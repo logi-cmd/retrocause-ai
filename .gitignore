@@ -1,0 +1,23 @@
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node / frontend dependencies
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Local logs
+*.log
+uvicorn_stdout.log
+uvicorn_stderr.log
+
+# Local-only business / planning docs (must not be pushed)
+docs-private/
+*.local.md

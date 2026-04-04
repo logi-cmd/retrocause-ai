@@ -1,0 +1,1289 @@
+@import "tailwindcss";
+
+/* ========================================
+   RetroCause Design System - Evidence Board Edition
+   Cinematic police evidence-wall aesthetic: white/ivory base,
+   paper cards, marker accents, thread connectors.
+   ======================================== */
+
+:root {
+  /* === Dark Evidence Board Color Palette === */
+  /* Dark slate background */
+  --board-dark:      #0d0d0f;
+  --board-slate:     #12131a;
+  --board-slate-deep:#0a0b0f;
+  
+  /* Warm ivory/white board background (preserved for legacy) */
+  --board-white:     #FAFAF8;
+  --board-ivory:     #F5F3EE;
+  --board-cream:     #EDE9E0;
+  
+  /* Paper card colors - slightly warm white (preserved for legacy) */
+  --paper-white:     #FFFFFF;
+  --paper-cream:     #FDFCFA;
+  --paper-aged:      #F8F6F1;
+
+  /* Marker accent colors - red and blue (like whiteboard markers) */
+  --marker-red:      #C94A4A;
+  --marker-red-light:#E86363;
+  --marker-red-dark: #991b1b;
+  --marker-blue:     #3B6EA5;
+  --marker-blue-light: #5B8BB5;
+  
+  /* Neutral grays for text (dark on white) */
+  --ink-900:        #1A1A1A;
+  --ink-700:        #3D3D3D;
+  --ink-500:        #6B6B6B;
+  --ink-300:        #A3A3A3;
+  --ink-100:        #E5E5E5;
+  --ink-600:        #525252;
+  --ink-400:        #8A8A8A;
+
+  /* Border colors - subtle, paper-like */
+  --paper-border:       #E0DDD6;
+  --paper-border-strong:#C9C4BA;
+  
+  /* Brand / evidence thread colors */
+  --thread-primary:   var(--marker-blue);
+  --thread-secondary: var(--marker-red);
+  --thread-success:   #2D8A5F;
+  --thread-warning:   #B8860B;
+  --thread-uncertain: var(--ink-500);
+  --thread-red:       var(--marker-red);
+
+  /* Legacy neutral scale (for backward compatibility) */
+  --neutral-950: #1A1A1A;
+  --neutral-900: #262626;
+  --neutral-850: #333333;
+  --neutral-800: #404040;
+  --neutral-750: #4D4D4D;
+  --neutral-700: #595959;
+  --neutral-600: #6B6B6B;
+  --neutral-500: #7F7F7F;
+  --neutral-400: #A3A3A3;
+  --neutral-300: #C4C4C4;
+  --neutral-200: #E0E0E0;
+  --neutral-100: #F0F0F0;
+  --neutral-50:  #F8F8F8;
+
+  /* === Brand Colors (evidence-board style) === */
+  --brand-primary:   var(--marker-blue);
+  --brand-secondary: var(--marker-blue-light);
+  --brand-muted:     rgba(59, 110, 165, 0.08);
+
+  /* === Semantic Colors === */
+  --success: #2D8A5F;
+  --success-bg: rgba(45, 138, 95, 0.08);
+  --warning: #B8860B;
+  --warning-bg: rgba(184, 134, 11, 0.08);
+  --error:   #C94A4A;
+  --error-bg: rgba(201, 74, 74, 0.08);
+  --info:    var(--marker-blue);
+  --info-bg: rgba(59, 110, 165, 0.08);
+
+  /* === Semantic Token Aliases === */
+  --background:       var(--board-ivory);
+  --background-soft:  var(--board-cream);
+  --background-card:  var(--paper-white);
+  --background-inset: var(--paper-aged);
+  --foreground:       var(--ink-700);
+  --foreground-muted: var(--ink-500);
+  --foreground-subtle: var(--ink-300);
+
+  /* === Border Design Tokens === */
+  --border-subtle:   rgba(192, 192, 186, 0.4);
+  --border-default:  var(--paper-border);
+  --border-strong:   var(--paper-border-strong);
+  --border-focus:    var(--marker-blue);
+
+  /* === Causal Edge Colors === */
+  --causal-strong:   var(--thread-success);
+  --causal-weak:     var(--thread-warning);
+  --causal-negative: var(--thread-red);
+  --causal-uncertain: var(--thread-uncertain);
+
+  /* === Evidence Board String Color (Red String) === */
+  --string-red: #c44536;
+  --string-red-mockup: #c44536;
+
+  /* === Radius Scale === */
+  --radius-none: 0;
+  --radius-sm:   3px;
+  --radius-md:   5px;
+  --radius-lg:   8px;
+
+  /* === Spacing Scale === */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  
+  /* === Paper Shadow (evidence card effect) === */
+  --paper-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  --paper-shadow-hover: 0 4px 6px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.06);
+
+  /* === Evidence Wall Depth Layers === */
+  --card-lift-1: 0 2px 4px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  --card-lift-2: 0 4px 8px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.08);
+  --card-lift-3: 0 8px 16px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.1);
+  --card-lift-selected: 0 6px 20px rgba(91,141,239,0.25), 0 3px 6px rgba(91,141,239,0.15);
+
+  /* === Evidence Board Depth Zones === */
+  --zone-surface: 0 1px 3px rgba(0,0,0,0.06);
+  --zone-raised: 0 2px 8px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.05);
+  --zone-floating: 0 4px 16px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.06);
+  --zone-elevated: 0 8px 24px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.08);
+
+  /* === Board Texture Opacity === */
+  --texture-grid: 0.15;
+  --texture-noise: 0.025;
+  --texture-vignette: 0.04;
+  
+  /* === Dark Theme Specific === */
+  --dark-panel-bg: rgba(15, 15, 20, 0.75);
+  --dark-glass-border: rgba(255, 255, 255, 0.08);
+  --dark-sidebar-width: 300px;
+  --dark-header-height: 64px;
+
+  /* === Light Evidence Wall (Cork Board Style) === */
+  --wall-base: #E8E0D0;
+  --wall-warm: #F5EFE5;
+  --wall-cork: #D4C4A8;
+  --wall-shadow: rgba(139, 119, 89, 0.15);
+  --wall-texture: rgba(180, 160, 130, 0.12);
+  --light-sidebar-width: 180px;
+  --light-header-height: 52px;
+
+  /* === Evidence Board Mockup Colors (Warm Cork Board) === */
+  --mockup-wall-start: #f8f4eb;
+  --mockup-wall-mid: #f0e8d8;
+  --mockup-wall-end: #e8dfc8;
+  --mockup-panel-bg: rgba(250, 246, 238, 0.7);
+  --mockup-panel-border: rgba(160, 140, 110, 0.15);
+  --mockup-header-bg: rgba(250, 246, 238, 0.92);
+  --mockup-header-border: rgba(160, 140, 110, 0.2);
+  --mockup-string-red: #c44536;
+  --mockup-text-primary: #3d3225;
+  --mockup-text-secondary: #5c4a32;
+  --mockup-text-muted: #7a6b55;
+  --mockup-text-faint: #8b7355;
+  --mockup-accent-red: #a0503c;
+  --mockup-accent-red-bg: rgba(180, 80, 60, 0.1);
+  --mockup-accent-red-border: rgba(180, 80, 60, 0.25);
+}
+
+@theme inline {
+  --color-background:       var(--background);
+  --color-background-soft: var(--background-soft);
+  --color-background-card:  var(--background-card);
+  --color-background-inset: var(--background-inset);
+  --color-foreground:       var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-subtle: var(--foreground-subtle);
+
+  --color-border-subtle:   var(--border-subtle);
+  --color-border-default:  var(--border-default);
+  --color-border-strong:   var(--border-strong);
+  --color-border-focus:    var(--border-focus);
+
+  --color-brand-primary:   var(--brand-primary);
+  --color-brand-muted:     var(--brand-muted);
+
+  --color-success:         var(--success);
+  --color-success-bg:      var(--success-bg);
+  --color-warning:         var(--warning);
+  --color-warning-bg:      var(--warning-bg);
+  --color-error:           var(--error);
+  --color-error-bg:        var(--error-bg);
+  --color-info:            var(--info);
+  --color-info-bg:         var(--info-bg);
+
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: var(--board-ivory);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Dark theme body variant */
+body.theme-dark {
+  --background: var(--board-dark);
+  --foreground: #e5e7eb;
+  --foreground-muted: #9ca3af;
+  --paper-cream: rgba(15, 15, 20, 0.75);
+  --paper-border: rgba(255, 255, 255, 0.08);
+}
+
+/* === Red String (Evidence Board Style) === */
+.red-string {
+  stroke: var(--string-red);
+  stroke-width: 2.5px;
+  fill: none;
+  opacity: 0.7;
+  stroke-linecap: round;
+}
+
+/* ========================================
+   DESIGN TOKEN CLASSES - Evidence Board Edition
+   Paper cards, marker accents, whiteboard aesthetic.
+   ======================================== */
+
+/* === Evidence Board Background === */
+.board {
+  background: var(--board-white);
+  background-image: 
+    radial-gradient(circle at 20% 50%, rgba(59, 110, 165, 0.02) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(201, 74, 74, 0.015) 0%, transparent 40%);
+}
+
+/* === Paper Card (Evidence Block) === */
+.paper {
+  background: var(--paper-white);
+  border: 1px solid var(--paper-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--paper-shadow);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.paper:hover {
+  box-shadow: var(--paper-shadow-hover);
+}
+
+/* === Module / Panel (Evidence Board Section) === */
+.module {
+  background: var(--paper-cream);
+  border: 1px solid var(--paper-border);
+  border-radius: var(--radius-lg);
+}
+
+/* === Inset / Recessed Area === */
+.inset {
+  background: var(--paper-aged);
+  border: 1px solid var(--paper-border);
+  border-radius: var(--radius-md);
+}
+
+/* === Button (Paper-takle feel) === */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink-700);
+  background: var(--paper-white);
+  border: 1px solid var(--paper-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--paper-shadow);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.btn:hover {
+  box-shadow: var(--paper-shadow-hover);
+  border-color: var(--paper-border-strong);
+}
+
+.btn:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--marker-blue);
+  outline-offset: 2px;
+}
+
+.btn.active {
+  background: var(--brand-muted);
+  border-color: var(--marker-blue);
+  color: var(--marker-blue);
+}
+
+.btn-primary {
+  background: var(--marker-blue);
+  border-color: var(--marker-blue);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(59, 110, 165, 0.2);
+}
+
+.btn-primary:hover {
+  background: var(--marker-blue-light);
+  border-color: var(--marker-blue-light);
+}
+
+.btn-red {
+  background: var(--marker-red);
+  border-color: var(--marker-red);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(201, 74, 74, 0.2);
+}
+
+.btn-red:hover {
+  background: var(--marker-red-light);
+  border-color: var(--marker-red-light);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.btn-ghost:hover {
+  background: var(--paper-aged);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* === Input === */
+.input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-700);
+  background: var(--paper-white);
+  border: 1px solid var(--paper-border);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.input::placeholder {
+  color: var(--ink-300);
+}
+
+.input:hover {
+  border-color: var(--paper-border-strong);
+}
+
+.input:focus {
+  border-color: var(--marker-blue);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.04), 0 0 0 3px rgba(59, 110, 165, 0.1);
+}
+
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* === Card === */
+.card {
+  background: var(--paper-white);
+  border: 1px solid var(--paper-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--paper-shadow);
+}
+
+/* === Semantic Badges === */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-2);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.02em;
+}
+
+.badge-success {
+  background: var(--success-bg);
+  color: var(--thread-success);
+}
+
+.badge-warning {
+  background: var(--warning-bg);
+  color: var(--thread-warning);
+}
+
+.badge-error {
+  background: var(--error-bg);
+  color: var(--marker-red);
+}
+
+.badge-info {
+  background: var(--info-bg);
+  color: var(--marker-blue);
+}
+
+/* === Evidence Pin (decorative corner marker) === */
+.pin {
+  position: relative;
+}
+
+.pin::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--marker-red);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+/* === Utility Classes === */
+.no-select { user-select: none; }
+.marker-red { color: var(--marker-red); }
+.marker-blue { color: var(--marker-blue); }
+
+/* ========================================
+   EVIDENCE WALL ENHANCEMENTS
+   Cinematic detective board character:
+   tape corners, pins, annotation chips,
+   grouping regions, layered cards.
+   ======================================== */
+
+/* === Tape Corner Effect (decorative) === */
+.tape-corner {
+  position: relative;
+}
+.tape-corner::before,
+.tape-corner::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 8px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 248, 230, 0.9) 0%,
+    rgba(245, 235, 210, 0.85) 50%,
+    rgba(230, 220, 195, 0.8) 100%
+  );
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+.tape-corner::before {
+  top: -3px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-2deg);
+}
+.tape-corner::after {
+  bottom: -3px;
+  left: 50%;
+  transform: translateX(-50%) rotate(2deg);
+}
+
+/* === Pushpin Effect (decorative top pin) === */
+.pushpin::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #E86363 0%, var(--marker-red) 50%, #A03030 100%);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3), inset 0 -1px 2px rgba(0,0,0,0.2);
+  z-index: 10;
+}
+.pushpin::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.4);
+}
+
+/* === Marker Annotation Chip (red/blue accent label) === */
+.marker-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+.marker-chip-red {
+  background: rgba(201, 74, 74, 0.1);
+  color: var(--marker-red);
+  border: 1px solid rgba(201, 74, 74, 0.3);
+}
+.marker-chip-blue {
+  background: rgba(59, 110, 165, 0.1);
+  color: var(--marker-blue);
+  border: 1px solid rgba(59, 110, 165, 0.3);
+}
+.marker-chip-green {
+  background: rgba(45, 138, 95, 0.1);
+  color: var(--thread-success);
+  border: 1px solid rgba(45, 138, 95, 0.3);
+}
+
+/* === Evidence Card (polaroid-style with lift) === */
+.evidence-card {
+  position: relative;
+  background: var(--paper-white);
+  border: 1px solid var(--paper-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--card-lift-1);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+.evidence-card:hover {
+  box-shadow: var(--card-lift-2);
+  transform: translateY(-1px);
+}
+.evidence-card.selected {
+  box-shadow: var(--card-lift-selected);
+  border-color: rgba(91, 141, 239, 0.5);
+}
+.evidence-card.outcome {
+  border-top: 3px solid var(--marker-blue);
+}
+.evidence-card.factor {
+  border-left: 3px solid var(--ink-400);
+}
+.evidence-card.intermediate {
+  border-left: 3px solid var(--ink-300);
+}
+
+/* === Grouping Region (subtle background zone) === */
+.grouping-region {
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    rgba(237, 233, 224, 0.5) 0%,
+    rgba(237, 233, 224, 0.25) 100%
+  );
+  border: 1px dashed rgba(201, 196, 186, 0.6);
+  border-radius: var(--radius-lg);
+}
+.grouping-region::before {
+  content: attr(data-region-label);
+  position: absolute;
+  top: -8px;
+  left: 12px;
+  padding: 0 6px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-400);
+  background: var(--board-white);
+}
+
+/* === Depth Zone Containers (for layered evidence wall) === */
+.depth-surface {
+  position: relative;
+  box-shadow: var(--zone-surface);
+}
+.depth-raised {
+  position: relative;
+  box-shadow: var(--zone-raised);
+}
+.depth-floating {
+  position: relative;
+  box-shadow: var(--zone-floating);
+}
+.depth-elevated {
+  position: relative;
+  box-shadow: var(--zone-elevated);
+}
+
+/* === Pinned Card Effect (detective board style) === */
+.pinned-card {
+  position: relative;
+  transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.pinned-card::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #E86363 0%, var(--marker-red) 50%, #A03030 100%);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3), inset 0 -1px 2px rgba(0,0,0,0.2);
+  z-index: 10;
+}
+.pinned-card::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.4);
+}
+
+/* === Paper Stack Effect (cards piled on board) === */
+.paper-stack {
+  position: relative;
+}
+.paper-stack::before,
+.paper-stack::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--paper-border);
+  border-radius: var(--radius-md);
+  background: var(--paper-aged);
+  z-index: -1;
+}
+.paper-stack::before {
+  transform: translate(3px, 3px);
+  opacity: 0.6;
+}
+.paper-stack::after {
+  transform: translate(6px, 6px);
+  opacity: 0.3;
+}
+
+/* === Note Corner Fold === */
+.note-fold {
+  position: relative;
+}
+.note-fold::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 16px 16px 0;
+  border-color: transparent var(--paper-border) transparent transparent;
+}
+
+/* === Evidence Marker's Stroke Effect === */
+.marker-stroke {
+  position: relative;
+  text-decoration: none;
+}
+.marker-stroke::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: currentColor;
+  opacity: 0.4;
+  border-radius: 2px;
+  transform: rotate(-0.5deg);
+}
+
+/* === Case File Tab Indicator === */
+.case-tab {
+  position: relative;
+  padding-bottom: 6px;
+}
+.case-tab::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--marker-blue);
+  box-shadow: 0 0 8px rgba(59,110,165,0.5);
+}
+
+/* === Board Grid Lines (subtle) === */
+.board-grid {
+  background-image:
+    linear-gradient(var(--paper-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--paper-border) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* === Dark Evidence Board Background === */
+.board-dark {
+  background: 
+    radial-gradient(ellipse at 30% 20%, rgba(35, 35, 40, 0.8) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 80%, rgba(25, 25, 30, 0.6) 0%, transparent 50%),
+    linear-gradient(180deg, #12131a 0%, #0a0b0f 50%, #08090c 100%);
+}
+
+.board-light {
+  background: 
+    radial-gradient(ellipse at 20% 30%, rgba(180, 160, 130, 0.15) 0%, transparent 40%),
+    radial-gradient(ellipse at 80% 70%, rgba(200, 180, 150, 0.12) 0%, transparent 40%),
+    linear-gradient(180deg, var(--mockup-wall-start) 0%, var(--mockup-wall-mid) 50%, var(--mockup-wall-end) 100%);
+  position: relative;
+}
+
+.board-light::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.04;
+  pointer-events: none;
+}
+
+.board-light::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(160, 140, 110, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(160, 140, 110, 0.06) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+.board-dark::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.03;
+  pointer-events: none;
+}
+
+.board-dark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+}
+
+/* === Dark Glass Panel === */
+.glass-panel-dark {
+  background: rgba(15, 15, 20, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.glass-panel-light {
+  background: var(--mockup-panel-bg);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border-color: var(--mockup-panel-border);
+  box-shadow: none;
+}
+
+/* === Sticky Note Colors (Evidence Board Style - Mockup Pastels) === */
+.sticky-yellow {
+  background: linear-gradient(145deg, #fef9e7 0%, #f9e8c8 100%);
+  border-bottom: 3px solid rgba(180, 160, 120, 0.3);
+}
+.sticky-cream {
+  background: linear-gradient(145deg, #fefcf5 0%, #f5edd8 100%);
+  border-bottom: 3px solid rgba(170, 150, 110, 0.3);
+}
+.sticky-pink {
+  background: linear-gradient(145deg, #fef0f3 0%, #f8dce4 100%);
+  border-bottom: 3px solid rgba(200, 150, 170, 0.3);
+}
+.sticky-blue {
+  background: linear-gradient(145deg, #eef5fa 0%, #dce8f2 100%);
+  border-bottom: 3px solid rgba(140, 170, 200, 0.3);
+}
+.sticky-green {
+  background: linear-gradient(145deg, #eef8f3 0%, #d8efe2 100%);
+  border-bottom: 3px solid rgba(140, 190, 160, 0.3);
+}
+.sticky-orange {
+  background: linear-gradient(145deg, #fef0e8 0%, #f8e0cc 100%);
+  border-bottom: 3px solid rgba(200, 170, 140, 0.3);
+}
+.sticky-mint {
+  background: linear-gradient(145deg, #eef8f3 0%, #d8efe2 100%);
+  border-bottom: 3px solid rgba(140, 190, 160, 0.3);
+}
+.sticky-lavender {
+  background: linear-gradient(145deg, #f3f0f8 0%, #e4dff0 100%);
+  border-bottom: 3px solid rgba(170, 150, 200, 0.3);
+}
+
+/* === Enhanced Evidence Card Shadows === */
+.evidence-shadow-1 {
+  box-shadow: 0 2px 4px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+}
+.evidence-shadow-2 {
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.08);
+}
+.evidence-shadow-3 {
+  box-shadow: 0 8px 16px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.1);
+}
+.evidence-shadow-lifted {
+  box-shadow: 0 12px 28px rgba(0,0,0,0.15), 0 6px 12px rgba(0,0,0,0.1), inset 0 0 0 1px rgba(0,0,0,0.05);
+}
+
+/* === Board Zone Labels (case file style headers) === */
+.zone-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-500);
+  padding: 4px 10px;
+  background: linear-gradient(135deg, rgba(250,250,248,0.95) 0%, rgba(245,243,238,0.9) 100%);
+  border: 1px solid var(--paper-border);
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.zone-label::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--marker-blue);
+  opacity: 0.8;
+}
+
+/* === Paper Edge Effect (torn paper hint) === */
+.paper-edge {
+  position: relative;
+}
+.paper-edge::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -1px;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0,0,0,0.02) 50%,
+    rgba(0,0,0,0.05) 100%
+  );
+}
+
+/* === Thread Connection Line === */
+.thread-line {
+  stroke: var(--ink-300);
+  stroke-width: 1.5;
+  fill: none;
+  opacity: 0.5;
+}
+.thread-line.strong {
+  stroke: var(--thread-success);
+  stroke-width: 2;
+  opacity: 0.8;
+}
+.thread-line.weak {
+  stroke: var(--thread-warning);
+  stroke-dasharray: 4 3;
+}
+.thread-line.negative {
+  stroke: var(--marker-red);
+  stroke-width: 2;
+}
+
+/* === Evidence Tag (small label with marker accent) === */
+.evidence-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  border-radius: 3px;
+  background: var(--paper-aged);
+  color: var(--ink-600);
+}
+.evidence-tag::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+}
+
+/* === Section Header (marker-underline style) === */
+.section-header {
+  position: relative;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-500);
+}
+.section-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 24px;
+  height: 2px;
+  background: var(--marker-blue);
+  border-radius: 1px;
+}
+
+/* === Status Indicator Dots === */
+.status-dot-success {
+  background: var(--thread-success);
+}
+.status-dot-warning {
+  background: var(--thread-warning);
+}
+.status-dot-error {
+  background: var(--marker-red);
+}
+
+/* === Evidence Board Paper Texture Overlay === */
+.board-texture {
+  position: relative;
+}
+.board-texture::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--texture-noise);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+}
+
+/* === Vignette Edge (focus attention toward center) === */
+.board-vignette {
+  position: relative;
+}
+.board-vignette::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 80px rgba(0,0,0,var(--texture-vignette));
+  border-radius: inherit;
+}
+
+/* === Scrollbar Styling (thin, evidence-board style) === */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(160, 140, 110, 0.2);
+  border-radius: 2px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(160, 140, 110, 0.4);
+}
+
+/* === Compact Panel Item (Mockup Style) === */
+.compact-item {
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(160, 140, 110, 0.1);
+  border-radius: 4px;
+  margin-bottom: 8px;
+  font-size: 0.65rem;
+  color: #5c4a32;
+  line-height: 1.4;
+}
+.compact-item:hover {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(180, 80, 60, 0.2);
+}
+.compact-label {
+  font-size: 0.55rem;
+  color: #8b7355;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+}
+
+/* ========================================
+   MICRO-ANIMATIONS - Evidence Board Edition
+   Restrained, cinematic motion that enhances
+   the detective-board aesthetic.
+   ======================================== */
+
+/* === Entrance Animations === */
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes subtleFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+/* Staggered entrance for board nodes */
+.animate-entrance {
+  animation: fadeSlideUp 0.35s ease-out forwards;
+  opacity: 0;
+}
+
+.animate-entrance-delay-1 { animation-delay: 0.05s; }
+.animate-entrance-delay-2 { animation-delay: 0.1s; }
+.animate-entrance-delay-3 { animation-delay: 0.15s; }
+.animate-entrance-delay-4 { animation-delay: 0.2s; }
+.animate-entrance-delay-5 { animation-delay: 0.25s; }
+
+/* === Micro-interaction feedback === */
+@keyframes gentlePulse {
+  0%, 100% {
+    box-shadow: var(--card-lift-1);
+  }
+  50% {
+    box-shadow: var(--card-lift-2);
+  }
+}
+
+@keyframes selectionGlow {
+  0%, 100% {
+    box-shadow: var(--card-lift-selected);
+  }
+  50% {
+    box-shadow: 0 8px 28px rgba(91,141,239,0.3), 0 4px 8px rgba(91,141,239,0.2);
+  }
+}
+
+/* === Tab indicator animation === */
+@keyframes tabIndicatorSlide {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* === Edge draw animation for connection lines === */
+@keyframes drawLine {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* === Motion Utility Classes === */
+
+/* Smooth panel transitions */
+.transition-panel {
+  transition: opacity var(--duration-normal) var(--ease-out-quart),
+              transform var(--duration-normal) var(--ease-out-quart),
+              box-shadow var(--duration-normal) var(--ease-out-quart);
+}
+
+/* View content fade transition */
+.transition-view {
+  transition: opacity var(--duration-fast) var(--ease-out-quart);
+}
+
+/* Tab active indicator slide */
+.tab-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--marker-blue);
+  border-radius: 1px 1px 0 0;
+  transform-origin: left;
+  animation: tabIndicatorSlide var(--duration-normal) var(--ease-out-quint) forwards;
+}
+
+/* Hover lift for selectable items */
+.hover-lift {
+  transition: transform var(--duration-fast) var(--ease-out-quart),
+              box-shadow var(--duration-fast) var(--ease-out-quart);
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+}
+
+/* Selected state with subtle glow pulse */
+.selected-glow {
+  animation: selectionGlow 2s ease-in-out infinite;
+}
+
+/* Subtle scale on press for buttons */
+.press-scale:active {
+  transform: scale(0.97);
+  transition: transform var(--duration-instant) var(--ease-out-quart);
+}
+
+/* Focus ring with smooth appearance */
+.focus-ring {
+  transition: box-shadow var(--duration-fast) var(--ease-out-quart),
+              border-color var(--duration-fast) var(--ease-out-quart);
+}
+
+/* Panel subtle hover glow */
+.panel-hover {
+  transition: box-shadow var(--duration-normal) var(--ease-out-quart);
+}
+.panel-hover:hover {
+  box-shadow: 0 0 0 1px var(--paper-border-strong), var(--paper-shadow-hover);
+}
+
+/* === Reduced motion preference === */
+@media (prefers-reduced-motion: reduce) {
+  .animate-entrance,
+  .animate-entrance-delay-1,
+  .animate-entrance-delay-2,
+  .animate-entrance-delay-3,
+  .animate-entrance-delay-4,
+  .animate-entrance-delay-5,
+  .selected-glow {
+    animation: none;
+    opacity: 1;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ========================================
+   LEGACY NEO CLASSES (Deprecated - mapped to evidence-board system)
+   Preserved for backward compatibility.
+   ======================================== */
+
+.neo-out {
+  background: var(--paper-white);
+  border: 1px solid var(--paper-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--paper-shadow);
+}
+
+.neo-in {
+  background: var(--paper-aged);
+  border: 1px solid var(--paper-border);
+  border-radius: var(--radius-md);
+}
+
+.neo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink-700);
+  background: var(--paper-white);
+  border: 1px solid var(--paper-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  box-shadow: var(--paper-shadow);
+}
+
+.neo-btn:hover {
+  box-shadow: var(--paper-shadow-hover);
+  border-color: var(--paper-border-strong);
+}
+
+.neo-btn:active,
+.neo-btn.active {
+  background: var(--brand-muted);
+  border-color: var(--marker-blue);
+  color: var(--marker-blue);
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+.neo-btn:focus-visible {
+  outline: 2px solid var(--marker-blue);
+  outline-offset: 2px;
+}
+
+.neo-input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-700);
+  background: var(--paper-white);
+  border: 1px solid var(--paper-border);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.neo-input::placeholder {
+  color: var(--ink-300);
+}
+
+.neo-input:hover {
+  border-color: var(--paper-border-strong);
+}
+
+.neo-input:focus {
+  border-color: var(--marker-blue);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.04), 0 0 0 3px rgba(59, 110, 165, 0.1);
+}

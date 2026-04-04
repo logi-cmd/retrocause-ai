@@ -1,0 +1,88 @@
+name: Bug Report
+description: Something is broken or behaving unexpectedly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. RetroCause is a research-grade alpha, so rough edges are expected. The more detail you provide, the faster we can reproduce and fix it.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: A clear description of the bug.
+      placeholder: "e.g. The frontend crashes when I click an upstream cause node in the right panel."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we see the same behavior?
+      placeholder: |
+        1. Run `python start.py`
+        2. Open http://localhost:3000
+        3. Submit query "Why did SVB collapse?"
+        4. Click the first upstream cause in the right panel
+        5. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What should have happened instead?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: interface
+    attributes:
+      label: Interface
+      description: Which part of RetroCause were you using?
+      options:
+        - Browser UI (Next.js frontend)
+        - CLI
+        - Streamlit demo
+        - Backend API (/api/analyze/v2)
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      description: Were you using demo mode or real analysis?
+      options:
+        - Demo mode (no API key)
+        - Real analysis (with API key)
+        - Not sure
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Help us reproduce. Include relevant details.
+      placeholder: |
+        - OS: Windows 11 / macOS 14 / Ubuntu 22.04
+        - Python version: 3.10.x
+        - Node.js version: 20.x
+        - Browser: Chrome 123
+        - How you installed: pip install -e ".[dev]"
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste any relevant terminal output, browser console errors, or screenshots.
+      render: shell
+    validations:
+      required: false

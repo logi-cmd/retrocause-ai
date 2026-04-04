@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evidence Board - Light</title>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'IBM Plex Mono', monospace;
+            background: #f5f0e6;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Warm yellow/beige wall background */
+        .evidence-board {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: 
+                /* Subtle cork board texture pattern */
+                radial-gradient(ellipse at 20% 30%, rgba(180, 160, 130, 0.15) 0%, transparent 40%),
+                radial-gradient(ellipse at 80% 70%, rgba(200, 180, 150, 0.12) 0%, transparent 40%),
+                /* Base warm beige color */
+                linear-gradient(180deg, #f8f4eb 0%, #f0e8d8 50%, #e8dfc8 100%);
+            background-size: cover;
+        }
+
+        /* Subtle cork texture overlay */
+        .evidence-board::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            opacity: 0.04;
+            pointer-events: none;
+        }
+
+        /* Faint grid lines for board effect */
+        .evidence-board::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(160, 140, 110, 0.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(160, 140, 110, 0.06) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+        }
+
+        /* Minimal header - thin strip at top */
+        .header-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 52px;
+            background: rgba(250, 246, 238, 0.92);
+            backdrop-filter: blur(8px);
+            border-bottom: 1px solid rgba(160, 140, 110, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 100;
+        }
+
+        .header-title {
+            font-family: 'Caveat', cursive;
+            color: #5c4a32;
+            font-size: 1.5rem;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+        }
+
+        .case-badge {
+            background: rgba(180, 80, 60, 0.1);
+            border: 1px solid rgba(180, 80, 60, 0.25);
+            color: #a0503c;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #8b7355;
+            font-size: 0.65rem;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            background: #7cb87c;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Main canvas area - dominates the screen */
+        .main-canvas {
+            position: absolute;
+            top: 52px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+        }
+
+        /* SVG Canvas for red strings - full canvas */
+        .string-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .red-string {
+            stroke: #c44536;
+            stroke-width: 2.5px;
+            fill: none;
+            stroke-linecap: round;
+            opacity: 0.7;
+        }
+
+        /* Sticky note cards */
+        .sticky-card {
+            position: absolute;
+            padding: 22px 14px 14px 14px;
+            border-radius: 2px;
+            box-shadow: 
+                0 3px 8px rgba(80, 60, 40, 0.15),
+                0 1px 3px rgba(80, 60, 40, 0.1);
+            transform-origin: top center;
+        }
+
+        /* Pushpin SVG */
+        .pushpin {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 22px;
+            height: 22px;
+            z-index: 20;
+            filter: drop-shadow(0 2px 3px rgba(80, 60, 40, 0.25));
+        }
+
+        /* Card inner content - counter-rotate to keep text readable */
+        .card-inner {
+            transform: rotate(calc(-1 * var(--card-rotate, 0deg)));
+        }
+
+        .card-title {
+            font-family: 'Caveat', cursive;
+            font-size: 1.15rem;
+            color: #3d3225;
+            margin-bottom: 4px;
+            line-height: 1.2;
+            font-weight: 600;
+        }
+
+        .card-subtitle {
+            font-size: 0.6rem;
+            color: #7a6b55;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 8px;
+        }
+
+        .card-detail {
+            font-size: 0.65rem;
+            color: #5c4a32;
+            line-height: 1.45;
+        }
+
+        .card-tag {
+            display: inline-block;
+            padding: 2px 7px;
+            border-radius: 2px;
+            font-size: 0.55rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-top: 6px;
+        }
+
+        /* Sticky note color variants - soft, light tones */
+        .sticky-yellow {
+            background: linear-gradient(145deg, #fef9e7 0%, #f9e8c8 100%);
+            border-bottom: 3px solid rgba(180, 160, 120, 0.3);
+        }
+
+        .sticky-cream {
+            background: linear-gradient(145deg, #fefcf5 0%, #f5edd8 100%);
+            border-bottom: 3px solid rgba(170, 150, 110, 0.3);
+        }
+
+        .sticky-pink {
+            background: linear-gradient(145deg, #fef0f3 0%, #f8dce4 100%);
+            border-bottom: 3px solid rgba(200, 150, 170, 0.3);
+        }
+
+        .sticky-blue {
+            background: linear-gradient(145deg, #eef5fa 0%, #dce8f2 100%);
+            border-bottom: 3px solid rgba(140, 170, 200, 0.3);
+        }
+
+        .sticky-mint {
+            background: linear-gradient(145deg, #eef8f3 0%, #d8efe2 100%);
+            border-bottom: 3px solid rgba(140, 190, 160, 0.3);
+        }
+
+        .sticky-lavender {
+            background: linear-gradient(145deg, #f3f0f8 0%, #e4dff0 100%);
+            border-bottom: 3px solid rgba(170, 150, 200, 0.3);
+        }
+
+        .tag-cause { background: rgba(196, 69, 54, 0.15); color: #943d30; }
+        .tag-effect { background: rgba(70, 130, 180, 0.15); color: #4a7a9e; }
+        .tag-evidence { background: rgba(100, 140, 90, 0.15); color: #5a7a52; }
+        .tag-mediator { background: rgba(180, 140, 80, 0.15); color: #8a6a40; }
+        .tag-factor { background: rgba(140, 100, 160, 0.15); color: #6a5080; }
+
+        /* Minimal side panels - just thin strips */
+        .left-panel {
+            position: absolute;
+            top: 52px;
+            left: 0;
+            width: 180px;
+            bottom: 0;
+            padding: 16px 12px;
+            background: rgba(250, 246, 238, 0.7);
+            backdrop-filter: blur(4px);
+            border-right: 1px solid rgba(160, 140, 110, 0.15);
+            z-index: 50;
+            overflow-y: auto;
+        }
+
+        .right-panel {
+            position: absolute;
+            top: 52px;
+            right: 0;
+            width: 180px;
+            bottom: 0;
+            padding: 16px 12px;
+            background: rgba(250, 246, 238, 0.7);
+            backdrop-filter: blur(4px);
+            border-left: 1px solid rgba(160, 140, 110, 0.15);
+            z-index: 50;
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            font-family: 'Caveat', cursive;
+            color: #6b5a42;
+            font-size: 1rem;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(160, 140, 110, 0.15);
+        }
+
+        .compact-item {
+            padding: 8px 10px;
+            background: rgba(255, 255, 255, 0.5);
+            border: 1px solid rgba(160, 140, 110, 0.1);
+            border-radius: 4px;
+            margin-bottom: 8px;
+            font-size: 0.65rem;
+            color: #5c4a32;
+            line-height: 1.4;
+        }
+
+        .compact-item:hover {
+            background: rgba(255, 255, 255, 0.8);
+            border-color: rgba(180, 80, 60, 0.2);
+        }
+
+        .compact-label {
+            font-size: 0.55rem;
+            color: #8b7355;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 3px;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(160, 140, 110, 0.2);
+            border-radius: 2px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(160, 140, 110, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="evidence-board">
+        <!-- Minimal Header -->
+        <header class="header-bar">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 28px; height: 28px; background: rgba(180, 80, 60, 0.1); border: 1px solid rgba(180, 80, 60, 0.2); border-radius: 5px; display: flex; align-items: center; justify-content: center;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a0503c" stroke-width="2">
+                        <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                </div>
+                <h1 class="header-title">Causal Evidence Board</h1>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <span class="case-badge">Why did this happen?</span>
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span>Demo Mode</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Left Panel - very minimal -->
+        <aside class="left-panel">
+            <h2 class="panel-title">Hypothesis Chains</h2>
+            
+            <div class="compact-item">
+                <div class="compact-label">Chain A — Primary</div>
+                <div>Main causal pathway with 5 nodes</div>
+                <div style="margin-top: 4px; font-size: 0.6rem; color: #7a6b55;">P = 0.42</div>
+            </div>
+            
+            <div class="compact-item">
+                <div class="compact-label">Chain B — Alternative</div>
+                <div>Secondary explanation with 3 nodes</div>
+                <div style="margin-top: 4px; font-size: 0.6rem; color: #7a6b55;">P = 0.28</div>
+            </div>
+            
+            <div class="compact-item">
+                <div class="compact-label">Chain C — Competing</div>
+                <div>Alternative view with 4 nodes</div>
+                <div style="margin-top: 4px; font-size: 0.6rem; color: #7a6b55;">P = 0.19</div>
+            </div>
+            
+            <h2 class="panel-title" style="margin-top: 16px;">Evidence Stats</h2>
+            <div class="compact-item">
+                <div style="font-size: 1.2rem; font-weight: 600; color: #5c4a32;">24</div>
+                <div style="color: #8b7355;">Total evidence items</div>
+            </div>
+            <div class="compact-item">
+                <div style="font-size: 1.2rem; font-weight: 600; color: #5c4a32;">12</div>
+                <div style="color: #8b7355;">Causal connections</div>
+            </div>
+        </aside>
+
+        <!-- Right Panel - very minimal -->
+        <aside class="right-panel">
+            <h2 class="panel-title">Selected Node</h2>
+            
+            <div class="compact-item" style="background: rgba(255, 250, 240, 0.8);">
+                <div style="font-family: 'Caveat', cursive; font-size: 1.1rem; color: #3d3225; margin-bottom: 4px;">Click any node</div>
+                <div style="color: #8b7355; font-size: 0.65rem;">to view its details, evidence links, and upstream tracing</div>
+            </div>
+            
+            <h2 class="panel-title" style="margin-top: 16px;">Legend</h2>
+            <div class="compact-item" style="padding: 6px 10px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <span style="width: 10px; height: 10px; background: rgba(196, 69, 54, 0.4); border-radius: 2px;"></span>
+                    <span style="font-size: 0.6rem;">Cause</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <span style="width: 10px; height: 10px; background: rgba(70, 130, 180, 0.4); border-radius: 2px;"></span>
+                    <span style="font-size: 0.6rem;">Effect</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <span style="width: 10px; height: 10px; background: rgba(180, 140, 80, 0.4); border-radius: 2px;"></span>
+                    <span style="font-size: 0.6rem;">Mediator</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="width: 10px; height: 10px; background: rgba(100, 140, 90, 0.4); border-radius: 2px;"></span>
+                    <span style="font-size: 0.6rem;">Evidence</span>
+                </div>
+            </div>
+            
+            <div class="compact-item" style="margin-top: 16px; background: rgba(255, 248, 240, 0.8);">
+                <div style="font-size: 0.6rem; color: #8b7355; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Actions</div>
+                <div style="font-size: 0.65rem; color: #5c4a32; line-height: 1.6;">
+                    • Trace upstream<br/>
+                    • Compare chains<br/>
+                    • View counterfactuals
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Canvas with SVG Strings - FULL WIDTH -->
+        <div class="main-canvas">
+            <svg class="string-canvas" viewBox="0 0 1400 800" preserveAspectRatio="xMidYMid meet">
+                <!-- Red string connections - natural curves from pushpin areas -->
+                
+                <!-- Main hub: Asteroid Impact (center) to others -->
+                <path class="red-string" d="M 540 320 Q 380 280 280 220"/>
+                <path class="red-string" d="M 560 300 Q 680 250 780 230"/>
+                <path class="red-string" d="M 520 360 Q 420 400 350 420"/>
+                <path class="red-string" d="M 580 350 Q 700 380 800 370"/>
+                <path class="red-string" d="M 540 400 Q 540 480 530 540"/>
+                
+                <!-- Secondary connections -->
+                <path class="red-string" d="M 280 250 Q 340 260 350 390" stroke-width="2" opacity="0.5"/>
+                <path class="red-string" d="M 780 260 Q 820 310 800 340" stroke-width="2" opacity="0.5"/>
+                <path class="red-string" d="M 350 450 Q 450 440 510 470" stroke-width="2" opacity="0.5"/>
+                <path class="red-string" d="M 820 390 Q 750 420 700 450" stroke-width="2" opacity="0.5"/>
+                <path class="red-string" d="M 530 570 Q 620 550 700 480" stroke-width="2" opacity="0.5"/>
+                
+                <!-- Tertiary small connections -->
+                <path class="red-string" d="M 200 380 Q 250 410 320 420" stroke-width="1.5" opacity="0.4"/>
+                <path class="red-string" d="M 880 340 Q 920 380 900 440" stroke-width="1.5" opacity="0.4"/>
+            </svg>
+
+            <!-- Node 1: Asteroid Impact (Primary Cause) - Yellow, center-left -->
+            <div class="sticky-card sticky-yellow" style="top: 180px; left: 180px; width: 180px; rotate: -2deg;">
+                <svg class="pushpin" viewBox="0 0 24 24">
+                    <defs>
+                        <linearGradient id="pinRed" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#d64545"/>
+                            <stop offset="100%" style="stop-color:#a33030"/>
+                        </linearGradient>
+                    </defs>
+                    <circle cx="12" cy="8" r="6" fill="url(#pinRed)"/>
+                    <ellipse cx="10" cy="6" rx="2" ry="1.5" fill="rgba(255,255,255,0.35)"/>
+                    <rect x="11" y="13" width="2" height="8" fill="#b8a080"/>
+                </svg>
+                <div class="card-inner" style="--card-rotate: -2deg;">
+                    <div class="card-title">Asteroid Impact</div>
+                    <div class="card-subtitle">Primary Cause</div>
+                    <div class="card-detail">
+                        Chicxulub impactor<br/>
+                        10km diameter<br/>
+                        66M years ago
+                    </div>
+                    <span class="card-tag tag-cause">Cause</span>
+                </div>
+            </div>
+
+            <!-- Node 2: Dust & Darkness - Cream, top-center -->
+            <div class="sticky-card sticky-cream" style="top: 160px; left: 440px; width: 170px; rotate: 1.5deg;">
+                <svg class="pushpin" viewBox="0 0 24 24">
+                    <circle cx="12" cy="8" r="6" fill="url(#pinRed)"/>
+                    <ellipse cx="10" cy="6" rx="2" ry="1.5" fill="rgba(255,255,255,0.35)"/>
+                    <rect x="11" y="13" width="2" height="8" fill="#b8a080"/>
+                </svg>
+                <div class="card-inner" style="--card-rotate: 1.5deg;">
+                    <div class="card-title">Global Dust Cloud</div>
+                    <div class="card-subtitle">Mediator</div>
+                    <div class="card-detail">
+                        Solar blocked<br/>
+                        Photosynthesis halted<br/>
+                        <span style="color: #8a6a40;">−70% light</span>
+                    </div>
+                    <span class="card-tag tag-mediator">Mediator</span>
+                </div>
+            </div>
+
+            <!-- Node 3: Volcanic Winter - Blue, top-right -->
+            <div class="sticky-card sticky-blue" style="top: 150px; left: 680px; width: 165px; rotate: -1deg;">
+                <svg class="pushpin" viewBox="0 0 24 24">
+                    <circle cx="12" cy="8" r="6" fill="url(#pinRed)"/>
+                    <ellipse cx="10" cy="6" rx="2" ry="1.5" fill="rgba(255,255,255,0.35)"/>
+                    <rect x="11" y="13" width="2" height="8" fill="#b8a080"/>
+                </svg>
+                <div class="card-inner" style="--card-rotate: -1deg;">
+                    <div class="card-title">Volcanic Winter</div>
+                    <div class="card-subtitle">Competing Cause</div>
+                    <div class="card-detail">
+                        Deccan traps CO₂<br/>
+                        Cooling period<br/>
+                        Duration: decades
+                    </div>
+                    <span class="card-tag tag-cause">Cause</span>
+                </div>
+            </div>
+
+            <!-- Node 4: Food Chain Collapse - Pink, center-left -->
+            <div class="sticky-card sticky-pink" style="top: 310px; left: 140px; width: 160px; rotate: 2.5deg;">
+                <svg class="pushpin" viewBox="0 0 24 24">
+                    <circle cx="12" cy="8" r="6" fill="url(#pinRed)"/>
+                    <ellipse cx="10" cy="6" rx="2" ry="1.5" fill="rgba(255,255,255,0.35)"/>
+                    <rect x="11" y="13" width="2" height="8" fill="#b8a080"/>
+                </svg>
+                <div class="card-inner" style="--card-rotate: 2.5deg;">
+                    <div class="card-title">Food Chain Collapse</div>
+                    <div class="card-subtitle">Downstream Effect</div>
+                    <div class="card-detail">
+                        Plants die → herbivores<br/>
+                        → carnivores die<br/>
+                        Trophic cascade
+                    </div>
+                    <span class="card-tag tag-effect">Effect</span>
+                </div>
+            </div>
+
+            <!-- Node 5: Climate Shift - Mint, center -->
+            <div class="sticky-card sticky-mint" style="top: 270px; left: 460px; width: 170px; rotate: -1.5deg;">
+                <svg class="pushpin" viewBox="0 0 24 24">
+                    <circle cx="12" cy="8" r="6" fill="url(#pinRed)"/>
+                    <ellipse cx="10" cy="6" rx="2" ry="1.5" fill="rgba(255,255,255,0.35)"/>
+                    <rect x="11" y="13" width="2" height="8" fill="#b8a080"/>
+                </svg>
+                <div class="card-inner" style="--card-rotate: -1.5deg;">
+                    <div class="card-title">Global Cooling</div>
+                    <div class="card-subtitle">Environmental Effect</div>
+                    <div class="card-detail">
+                        Temperature drop<br/>
+                        −8°C globally<br/>
+                        Ice age conditions
+                    </div>
+                    <span class="card-tag tag-effect">Effect</span>
+                </div>
+            </div>
+
+            <!-- Node 6: Ocean Acidification - Lavender, center-right -->
+            <div class="sticky-card sticky-lavender" style="top: 260px; left: 720px; width: 155px; rotate: 1deg;">
+                <svg class="pushpin" viewBox="0 0 24 24">
+                    <circle cx="12" cy="8" r="6" fill="url(#pinRed)"/>
+                    <ellipse cx="10" cy="6" rx="2" ry="1.5" fill="rgba(255,255,255,0.35)"/>
+                    <rect x="11" y="13" width="2" height="8" fill="#b8a080"/>
+                </svg>
+                <div class="card-inner" style="--card-rotate: 1deg;">
+                    <div class="card-title">Ocean Changes</div>
+                    <div class="card-subtitle">Secondary Effect</div>
+                    <div class="card-detail">
+                        SO₂ absorption<br/>
+                        Acidification<br/>
+                        Marine life collapse
+                    </div>
+                    <span class="card-tag tag-effect">Effect</span>
+                </div>
+            </div>
+
+            <!-- Node 7: Large Dino Extinction - Yellow, bottom-center-left -->
+            <div class="sticky-card sticky-yellow" style="top: 390px; left: 260px; width: 165px; rotate: -2.5deg;">
+                <svg class="pushpin" viewBox="0 0 24 24">
+                    <circle cx="12" cy="8" r="6" fill="url(#pinRed)"/>
+                    <ellipse cx="10" cy="6" rx="2" ry="1.5" fill="rgba(255,255,255,0.35)"/>
+                    <rect x="11" y="13" width="2" height="8" fill="#b8a080"/>
+                </svg>
+                <div class="card-inner" style="--card-rotate: -2.5deg;">
+                    <div class="card-title">Large Dinosaurs</div>
+                    <div class="card-subtitle">Final Effect</div>
+                    <div class="card-detail">
+                        Non-avian dinos<br/>
+                        75% species lost<br/>
+                        in <span style="color: #8a6a40;">1000 years</span>
+                    </div>
+                    <span class="card-tag tag-effect">Effect</span>
+                </div>
+            </div>
+
+            <!-- Node 8: Small Mammals Survive - Cream, bottom-center -->
+            <div class="sticky-card sticky-cream" style="top: 420px; left: 450px; width: 150px; rotate: 1deg;">
+                <svg class="pushpin" viewBox="0 0 24 24">
+                    <circle cx="12" cy="8" r="6" fill="url(#pinRed)"/>
+                    <ellipse cx="10" cy="6" rx="2" ry="1.5" fill="rgba(255,255,255,0.35)"/>
+                    <rect x="11" y="13" width="2" height="8" fill="#b8a080"/>
+                </svg>
+                <div class="card-inner" style="--card-rotate: 1deg;">
+                    <div class="card-title">Mammals Survive</div>
+                    <div class="card-subtitle">Survivor Group</div>
+                    <div class="card-detail">
+                        Small size helped<br/>
+                        Burrowing behavior<br/>
+                        Generalized diet
+                    </div>
+                    <span class="card-tag tag-evidence">Evidence</span>
+                </div>
+            </div>
+
+            <!-- Node 9: Bird Origins - Blue, bottom-right -->
+            <div class="sticky-card sticky-blue" style="top: 400px; left: 650px; width: 150px; rotate: -1deg;">
+                <svg class="pushpin" viewBox="0 0 24 24">
+                    <circle cx="12" cy="8" r="6" fill="url(#pinRed)"/>
+                    <ellipse cx="10" cy="6" rx="2" ry="1.5" fill="rgba(255,255,255,0.35)"/>
+                    <rect x="11" y="13" width="2" height="8" fill="#b8a080"/>
+                </svg>
+                <div class="card-inner" style="--card-rotate: -1deg;">
+                    <div class="card-title">Avian Survivors</div>
+                    <div class="card-subtitle">Partial Survivor</div>
+                    <div class="card-detail">
+                        Theropod lineage<br/>
+                        Feathered dinos<br/>
+                        Birds today
+                    </div>
+                    <span class="card-tag tag-evidence">Evidence</span>
+                </div>
+            </div>
+
+            <!-- Node 10: Evidence: Iridium Layer - Pink, far left -->
+            <div class="sticky-card sticky-pink" style="top: 250px; left: 20px; width: 130px; rotate: 3deg;">
+                <svg class="pushpin" viewBox="0 0 24 24">
+                    <circle cx="12" cy="8" r="6" fill="url(#pinRed)"/>
+                    <ellipse cx="10" cy="6" rx="2" ry="1.5" fill="rgba(255,255,255,0.35)"/>
+                    <rect x="11" y="13" width="2" height="8" fill="#b8a080"/>
+                </svg>
+                <div class="card-inner" style="--card-rotate: 3deg;">
+                    <div class="card-title">Iridium Layer</div>
+                    <div class="card-subtitle">Geological Evidence</div>
+                    <div class="card-detail">
+                        66Ma boundary<br/>
+                        Anomaly in crust<br/>
+                        <span style="color: #8a6a40;">Global presence</span>
+                    </div>
+                    <span class="card-tag tag-evidence">Evidence</span>
+                </div>
+            </div>
+
+            <!-- Node 11: Evidence: Crater - Mint, far right -->
+            <div class="sticky-card sticky-mint" style="top: 300px; left: 930px; width: 135px; rotate: -2deg;">
+                <svg class="pushpin" viewBox="0 0 24 24">
+                    <circle cx="12" cy="8" r="6" fill="url(#pinRed)"/>
+                    <ellipse cx="10" cy="6" rx="2" ry="1.5" fill="rgba(255,255,255,0.35)"/>
+                    <rect x="11" y="13" width="2" height="8" fill="#b8a080"/>
+                </svg>
+                <div class="card-inner" style="--card-rotate: -2deg;">
+                    <div class="card-title">Chicxulub Crater</div>
+                    <div class="card-subtitle">Physical Evidence</div>
+                    <div class="card-detail">
+                        Yucatan peninsula<br/>
+                        180km diameter<br/>
+                        <span style="color: #8a6a40;">Confirmed 1991</span>
+                    </div>
+                    <span class="card-tag tag-evidence">Evidence</span>
+                </div>
+            </div>
+
+            <!-- Node 12: Alternative Hypothesis - Lavender, bottom far right -->
+            <div class="sticky-card sticky-lavender" style="top: 480px; left: 820px; width: 145px; rotate: 2deg;">
+                <svg class="pushpin" viewBox="0 0 24 24">
+                    <circle cx="12" cy="8" r="6" fill="url(#pinRed)"/>
+                    <ellipse cx="10" cy="6" rx="2" ry="1.5" fill="rgba(255,255,255,0.35)"/>
+                    <rect x="11" y="13" width="2" height="8" fill="#b8a080"/>
+                </svg>
+                <div class="card-inner" style="--card-rotate: 2deg;">
+                    <div class="card-title">Multi-Factor</div>
+                    <div class="card-subtitle">Alternative View</div>
+                    <div class="card-detail">
+                        Volcano + Impact<br/>
+                        Combined effect<br/>
+                        Ongoing debate
+                    </div>
+                    <span class="card-tag tag-factor">Factor</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
