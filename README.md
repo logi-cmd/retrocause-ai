@@ -43,6 +43,8 @@ RetroCause is currently a **research-grade alpha**:
 - browser-based evidence-board UI (FastAPI + Next.js)
 - Streamlit demo is available as a fallback
 - factor impact analysis MVP is available
+- homepage now supports a minimal live `/api/analyze/v2` query flow
+- demo fallback vs real analysis is explicitly labeled in the UI
 - tests and frontend build are passing
 
 Already implemented:
@@ -83,9 +85,11 @@ This opens:
 - **Frontend**: http://localhost:3005 (evidence-board UI)
 - **Backend API**: http://localhost:8000 (FastAPI, with `/api/analyze/v2`)
 
-The frontend sends your question to the v2 API, then renders the result as an interactive evidence board: causal graph on the left, chain detail in the center, node/evidence/counterfactual detail on the right. Multi-hop tracing lets you click upstream causes to drill deeper into any chain.
+The homepage can now send your question to the v2 API and render the recommended chain as an interactive evidence board. When real analysis is unavailable, the UI explicitly falls back to demo mode instead of silently pretending the result is live.
 
-Without an API key, the UI loads demo data so you can explore the interface.
+The fuller three-panel console workflow still exists in the codebase and remains a useful internal/reference UI path, but the current public OSS homepage is the primary entry point.
+
+Without an API key, the UI may load demo data so you can explore the interface. This fallback is now explicitly labeled.
 
 ### CLI
 
@@ -201,9 +205,9 @@ RetroCause tries to give you a more structured explanation by combining:
 - evidence links
 - intervention-style comparisons
 
-It is not claiming perfect causal truth.
+It is not claiming perfect causal truth, and it does not guarantee scientifically validated causal correctness.
 
-It is designed to provide a **clearer and more inspectable explanation interface**.
+It is designed to provide a **clearer and more inspectable explanation interface** with more visible uncertainty and evidence structure than a typical chat answer.
 
 ---
 
@@ -238,6 +242,10 @@ Some commercial and planning documents are intentionally kept local and are not 
 ### Is this a production-ready causal inference system?
 
 No. It is currently a research-grade alpha and open-source demo product.
+
+### Does the OSS UI clearly distinguish demo vs real analysis?
+
+Yes. The homepage now explicitly marks whether the current board is showing a real API result or a demo fallback.
 
 ### Does it need an API key?
 

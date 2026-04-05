@@ -3,7 +3,152 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Caveat } from "next/font/google";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
-import { mockPrimaryChain, type ChainNode, type ChainEdge } from "@/data/mockData";
+import {
+  getLocalizedMockData,
+  type CausalChain,
+  type ChainNode,
+  type ChainEdge,
+  type CausalNodeType,
+  type EdgeStrength,
+  type EvidenceReliability,
+} from "@/data/mockData";
+
+type ApiNode = {
+  id: string;
+  label: string;
+  description: string;
+  probability: number;
+  type: string;
+  depth: number;
+  upstream_ids: string[];
+  supporting_evidence_ids: string[];
+  refuting_evidence_ids: string[];
+};
+
+type ApiEdge = {
+  id: string;
+  source: string;
+  target: string;
+  strength: number;
+  type: string;
+  supporting_evidence_ids: string[];
+  refuting_evidence_ids: string[];
+};
+
+type AnalyzeResponseV2 = {
+  query: string;
+  is_demo: boolean;
+  demo_topic: string | null;
+  recommended_chain_id: string | null;
+  evidences: Array<{
+    id: string;
+    content: string;
+    source: string;
+    reliability: string;
+    is_supporting: boolean;
+  }>;
+  chains: Array<{
+    chain_id: string;
+    label: string;
+    description: string;
+    probability: number;
+    depth: number;
+    nodes: ApiNode[];
+    edges: ApiEdge[];
+    supporting_evidence_ids: string[];
+    refuting_evidence_ids: string[];
+  }>;
+};
+
+function toLocalChain(
+  chain: AnalyzeResponseV2["chains"][number],
+  locale: "zh" | "en",
+  evidencePool: AnalyzeResponseV2["evidences"]
+): CausalChain {
+  const mapNodeType = (type: string): CausalNodeType => {
+    if (type === "cause") return "factor";
+    if (type === "effect") return "outcome";
+    return "intermediate";
+  };
+
+  const mapEdgeStrength = (strength: number): EdgeStrength => {
+    if (strength >= 0.7) return "strong";
+    if (strength >= 0.4) return "weak";
+    return "uncertain";
+  };
+
+  const mapReliability = (reliability: string): EvidenceReliability => {
+    if (reliability === "0.50") return "medium";
+    if (reliability === "0.00") return "weak";
+
+    const score = Number(reliability);
+    if (Number.isNaN(score)) return "medium";
+    if (score >= 0.75) return "strong";
+    if (score >= 0.5) return "medium";
+    return "weak";
+  };
+
+  return {
+    metadata: {
+      id: chain.chain_id,
+      title: chain.label,
+      outcomeLabel: chain.nodes[chain.nodes.length - 1]?.label ?? chain.label,
+      totalNodes: chain.nodes.length,
+      totalEdges: chain.edges.length,
+      maxDepth: chain.depth,
+      confidence: chain.probability,
+      primaryEvidenceCount: chain.supporting_evidence_ids.length,
+      counterfactualSummary: {
+        intervention: locale === "en" ? "See counterfactual tab in full console" : "完整反事实请查看控制台页",
+        outcomeChange: locale === "en" ? "Detailed counterfactual summary not yet rendered on homepage" : "首页暂未完整渲染反事实摘要",
+        probabilityShift: 0,
+        description: locale === "en" ? "This homepage currently renders the selected causal chain and labels whether the result is live or demo." : "当前首页会渲染所选因果链，并标注结果来自 real analysis 还是 demo。",
+      },
+    },
+    nodes: chain.nodes.map((node) => ({
+      id: node.id,
+      label: node.label,
+      type: mapNodeType(node.type),
+      probability: Math.round(node.probability * 100),
+      depth: node.depth,
+      description: {
+        brief: node.description,
+        detail: node.description,
+      },
+      upstreamIds: node.upstream_ids,
+      evidenceIds: [...node.supporting_evidence_ids, ...node.refuting_evidence_ids],
+    })),
+    edges: chain.edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      strength: edge.strength,
+      type: mapEdgeStrength(edge.strength),
+      evidence: evidencePool
+        .filter((item) => edge.supporting_evidence_ids.includes(item.id) || edge.refuting_evidence_ids.includes(item.id))
+        .map((item) => ({
+          evidenceId: item.id,
+          content: item.content,
+          reliability: mapReliability(item.reliability),
+          causalWeight: Number(item.reliability) || 0.5,
+        })),
+    })),
+    upstreamMap: Object.fromEntries(
+      chain.nodes.map((node) => [
+        node.id,
+        chain.nodes
+          .filter((candidate) => node.upstream_ids.includes(candidate.id))
+          .map((candidate) => ({
+            id: candidate.id,
+            label: candidate.label,
+            probability: Math.round(candidate.probability * 100),
+            depth: candidate.depth,
+            type: mapNodeType(candidate.type),
+          })),
+      ])
+    ),
+  };
+}
 
 const caveat = Caveat({
   subsets: ["latin"],
@@ -396,6 +541,21 @@ function StickyCard({
 export default function Home() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const { locale, setLocale, t } = useI18n();
+  const localizedDemo = getLocalizedMockData(locale);
+  const [activeChain, setActiveChain] = useState(localizedDemo.primaryChain);
+  const [currentQuery, setCurrentQuery] = useState("");
+  const [lastQuery, setLastQuery] = useState("");
+  const [statusNote, setStatusNote] = useState("");
+  const [availableChains, setAvailableChains] = useState<AnalyzeResponseV2["chains"]>([]);
+  const [recommendedChainId, setRecommendedChainId] = useState<string | null>(null);
+  const [evidencePool, setEvidencePool] = useState<AnalyzeResponseV2["evidences"]>([]);
+  const [analysisMode, setAnalysisMode] = useState<{ isDemo: boolean; demoTopic: string | null; loading: boolean }>({
+    isDemo: true,
+    demoTopic: null,
+    loading: false,
+  });
+
+  const mockPrimaryChain = activeChain;
   
   // Board drag/pan state
   const [isDragging, setIsDragging] = useState(false);
@@ -410,6 +570,16 @@ export default function Home() {
   const [boardReady, setBoardReady] = useState(false);
 
   useEffect(() => {
+    setActiveChain(localizedDemo.primaryChain);
+    setAvailableChains([]);
+    setRecommendedChainId(null);
+    setEvidencePool([]);
+    setSelectedNodeId(null);
+    setPanOffset({ x: 0, y: 0 });
+  }, [localizedDemo]);
+
+  useEffect(() => {
+    setBoardReady(false);
     const width = window.innerWidth;
     const height = window.innerHeight;
     const headerHeight = 52;
@@ -424,10 +594,9 @@ export default function Home() {
 
     setNotes(computedNotes);
     setBoardReady(true);
-  }, [locale, t]);
+  }, [mockPrimaryChain, locale, t]);
 
   const causalStrings = computeCausalStrings(notes, mockPrimaryChain.edges);
-  const noteIndexMap = new Map(notes.map((note, index) => [note.id, index]));
   const connectedNodeIds = selectedNodeId
     ? new Set(
         mockPrimaryChain.edges.flatMap((edge) =>
@@ -448,7 +617,21 @@ export default function Home() {
     },
     { outcome: 0, factor: 0, intermediate: 0 }
   );
-  const totalEvidenceItems = mockPrimaryChain.edges.reduce((sum, edge) => sum + edge.evidence.length, 0);
+  const totalEvidenceItems = Math.max(
+    mockPrimaryChain.edges.reduce((sum, edge) => sum + edge.evidence.length, 0),
+    evidencePool.length
+  );
+  const selectedNodeData = mockPrimaryChain.nodes.find((node) => node.id === selectedNodeId);
+  const selectedNodeSupportingCount = mockPrimaryChain.edges.reduce(
+    (sum, edge) =>
+      edge.source === selectedNodeId || edge.target === selectedNodeId
+        ? sum + edge.evidence.filter((item) => item.reliability !== "weak").length
+        : sum,
+    0
+  );
+  const selectedNodeUncertainty = selectedNodeData
+    ? Math.max(0, 100 - selectedNodeData.probability)
+    : Math.max(0, 100 - Math.round(mockPrimaryChain.metadata.confidence * 100));
   const selectedEdgeIds = selectedNodeId
     ? new Set(
         mockPrimaryChain.edges
@@ -456,6 +639,41 @@ export default function Home() {
           .map((edge) => edge.id)
       )
     : new Set<string>();
+  const chainProbabilityItems = availableChains.slice(0, 3);
+  const activeChainIsRecommended = !recommendedChainId || mockPrimaryChain.metadata.id === recommendedChainId;
+  const activeChainConfidence = Math.round(mockPrimaryChain.metadata.confidence * 100);
+  const hasLowConfidence = activeChainConfidence < 50;
+  const hasLowEvidenceCoverage = mockPrimaryChain.metadata.primaryEvidenceCount < 3;
+  const hasHighUncertainty = selectedNodeUncertainty > 60;
+  const selectedNodeEvidenceIds = selectedNodeData?.evidenceIds ?? [];
+  const activeChainEvidenceIds = new Set(
+    mockPrimaryChain.edges.flatMap((edge) => edge.evidence.map((item) => item.evidenceId))
+  );
+  const relatedEvidence = evidencePool.filter((item) => {
+    if (selectedNodeEvidenceIds.length > 0) {
+      return selectedNodeEvidenceIds.includes(item.id);
+    }
+
+    if (activeChainEvidenceIds.size > 0) {
+      return activeChainEvidenceIds.has(item.id);
+    }
+
+    return false;
+  });
+  const visibleEvidence = (relatedEvidence.length > 0 ? relatedEvidence : evidencePool).slice(0, 3);
+  const getReliabilityLabel = (reliability: string) => {
+    const score = Number(reliability);
+    if (Number.isNaN(score)) {
+      return t("home.evidence.medium");
+    }
+    if (score >= 0.75) {
+      return t("home.evidence.strong");
+    }
+    if (score >= 0.5) {
+      return t("home.evidence.medium");
+    }
+    return t("home.evidence.weak");
+  };
 
   // Background drag handlers
   const handleBoardMouseDown = useCallback((e: React.MouseEvent) => {
@@ -550,6 +768,71 @@ export default function Home() {
   }, []);
 
   const selectedNote = notes.find((n) => n.id === selectedNodeId);
+
+  const runAnalysis = useCallback(async () => {
+    const query = currentQuery.trim();
+    if (!query) {
+      return;
+    }
+
+    setAnalysisMode((current) => ({ ...current, loading: true }));
+    setStatusNote(locale === "en" ? "Running live analysis…" : "正在执行真实分析…");
+    setLastQuery(query);
+
+    try {
+      const response = await fetch("http://127.0.0.1:8000/api/analyze/v2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const payload = (await response.json()) as AnalyzeResponseV2;
+      const recommended = payload.chains.find((chain) => chain.chain_id === payload.recommended_chain_id) ?? payload.chains[0];
+
+      if (!recommended) {
+        throw new Error("No chains returned");
+      }
+
+      setAvailableChains(payload.chains);
+      setRecommendedChainId(payload.recommended_chain_id);
+      setEvidencePool(payload.evidences);
+      setActiveChain(toLocalChain(recommended, locale, payload.evidences));
+
+      setAnalysisMode({
+        isDemo: payload.is_demo,
+        demoTopic: payload.demo_topic,
+        loading: false,
+      });
+      setSelectedNodeId(null);
+      setPanOffset({ x: 0, y: 0 });
+      setStatusNote(
+        payload.is_demo
+          ? locale === "en"
+            ? "Backend returned demo fallback data. Treat this as a structured example, not validated analysis."
+            : "后端返回了 demo fallback 数据。请将其视为结构化示例，而非已验证分析。"
+          : locale === "en"
+            ? "Live analysis returned a recommended causal chain. Review evidence coverage before trusting it."
+            : "真实分析已返回推荐因果链。请先检查证据覆盖，再决定是否相信结果。"
+      );
+    } catch {
+      setActiveChain(localizedDemo.primaryChain);
+      setAvailableChains([]);
+      setRecommendedChainId(null);
+      setEvidencePool([]);
+      setAnalysisMode({ isDemo: true, demoTopic: null, loading: false });
+      setSelectedNodeId(null);
+      setPanOffset({ x: 0, y: 0 });
+      setStatusNote(
+        locale === "en"
+          ? "Live analysis failed; showing local demo board instead."
+          : "真实分析失败，当前回退到本地 demo 证据墙。"
+      );
+    }
+  }, [currentQuery, locale, localizedDemo.primaryChain]);
 
   return (
     <div
@@ -700,7 +983,13 @@ export default function Home() {
                 animation: "pulse 2s infinite",
               }}
             />
-            <span>{t("status.demoMode")}</span>
+            <span>
+              {analysisMode.loading
+                ? t("header.status.processing")
+                : analysisMode.isDemo
+                  ? t("status.demoMode")
+                  : t("header.status.live")}
+            </span>
           </div>
           <button
             onClick={() => setLocale(locale === "en" ? "zh" : "en")}
@@ -735,15 +1024,109 @@ export default function Home() {
           overflowY: "auto",
         }}
       >
+        <div className="compact-item" style={{ marginBottom: "12px", background: "rgba(255,255,255,0.72)" }}>
+          <div className="compact-label">{t("query.label")}</div>
+          <textarea
+            value={currentQuery}
+            onChange={(event) => setCurrentQuery(event.target.value)}
+            placeholder={t("query.placeholderExample")}
+            style={{
+              width: "100%",
+              minHeight: "72px",
+              resize: "none",
+              border: "1px solid rgba(160, 140, 110, 0.18)",
+              borderRadius: "6px",
+              padding: "8px 10px",
+              background: "rgba(255,255,255,0.82)",
+              color: "#5c4a32",
+              fontSize: "0.68rem",
+              lineHeight: 1.5,
+              outline: "none",
+            }}
+          />
+          <button
+            onClick={runAnalysis}
+            disabled={analysisMode.loading || !currentQuery.trim()}
+            style={{
+              marginTop: "8px",
+              width: "100%",
+              padding: "8px 10px",
+              borderRadius: "6px",
+              border: "1px solid rgba(59, 110, 165, 0.2)",
+              background: analysisMode.loading ? "rgba(59,110,165,0.08)" : "rgba(59,110,165,0.12)",
+              color: "#4a7a9e",
+              fontSize: "0.68rem",
+              fontWeight: 600,
+              cursor: analysisMode.loading ? "wait" : "pointer",
+            }}
+          >
+            {analysisMode.loading ? t("header.status.processing") : t("query.submit")}
+          </button>
+        </div>
+
         <h2 className="panel-title">{t("panel.hypotheses")}</h2>
 
         <div className="compact-item">
           <div className="compact-label">{t("home.chain.primary")}</div>
           <div>{primaryChainTitle}</div>
           <div style={{ marginTop: "4px", fontSize: "0.6rem", color: "#7a6b55" }}>
-            {t("graph.confidence")} = {Math.round(mockPrimaryChain.metadata.confidence * 100)}%
+            {t("graph.confidence")} = {activeChainConfidence}%
           </div>
+          {activeChainIsRecommended && availableChains.length > 0 && (
+            <div style={{ marginTop: "6px", fontSize: "0.56rem", color: "#4a7a9e", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+              {locale === "en" ? "Recommended chain" : "推荐链路"}
+            </div>
+          )}
+          {hasLowConfidence && (
+            <div style={{ marginTop: "6px", fontSize: "0.58rem", color: "#a0503c", lineHeight: 1.5 }}>
+              {locale === "en" ? "Low confidence. Treat this chain as a tentative explanation." : "当前链路置信偏低，请将其视为暂定解释。"}
+            </div>
+          )}
+          {hasLowEvidenceCoverage && (
+            <div style={{ marginTop: "4px", fontSize: "0.58rem", color: "#a0503c", lineHeight: 1.5 }}>
+              {locale === "en" ? "Evidence coverage is thin. Inspect sources before trusting the result." : "当前证据覆盖偏薄，信任结果前请先检查来源。"}
+            </div>
+          )}
         </div>
+
+        {chainProbabilityItems.length > 0 && (
+          <div className="compact-item">
+            <div className="compact-label">{t("home.chain.alternative")}</div>
+            {chainProbabilityItems.map((chain) => (
+              <button
+                key={chain.chain_id}
+                onClick={() => {
+                  setSelectedNodeId(null);
+                  setPanOffset({ x: 0, y: 0 });
+                  setActiveChain(toLocalChain(chain, locale, evidencePool));
+                }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  marginTop: "6px",
+                  padding: "6px 8px",
+                  borderRadius: "4px",
+                  border: chain.chain_id === mockPrimaryChain.metadata.id ? "1px solid rgba(59,110,165,0.28)" : "1px solid rgba(160,140,110,0.12)",
+                  background: chain.chain_id === mockPrimaryChain.metadata.id ? "rgba(59,110,165,0.08)" : "rgba(255,255,255,0.55)",
+                  color: "#5c4a32",
+                  fontSize: "0.62rem",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
+                  <span>{chain.label}</span>
+                  {chain.chain_id === recommendedChainId && (
+                    <span style={{ fontSize: "0.5rem", color: "#4a7a9e", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      {locale === "en" ? "Rec" : "推荐"}
+                    </span>
+                  )}
+                </div>
+                <div style={{ color: "#8b7355", marginTop: "2px" }}>{t("graph.confidence")} {Math.round(chain.probability * 100)}%</div>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="compact-item">
           <div className="compact-label">{t("home.summary.structure")}</div>
@@ -786,6 +1169,17 @@ export default function Home() {
           </div>
           <div style={{ color: "#8b7355" }}>{t("home.stats.primaryEvidence")}</div>
         </div>
+        <div className="compact-item">
+          <div style={{ fontSize: "1.2rem", fontWeight: 600, color: selectedNodeUncertainty > 45 ? "#a0503c" : "#5c4a32" }}>
+            {selectedNodeUncertainty}%
+          </div>
+          <div style={{ color: "#8b7355" }}>{t("home.stats.uncertainty")}</div>
+          {hasHighUncertainty && (
+            <div style={{ marginTop: "4px", fontSize: "0.56rem", color: "#a0503c", lineHeight: 1.5 }}>
+              {locale === "en" ? "High uncertainty. Review upstream assumptions and evidence quality." : "当前不确定性较高，请重点检查上游假设与证据质量。"}
+            </div>
+          )}
+        </div>
       </aside>
 
       <aside
@@ -824,6 +1218,10 @@ export default function Home() {
             <div style={{ color: "#8b7355", fontSize: "0.65rem" }}>
               {t("graph.depth")} {selectedNote.depth}
             </div>
+            <div style={{ color: "#8b7355", fontSize: "0.62rem", marginTop: "6px", lineHeight: 1.5 }}>
+              {t("home.stats.primaryEvidence")}: {selectedNodeSupportingCount}
+              <br />{t("home.stats.uncertainty")}: {selectedNodeUncertainty}%
+            </div>
           </div>
         ) : (
           <div
@@ -845,6 +1243,31 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        <div className="compact-item" style={{ background: analysisMode.isDemo ? "rgba(255,248,240,0.9)" : "rgba(240,248,244,0.9)" }}>
+          <div className="compact-label">{analysisMode.isDemo ? t("status.demoMode") : t("header.status.live")}</div>
+          <div style={{ fontSize: "0.65rem", lineHeight: 1.5 }}>{statusNote || (analysisMode.isDemo ? t("demo.banner") : t("status.liveAnalysis"))}</div>
+        </div>
+
+        <div className="compact-item" style={{ background: "rgba(255,255,255,0.72)" }}>
+          <div className="compact-label">{t("home.evidence.related")}</div>
+          {visibleEvidence.length > 0 ? (
+            visibleEvidence.map((item) => (
+              <div key={item.id} style={{ marginBottom: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", fontSize: "0.56rem", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                  <span style={{ color: item.is_supporting ? "#5a7a52" : "#a0503c" }}>
+                    {item.is_supporting ? t("home.evidence.supporting") : t("home.evidence.refuting")}
+                  </span>
+                  <span style={{ color: "#8b7355" }}>{getReliabilityLabel(item.reliability)}</span>
+                </div>
+                <div style={{ fontSize: "0.65rem", color: "#5c4a32", lineHeight: 1.45 }}>{item.content}</div>
+                <div style={{ fontSize: "0.56rem", color: "#8b7355", marginTop: "2px" }}>{item.source}</div>
+              </div>
+            ))
+          ) : (
+            <div style={{ fontSize: "0.65rem", color: "#8b7355", lineHeight: 1.5 }}>{t("home.evidence.empty")}</div>
+          )}
+        </div>
 
         <h2 className="panel-title" style={{ marginTop: "16px" }}>
           {t("home.legend.title")}

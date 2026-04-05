@@ -3,6 +3,7 @@
 
 import React from "react";
 import { Agent } from "@/data/mockData";
+import { useI18n } from "@/lib/i18n";
 
 interface AgentListProps {
   agents: Agent[];
@@ -15,10 +16,11 @@ const stanceStyles: Record<string, string> = {
 };
 
 export default function AgentList({ agents }: AgentListProps) {
+  const { t } = useI18n();
   return (
     <div className="p-5 rounded-lg bg-[var(--paper-white)] border border-[var(--paper-border)] shadow-[var(--paper-shadow)] mb-4">
       <h4 className="text-xs uppercase tracking-widest text-[var(--ink-400)] mb-4 font-semibold">
-        参与 Agent
+        {t("panel.agents")}
       </h4>
       <div className="space-y-3">
         {agents.map((a) => (
@@ -33,7 +35,7 @@ export default function AgentList({ agents }: AgentListProps) {
               </span>
             </div>
             <span className={`badge border-none px-3 py-1 rounded-md font-medium shadow-sm ${stanceStyles[a.stance]}`}>
-              {a.stance === "support" ? "支持" : a.stance === "oppose" ? "反对" : "中立"}
+              {a.stance === "support" ? t("debate.footer.support") : a.stance === "oppose" ? t("debate.footer.oppose") : t("debate.footer.neutral")}
             </span>
           </div>
         ))}

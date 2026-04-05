@@ -16,10 +16,11 @@
 
 Without a configured real model / evidence collection path, the browser experience can fall back to demo data.
 
-This is now **explicitly labeled in the UI**, but it still means:
+This is now **explicitly labeled in the UI**, and the homepage can call `/api/analyze/v2` directly, but it still means:
 
 - not every user query yields a truly query-specific causal chain
 - the OSS demo is reliable for interaction testing, not guaranteed real analysis quality
+- evidence coverage, confidence, and uncertainty should be treated as guidance signals rather than proof of causal truth
 
 ### 2. Real-time streaming is not finished
 
@@ -41,14 +42,16 @@ The current OSS is a strong demoable alpha, not a production-grade end-user appl
 
 ### P1 — Make real analysis mode clearer
 
-- show stronger distinction between real analysis and demo mode
+- show stronger distinction between real analysis and demo mode ✅
 - optionally surface model / source availability in the UI
+- surface evidence coverage / support-vs-refutation balance more prominently
 
 ### P2 — Improve node and evidence workflows
 
 - evidence filtering by source / support / confidence
 - better chain comparison workflows
 - stronger edge explanation affordances
+- richer right-panel rendering of real API evidence pools
 
 ### P3 — Strengthen query-specific fallback behavior
 
@@ -65,6 +68,7 @@ The current OSS is a strong demoable alpha, not a production-grade end-user appl
 - stronger intervention math
 - richer sensitivity analysis
 - more robust evidence grounding and uncertainty communication
+- clearer failure states so the product never overstates confidence when real analysis is weak
 
 ## Release Readiness Heuristic
 

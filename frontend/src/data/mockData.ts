@@ -454,25 +454,25 @@ export const mockEngineStatus: EngineStatus = {
 
 // Mock Data: 筛选选项
 export const timeRangeOptions = [
-  { value: 'all', label: '全部时间' },
-  { value: '24h', label: '近 24 小时' },
-  { value: '7d', label: '近 7 天' },
-  { value: '30d', label: '近 30 天' },
-  { value: '1y', label: '近 1 年' },
+  { value: 'all', label: 'filters.time.all' },
+  { value: '24h', label: 'filters.time.24h' },
+  { value: '7d', label: 'filters.time.7d' },
+  { value: '30d', label: 'filters.time.30d' },
+  { value: '1y', label: 'filters.time.1y' },
 ];
 
 export const causalStrengthOptions = [
-  { value: 'all', label: '全部' },
-  { value: 'strong', label: '强因果 (>0.8)' },
-  { value: 'medium', label: '中因果 (0.5-0.8)' },
-  { value: 'weak', label: '弱因果 (<0.5)' },
+  { value: 'all', label: 'filters.all' },
+  { value: 'strong', label: 'filters.strength.strong' },
+  { value: 'medium', label: 'filters.strength.medium' },
+  { value: 'weak', label: 'filters.strength.weak' },
 ];
 
 export const evidenceQualityOptions = [
-  { value: 'all', label: '全部' },
-  { value: 'high', label: '高可信度' },
-  { value: 'medium', label: '中可信度' },
-  { value: 'low', label: '低可信度' },
+  { value: 'all', label: 'filters.all' },
+  { value: 'high', label: 'filters.reliability.high' },
+  { value: 'medium', label: 'filters.reliability.medium' },
+  { value: 'low', label: 'filters.reliability.low' },
 ];
 
 // Mock Data: Agent辩论报告 (Stage 5)
@@ -638,3 +638,184 @@ export const mockAgentReports: AgentReport[] = [
     ],
   },
 ];
+
+export type DemoLocale = 'zh' | 'en';
+
+export interface LocalizedDemoData {
+  hypotheses: Hypothesis[];
+  evidences: Evidence[];
+  primaryChain: CausalChain;
+  causalNodes: CausalNode[];
+  causalEdges: CausalEdge[];
+  agents: Agent[];
+  probabilityBars: ProbabilityBar[];
+  agentReports: AgentReport[];
+  timeRangeOptions: typeof timeRangeOptions;
+  causalStrengthOptions: typeof causalStrengthOptions;
+  evidenceQualityOptions: typeof evidenceQualityOptions;
+}
+
+function deepClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function toEnglishData(): LocalizedDemoData {
+  const hypotheses = deepClone(mockHypotheses);
+  hypotheses[0].title = 'H1: Earnings Decline';
+  hypotheses[0].description = 'Q3 earnings show revenue down 23% year over year, with losses widening.';
+  hypotheses[1].title = 'H2: Competitive Pressure';
+  hypotheses[1].description = 'A major rival launched a breakthrough product and eroded market share.';
+  hypotheses[2].title = 'H3: Macro Pressure';
+  hypotheses[2].description = 'The entire sector was hit by tighter macro policy and shrinking liquidity.';
+  hypotheses[3].title = 'H4: Internal Governance';
+  hypotheses[3].description = 'The CTO and CFO both resigned before the crash, signaling internal weakness.';
+  hypotheses[4].title = 'H5: Short Seller Thesis';
+  hypotheses[4].description = 'A short-seller report triggered institutional panic selling.';
+
+  const evidences = deepClone(mockEvidences);
+  evidences[0].content = 'Q3 filings show revenue down 23% year over year, with net loss widening to RMB 230M.';
+  evidences[0].source = 'Company Filing (2024-01-10)';
+  evidences[1].content = 'After the rival launch, branded search volume fell 40% and app-store rank dropped out of the top 100.';
+  evidences[1].source = 'Industry Data Platform';
+  evidences[2].content = 'Negative social media narratives surged, with related topic views exceeding 50 million.';
+  evidences[2].source = 'Sentiment Monitoring System';
+  evidences[3].content = 'Institutional holding data shows major funds cut a combined 12% in the week before the crash.';
+  evidences[3].source = 'Trading Data Analysis';
+
+  const primaryChain = deepClone(mockPrimaryChain);
+  primaryChain.metadata.title = 'Macro Tightening → Competition Intensifies → Earnings Decline → Confidence Crisis → Stock Collapse';
+  primaryChain.metadata.outcomeLabel = 'Stock Collapse';
+  primaryChain.metadata.counterfactualSummary.intervention = 'Weaken the “Competition Intensifies” link';
+  primaryChain.metadata.counterfactualSummary.outcomeChange = 'If competitive pressure eased, the probability of earnings decline would drop from 78% to roughly 45%';
+  primaryChain.metadata.counterfactualSummary.description = 'Counterfactual simulation suggests the competition node acts as the key amplifier in this chain. If weakened, the downstream probability of earnings decline falls sharply.';
+
+  primaryChain.nodes[0].label = 'Macro Tightening';
+  primaryChain.nodes[0].description.brief = 'Regulatory tightening raised financing costs across the sector.';
+  primaryChain.nodes[0].description.detail = 'The central bank maintained a tighter liquidity stance, local debt reviews accelerated, and banks became more conservative toward leveraged sectors. The resulting financing squeeze narrowed expansion room and intensified sector-wide competition.';
+  primaryChain.nodes[1].label = 'Competition Intensifies';
+  primaryChain.nodes[1].description.brief = 'Competition became brutal and margins were compressed hard.';
+  primaryChain.nodes[1].description.detail = 'As liquidity tightened, leading players fought for a shrinking market through price wars and promotions. Smaller firms were squeezed harder, concentration rose temporarily, but the total profit pool shrank materially.';
+  primaryChain.nodes[2].label = 'Earnings Decline';
+  primaryChain.nodes[2].description.brief = 'Q3 revenue fell 23% year over year and losses missed expectations.';
+  primaryChain.nodes[2].description.detail = 'Under combined pressure from weaker pricing and rising costs, core business profitability dropped sharply. Revenue fell 23% year over year and net losses widened to RMB 230M, weakening investor conviction.';
+  primaryChain.nodes[3].label = 'Confidence Crisis';
+  primaryChain.nodes[3].description.brief = 'Market sentiment deteriorated and both institutions and retail investors lost confidence.';
+  primaryChain.nodes[3].description.detail = 'The earnings shock triggered a chain reaction: institutions sold aggressively, negative public sentiment spread, and executive departures amplified governance concerns. Panic propagated from institutional holders to retail investors.';
+  primaryChain.nodes[4].label = 'Stock Collapse';
+  primaryChain.nodes[4].description.brief = 'The share price crashed in a short window, marking the worst weekly drawdown on record.';
+  primaryChain.nodes[4].description.detail = 'With multiple negative catalysts piling up, the stock fell 47% in five trading days and erased more than RMB 20B in market value. Margin calls and forced liquidations amplified the downward spiral.';
+
+  primaryChain.edges[0].evidence[0].content = 'The central bank Q3 liquidity report showed M2 growth slowing to 8.1%, a cycle low.';
+  primaryChain.edges[0].evidence[1].content = 'Commercial banks extended loan approval cycles for real-estate-adjacent sectors beyond 45 days.';
+  primaryChain.edges[1].evidence[0].content = 'Sector price wars compressed gross margin from 34% to 21%.';
+  primaryChain.edges[1].evidence[1].content = 'After the competitor event, branded search index dropped 40%.';
+  primaryChain.edges[2].evidence[0].content = 'Within three trading days of the Q3 release, institutions were net sellers of 12% of float.';
+  primaryChain.edges[2].evidence[1].content = 'The CTO and CFO both submitted resignations before the earnings release.';
+  primaryChain.edges[3].evidence[0].content = 'The stock fell from RMB 42 to RMB 22 in five sessions, a 47% decline.';
+  primaryChain.edges[3].evidence[1].content = 'Margin financing balances fell 63% during the crash, with forced liquidation exceeding RMB 500M.';
+  primaryChain.edges[3].evidence[2].content = 'Related social topics exceeded 80 million views, with negative sentiment above 78%.';
+  primaryChain.upstreamMap.CN2[0].label = 'Macro Tightening';
+  primaryChain.upstreamMap.CN3[0].label = 'Macro Tightening';
+  primaryChain.upstreamMap.CN3[1].label = 'Competition Intensifies';
+  primaryChain.upstreamMap.CN4[0].label = 'Earnings Decline';
+  primaryChain.upstreamMap.CN5[0].label = 'Earnings Decline';
+  primaryChain.upstreamMap.CN5[1].label = 'Confidence Crisis';
+
+  const causalNodes = deepClone(mockCausalNodes);
+  causalNodes[0].label = 'Stock Collapse';
+  causalNodes[1].label = 'Earnings Decline';
+  causalNodes[2].label = 'Competitive Pressure';
+  causalNodes[3].label = 'Macro Policy';
+  causalNodes[4].label = 'Executive Departures';
+  causalNodes[5].label = 'Short Report';
+  causalNodes[6].label = 'Confidence Crisis';
+  causalNodes[7].label = 'Liquidity Tightening';
+
+  const agents = deepClone(mockAgents);
+  agents[0].name = 'Detective Agent';
+  agents[0].role = 'abduction';
+  agents[0].contribution = 'Identified earnings decline as the main driver.';
+  agents[1].name = 'Logic Agent';
+  agents[1].role = 'deduction';
+  agents[1].contribution = 'Checked the logical completeness of the chain.';
+  agents[2].name = 'Statistics Agent';
+  agents[2].role = 'induction';
+  agents[2].contribution = 'Estimated conditional probabilities from historical patterns.';
+  agents[3].name = 'Critique Agent';
+  agents[3].role = 'devilsAdvocate';
+  agents[3].contribution = 'Questioned the strength of the macro-causality claim.';
+  agents[4].name = 'Arbitration Agent';
+  agents[4].role = 'arbitration';
+  agents[4].contribution = 'Balanced competing views and produced the final judgment.';
+
+  const probabilityBars = deepClone(mockProbabilityBars);
+  probabilityBars[0].label = 'H1-Earnings';
+  probabilityBars[1].label = 'H2-Competition';
+  probabilityBars[2].label = 'H3-Macro';
+  probabilityBars[3].label = 'H4-Governance';
+  probabilityBars[4].label = 'H5-Short';
+
+  const agentReports = deepClone(mockAgentReports);
+  agentReports[0].agentName = 'Detective Agent';
+  agentReports[0].agentRole = 'abduction';
+  agentReports[0].conclusion = 'H1 (earnings decline) is the primary driver of the stock collapse, with confidence 0.82.';
+  agentReports[0].reasoning = 'IF Q3 revenue falls 23% AND institutional holdings drop 12%, THEN the stock price declines. Working backward: stock collapse ← earnings decline ← competitive loss.';
+  agentReports[1].agentName = 'Logic Agent';
+  agentReports[1].agentRole = 'deduction';
+  agentReports[1].conclusion = 'The H1→N1 chain passes logical consistency checks with no contradictory path.';
+  agentReports[1].reasoning = 'Deductive validation: (H1: earnings decline) → (N7: confidence crisis) → (N1: stock collapse). The causal transmission across nodes is internally consistent.';
+  agentReports[2].agentName = 'Statistics Agent';
+  agentReports[2].agentRole = 'induction';
+  agentReports[2].conclusion = 'Historical conditional probability supports P(collapse | earnings decline) = 0.76 ± 0.08.';
+  agentReports[2].reasoning = 'Historical patterns show a 76% crash probability within 30 trading days after an earnings shock. After Bayesian-style updating, P(H1|N1) remains high.';
+  agentReports[3].agentName = 'Critique Agent';
+  agentReports[3].agentRole = 'devilsAdvocate';
+  agentReports[3].conclusion = 'H1 carries reverse-causality risk: the collapse may have accelerated the confidence crisis rather than the other way around.';
+  agentReports[3].reasoning = 'Counter-argument: institutional selling (E4) may be both a cause and an effect. Timing overlap weakens directional certainty.';
+  agentReports[4].agentName = 'Abduction Agent';
+  agentReports[4].agentRole = 'abduction';
+  agentReports[4].conclusion = 'H3 (macro pressure) remains a viable competing explanation: policy tightening → industry slowdown → earnings decline.';
+  agentReports[4].reasoning = 'Alternative backward path: macro tightening → liquidity squeeze → stronger competition → earnings decline. It still needs a lower-prior comparison against H1.';
+  agentReports[5].agentName = 'Critique Agent';
+  agentReports[5].agentRole = 'devilsAdvocate';
+  agentReports[5].conclusion = 'H3 lacks enough support: E2 is only moderate support and cannot sustain a strong causal chain.';
+  agentReports[5].reasoning = 'E2 captures a search-volume drop but does not directly tie back to macro policy. Missing sector-wide data weakens H3.';
+  agentReports[6].agentName = 'Arbitration Agent';
+  agentReports[6].agentRole = 'arbitration';
+  agentReports[6].conclusion = 'Final ruling: H1 (earnings decline) remains the dominant explanation at P=0.78; H3 (macro) is secondary at P=0.38.';
+  agentReports[6].reasoning = 'Composite scoring favors H1 overwhelmingly over H3, so follow-up analysis should prioritize the earnings-driven pathway.';
+
+  return {
+    hypotheses,
+    evidences,
+    primaryChain,
+    causalNodes,
+    causalEdges: deepClone(mockCausalEdges),
+    agents,
+    probabilityBars,
+    agentReports,
+    timeRangeOptions: deepClone(timeRangeOptions),
+    causalStrengthOptions: deepClone(causalStrengthOptions),
+    evidenceQualityOptions: deepClone(evidenceQualityOptions),
+  };
+}
+
+export function getLocalizedMockData(locale: DemoLocale): LocalizedDemoData {
+  if (locale === 'en') {
+    return toEnglishData();
+  }
+
+  return {
+    hypotheses: deepClone(mockHypotheses),
+    evidences: deepClone(mockEvidences),
+    primaryChain: deepClone(mockPrimaryChain),
+    causalNodes: deepClone(mockCausalNodes),
+    causalEdges: deepClone(mockCausalEdges),
+    agents: deepClone(mockAgents),
+    probabilityBars: deepClone(mockProbabilityBars),
+    agentReports: deepClone(mockAgentReports),
+    timeRangeOptions: deepClone(timeRangeOptions),
+    causalStrengthOptions: deepClone(causalStrengthOptions),
+    evidenceQualityOptions: deepClone(evidenceQualityOptions),
+  };
+}

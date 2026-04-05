@@ -519,3 +519,51 @@ EvidenceCollection → GraphBuilding → HypothesisGeneration → EvidenceAnchor
 ### 理由
 - 对外 OSS 演示如果首页支持语言切换，而中间核心交互区仍夹杂硬编码英文/中文，会直接削弱专业度
 - 先用当前轻量字典方案补齐，比引入新的 i18n 框架更符合“增量、低风险、可 review”的约束
+
+### 2026-04-04 剩余 i18n 收口与最小双语 demo 数据层
+- 在继续收口最小可公开版本时，补齐了剩余关键小组件的双语界面层：
+  - `HypothesisList.tsx`
+  - `Filters.tsx`
+  - `AgentList.tsx`
+- 同时为了避免“语言切换了，但首页核心内容仍然全是中文”的割裂感，在 `frontend/src/data/mockData.ts` 中新增 `getLocalizedMockData(locale)`：
+  - zh 路径继续返回原有 mock 数据
+  - en 路径返回最小英文镜像数据，用于首页主证据墙内容
+- `frontend/src/app/page.tsx` 已切换为消费 locale-aware demo 数据，而不是直接写死 `mockPrimaryChain`
+
+### 理由
+- 对 OSS 首次访问者来说，语言切换如果只改变按钮文本、不改变主内容，会显得明显未完成
+- 先用“最小英文镜像数据层”补齐首页核心体验，比一次性重构整套 console 数据源更稳妥
+
+### 2026-04-04 首页接入真实 API 与 demo/real 分层显示
+- 用户继续追问：如果 ChatGPT 也能给推理过程，这个项目还有什么优势；并明确指出“如果不能提高推理准确性，本项目会损失很大的使用价值”。
+- 因此这一轮的优先级从 UI polish 转回到“诚实的结果展示”：
+  - 首页新增最小查询输入与分析按钮
+  - 首页直接调用后端 `POST /api/analyze/v2`
+  - 当后端返回推荐链时，首页会把推荐链映射成当前证据墙所需的数据结构并渲染
+  - UI 会明确区分：
+    - `real analysis`
+    - `demo fallback`
+  - 若真实分析失败，则首页明确提示“已回退到本地 demo”，而不是静默装作分析成功
+
+### 理由
+- 如果产品不能在结果层面区分“真实分析”和“演示数据”，证据墙再漂亮也只会放大不可信感
+- 相比继续增加视觉细节，更关键的是让用户知道：什么时候可以谨慎参考结果，什么时候只能把它当作结构化示例
+
+### 2026-04-04 首页信任信号补强：链切换联动、推荐链标识与证据过滤
+- 在首页接入 `/api/analyze/v2` 后，继续补齐了影响可信度的联动缺口：
+  - 便签布局重算现在会跟随 `activeChain`
+  - 切链、切语言、分析成功/失败回退时统一重置 `selectedNodeId` 与 `panOffset`
+  - 左侧备选链列表开始消费 `recommended_chain_id`，对推荐链增加显式标记
+  - 右侧证据区改为优先展示“当前选中节点 / 当前链”真正相关的证据，而不是简单截取全局 `evidencePool`
+  - 单条证据增加强 / 中 / 弱标签，首页增加低置信度、低证据覆盖、高不确定性提示
+
+### 理由
+- 用户对结果准确性和情报可信度高度敏感，因此首页必须优先补足诚实的信任信号，而不是继续只做视觉 polish
+- 对 OSS 版本而言，展示“推荐链是什么、证据够不够、哪里不确定”比假装结果可靠更重要
+- 继续在现有单文件首页实现上做小步修补，风险最低，也更符合“最小可公开版本”的节奏
+
+### 验证结果
+- `frontend/src/app/page.tsx` diagnostics clean
+- `frontend npm run build` 通过（Next.js 16.2.2）
+- `python -m ruff check retrocause tests` 通过
+- `pytest tests/` 通过（71 passed）

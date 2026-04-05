@@ -3,6 +3,7 @@
 
 import React from "react";
 import { Hypothesis } from "@/data/mockData";
+import { useI18n } from "@/lib/i18n";
 
 interface HypothesisListProps {
   hypotheses: Hypothesis[];
@@ -16,10 +17,10 @@ function getStrengthColor(strength: number): string {
   return "var(--marker-red)";
 }
 
-function getStrengthLabel(strength: number): string {
-  if (strength >= 0.7) return "强因果";
-  if (strength >= 0.4) return "中因果";
-  return "弱因果";
+function getStrengthLabel(strength: number, t: ReturnType<typeof useI18n>["t"]): string {
+  if (strength >= 0.7) return `${t("strength.strong")}${t("strength.causal")}`;
+  if (strength >= 0.4) return `${t("strength.medium")}${t("strength.causal")}`;
+  return `${t("strength.weak")}${t("strength.causal")}`;
 }
 
 export default function HypothesisList({
@@ -27,12 +28,13 @@ export default function HypothesisList({
   selectedId,
   onSelect,
 }: HypothesisListProps) {
+  const { t } = useI18n();
   if (hypotheses.length === 0) {
     return (
       <div className="flex-1 overflow-auto p-4 pt-0">
         <div className="mb-3">
           <span className="text-xs uppercase tracking-widest text-[var(--ink-400)] font-semibold">
-            竞争假设 (0)
+            {t("leftPanel.competingHypotheses")} (0)
           </span>
         </div>
         <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -41,8 +43,8 @@ export default function HypothesisList({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
             </svg>
           </div>
-          <p className="text-sm text-[var(--ink-500)] mb-1">暂无竞争假设</p>
-          <p className="text-xs text-[var(--ink-400)]">输入因果查询后系统将生成假设</p>
+          <p className="text-sm text-[var(--ink-500)] mb-1">{t("hypothesis.empty")}</p>
+          <p className="text-xs text-[var(--ink-400)]">{t("hypothesis.emptyHint")}</p>
         </div>
       </div>
     );
@@ -52,7 +54,7 @@ export default function HypothesisList({
     <div className="flex-1 overflow-auto p-4 pt-0">
       <div className="mb-3">
         <span className="text-xs uppercase tracking-widest text-[var(--ink-400)] font-semibold section-header inline-block">
-          竞争假设 ({hypotheses.length})
+          {t("leftPanel.competingHypotheses")} ({hypotheses.length})
         </span>
       </div>
       <div className="space-y-3">
@@ -78,7 +80,7 @@ export default function HypothesisList({
               {isSelected && (
                 <div className="mb-2">
                   <span className="text-xs font-medium px-2 py-0.5 rounded-sm marker-chip marker-chip-blue">
-                    当前选中
+                    {t("hypothesis.current")}
                   </span>
                 </div>
               )}
@@ -92,7 +94,7 @@ export default function HypothesisList({
                       color: strengthColor 
                     }}
                   >
-                    {getStrengthLabel(h.causalStrength)}
+                    {getStrengthLabel(h.causalStrength, t)}
                   </span>
                   <span 
                     className="text-xs font-mono px-1.5 py-0.5 rounded"
@@ -113,7 +115,7 @@ export default function HypothesisList({
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  {h.evidenceCount} 条证据
+                  {h.evidenceCount} {t("hypothesis.evidenceCount")}
                 </span>
               </div>
             </div>
