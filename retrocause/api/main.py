@@ -24,8 +24,9 @@ app.add_middleware(
 
 class AnalyzeRequest(BaseModel):
     query: str
-    model: str = "openrouter"  # default model provider
+    model: str = "openrouter"  # provider key (e.g. "zhipu") or explicit model name
     api_key: Optional[str] = None
+    explicit_model: Optional[str] = None  # user-selected model name (e.g. "glm-4-air")
 
 
 class GraphNode(BaseModel):
@@ -189,6 +190,8 @@ class AnalyzeResponseV2(BaseModel):
     upstream_map: UpstreamMapV2
     # Pipeline quality evaluation (absent for demo results)
     evaluation: Optional[PipelineEvaluationV2] = None
+    # Error message when real analysis fails (non-empty = something went wrong)
+    error: Optional[str] = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -411,6 +414,19 @@ async def root():
     return {"status": "ok", "message": "RetroCause API is running"}
 
 
+@app.get("/api/providers")
+async def list_providers():
+    return {
+        "providers": {
+            key: {
+                "label": cfg["label"],
+                "models": cfg["models"],
+            }
+            for key, cfg in PROVIDERS.items()
+        }
+    }
+
+
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 async def analyze_query(request: AnalyzeRequest):
     try:
@@ -423,7 +439,12 @@ async def analyze_query(request: AnalyzeRequest):
 
             provider_cfg = PROVIDERS.get(request.model)
             base_url = provider_cfg["base_url"] if provider_cfg else None
-            model_name = list(provider_cfg["models"].keys())[0] if provider_cfg else request.model
+            if request.explicit_model:
+                model_name = request.explicit_model
+            else:
+                model_name = (
+                    list(provider_cfg["models"].keys())[0] if provider_cfg else request.model
+                )
             try:
                 result = run_real_analysis(request.query, request.api_key, model_name, base_url)
             except Exception:
@@ -507,13 +528,20 @@ async def analyze_query_v2(request: AnalyzeRequest):
 
             provider_cfg = PROVIDERS.get(request.model)
             base_url = provider_cfg["base_url"] if provider_cfg else None
-            model_name = list(provider_cfg["models"].keys())[0] if provider_cfg else request.model
+            if request.explicit_model:
+                model_name = request.explicit_model
+            else:
+                model_name = (
+                    list(provider_cfg["models"].keys())[0] if provider_cfg else request.model
+                )
+            error_msg: str | None = None
             try:
                 result = run_real_analysis(request.query, request.api_key, model_name, base_url)
-            except Exception:
+            except Exception as exc:
                 import traceback
 
                 traceback.print_exc()
+                error_msg = f"{type(exc).__name__}: {exc}"
                 result = None
 
             if result is not None:
@@ -529,7 +557,9 @@ async def analyze_query_v2(request: AnalyzeRequest):
         result.is_demo = is_demo
         result.demo_topic = demo_topic
 
-        return _result_to_v2(result, is_demo=is_demo, demo_topic=demo_topic)
+        resp = _result_to_v2(result, is_demo=is_demo, demo_topic=demo_topic)
+        resp.error = error_msg if is_demo and request.api_key else None
+        return resp
 
     except Exception as e:
         import traceback

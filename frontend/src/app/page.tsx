@@ -66,6 +66,7 @@ type AnalyzeResponseV2 = {
     weaknesses: string[];
     recommended_actions: string[];
   } | null;
+  error?: string | null;
 };
 
 function toLocalChain(
@@ -555,6 +556,8 @@ export default function Home() {
   const [lastQuery, setLastQuery] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [selectedModel, setSelectedModel] = useState("openrouter");
+  const [selectedExplicitModel, setSelectedExplicitModel] = useState("");
+  const [availableModels, setAvailableModels] = useState<Record<string, string>>({});
   const [statusNote, setStatusNote] = useState("");
   const [availableChains, setAvailableChains] = useState<AnalyzeResponseV2["chains"]>([]);
   const [recommendedChainId, setRecommendedChainId] = useState<string | null>(null);
@@ -589,6 +592,26 @@ export default function Home() {
     setSelectedNodeId(null);
     setPanOffset({ x: 0, y: 0 });
   }, [localizedDemo]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("http://127.0.0.1:8000/api/providers")
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const models = data?.providers?.[selectedModel]?.models ?? {};
+        setAvailableModels(models);
+        const keys = Object.keys(models);
+        setSelectedExplicitModel(keys[0] ?? "");
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAvailableModels({});
+          setSelectedExplicitModel("");
+        }
+      });
+    return () => { cancelled = true; };
+  }, [selectedModel]);
 
   useEffect(() => {
     setBoardReady(false);
@@ -792,10 +815,14 @@ export default function Home() {
     setLastQuery(query);
 
     try {
+      const body: Record<string, unknown> = { query, model: selectedModel, api_key: apiKey };
+      if (selectedExplicitModel) {
+        body.explicit_model = selectedExplicitModel;
+      }
       const response = await fetch("http://127.0.0.1:8000/api/analyze/v2", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, model: selectedModel, api_key: apiKey }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -822,15 +849,25 @@ export default function Home() {
       });
       setSelectedNodeId(null);
       setPanOffset({ x: 0, y: 0 });
-      setStatusNote(
-        payload.is_demo
-          ? locale === "en"
+      if (payload.is_demo && payload.error) {
+        setStatusNote(
+          locale === "en"
+            ? `Analysis failed (${payload.error}). Showing demo fallback.`
+            : `分析失败（${payload.error}），当前显示 demo 回退数据。`
+        );
+      } else if (payload.is_demo) {
+        setStatusNote(
+          locale === "en"
             ? "Backend returned demo fallback data. Treat this as a structured example, not validated analysis."
             : "后端返回了 demo fallback 数据。请将其视为结构化示例，而非已验证分析。"
-          : locale === "en"
+        );
+      } else {
+        setStatusNote(
+          locale === "en"
             ? "Live analysis returned a recommended causal chain. Review evidence coverage before trusting it."
             : "真实分析已返回推荐因果链。请先检查证据覆盖，再决定是否相信结果。"
-      );
+        );
+      }
     } catch {
       setActiveChain(localizedDemo.primaryChain);
       setAvailableChains([]);
@@ -846,7 +883,7 @@ export default function Home() {
           : "真实分析失败，当前回退到本地 demo 证据墙。"
       );
     }
-  }, [currentQuery, selectedModel, apiKey, locale, localizedDemo.primaryChain]);
+  }, [currentQuery, selectedModel, selectedExplicitModel, apiKey, locale, localizedDemo.primaryChain]);
 
   return (
     <div
@@ -1081,6 +1118,27 @@ export default function Home() {
             <option value="moonshot">Moonshot / Kimi</option>
             <option value="deepseek">DeepSeek</option>
           </select>
+          {Object.keys(availableModels).length > 0 && (
+            <select
+              value={selectedExplicitModel}
+              onChange={(event) => setSelectedExplicitModel(event.target.value)}
+              style={{
+                width: "100%",
+                padding: "6px 8px",
+                border: "1px solid rgba(160, 140, 110, 0.18)",
+                borderRadius: "6px",
+                background: "rgba(255,255,255,0.82)",
+                color: "#5c4a32",
+                fontSize: "0.65rem",
+                outline: "none",
+                marginTop: "4px",
+              }}
+            >
+              {Object.entries(availableModels).map(([id, label]) => (
+                <option key={id} value={id}>{label}</option>
+              ))}
+            </select>
+          )}
           <div className="compact-label" style={{ marginTop: "8px" }}>{t("query.apiKey")}</div>
           <input
             type="password"

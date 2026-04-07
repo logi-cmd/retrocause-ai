@@ -16,7 +16,7 @@ class RetroCauseConfig:
     debate_max_rounds: int = 3
     debate_confidence_threshold: float = 0.8
     reliability_cross_validation_enabled: bool = True
-    request_timeout_seconds: float = 15.0
+    request_timeout_seconds: float = 120.0
     bayesian_num_samples: int = 2000
     bayesian_num_warmup: int = 1000
     counterfactual_sensitivity_threshold: float = 0.3

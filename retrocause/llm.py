@@ -138,14 +138,20 @@ class LLMClient:
         )
 
         try:
-            response = _call_with_retry(
-                self.client.chat.completions.create,
-                model=self.model,
-                messages=[
+            kwargs: dict = {
+                "model": self.model,
+                "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                response_format={"type": "json_object"},
+            }
+            try:
+                kwargs["response_format"] = {"type": "json_object"}
+            except Exception:
+                pass
+            response = _call_with_retry(
+                self.client.chat.completions.create,
+                **kwargs,
             )
             data = json.loads(response.choices[0].message.content)
             queries = data.get("queries", [])
@@ -196,14 +202,20 @@ class LLMClient:
         )
 
         try:
-            response = _call_with_retry(
-                self.client.chat.completions.create,
-                model=self.model,
-                messages=[
+            kwargs: dict = {
+                "model": self.model,
+                "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                response_format={"type": "json_object"},
+            }
+            try:
+                kwargs["response_format"] = {"type": "json_object"}
+            except Exception:
+                pass
+            response = _call_with_retry(
+                self.client.chat.completions.create,
+                **kwargs,
             )
             data = json.loads(response.choices[0].message.content)
             items = data.get("evidence", [])
@@ -267,14 +279,20 @@ class LLMClient:
         )
 
         try:
-            response = _call_with_retry(
-                self.client.chat.completions.create,
-                model=self.model,
-                messages=[
+            kwargs: dict = {
+                "model": self.model,
+                "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                response_format={"type": "json_object"},
+            }
+            try:
+                kwargs["response_format"] = {"type": "json_object"}
+            except Exception:
+                pass
+            response = _call_with_retry(
+                self.client.chat.completions.create,
+                **kwargs,
             )
             data = json.loads(response.choices[0].message.content)
             score = float(data.get("score", 0.5))
@@ -321,14 +339,20 @@ class LLMClient:
         )
 
         try:
-            response = _call_with_retry(
-                self.client.chat.completions.create,
-                model=self.model,
-                messages=[
+            kwargs: dict = {
+                "model": self.model,
+                "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                response_format={"type": "json_object"},
+            }
+            try:
+                kwargs["response_format"] = {"type": "json_object"}
+            except Exception:
+                pass
+            response = _call_with_retry(
+                self.client.chat.completions.create,
+                **kwargs,
             )
             data = json.loads(response.choices[0].message.content)
             if not isinstance(data, dict):
@@ -360,14 +384,20 @@ class LLMClient:
         )
 
         try:
-            response = _call_with_retry(
-                self.client.chat.completions.create,
-                model=self.model,
-                messages=[
+            kwargs: dict = {
+                "model": self.model,
+                "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                response_format={"type": "json_object"},
+            }
+            try:
+                kwargs["response_format"] = {"type": "json_object"}
+            except Exception:
+                pass
+            response = _call_with_retry(
+                self.client.chat.completions.create,
+                **kwargs,
             )
             data = json.loads(response.choices[0].message.content)
             if not isinstance(data, dict):
