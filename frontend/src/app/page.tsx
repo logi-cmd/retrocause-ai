@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Caveat } from "next/font/google";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import {
@@ -99,7 +99,7 @@ function toLocalChain(
       confidence: chain.probability,
       primaryEvidenceCount: chain.supporting_evidence_ids.length,
       counterfactualSummary: {
-        intervention: locale === "en" ? "See counterfactual tab in full console" : "完整反事实请查看控制台页",
+        intervention: locale === "en" ? "Counterfactual details remain limited in the OSS evidence board" : "当前 OSS 证据墙中的反事实详情仍然有限",
         outcomeChange: locale === "en" ? "Detailed counterfactual summary not yet rendered on homepage" : "首页暂未完整渲染反事实摘要",
         probabilityShift: 0,
         description: locale === "en" ? "This homepage currently renders the selected causal chain and labels whether the result is live or demo." : "当前首页会渲染所选因果链，并标注结果来自 real analysis 还是 demo。",
@@ -541,10 +541,12 @@ function StickyCard({
 export default function Home() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const { locale, setLocale, t } = useI18n();
-  const localizedDemo = getLocalizedMockData(locale);
+  const localizedDemo = useMemo(() => getLocalizedMockData(locale), [locale]);
   const [activeChain, setActiveChain] = useState(localizedDemo.primaryChain);
   const [currentQuery, setCurrentQuery] = useState("");
   const [lastQuery, setLastQuery] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [selectedModel, setSelectedModel] = useState("openrouter");
   const [statusNote, setStatusNote] = useState("");
   const [availableChains, setAvailableChains] = useState<AnalyzeResponseV2["chains"]>([]);
   const [recommendedChainId, setRecommendedChainId] = useState<string | null>(null);
@@ -783,7 +785,7 @@ export default function Home() {
       const response = await fetch("http://127.0.0.1:8000/api/analyze/v2", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ query, model: selectedModel, api_key: apiKey }),
       });
 
       if (!response.ok) {
@@ -832,7 +834,7 @@ export default function Home() {
           : "真实分析失败，当前回退到本地 demo 证据墙。"
       );
     }
-  }, [currentQuery, locale, localizedDemo.primaryChain]);
+  }, [currentQuery, selectedModel, apiKey, locale, localizedDemo.primaryChain]);
 
   return (
     <div
@@ -1044,6 +1046,53 @@ export default function Home() {
               outline: "none",
             }}
           />
+          <div className="compact-label" style={{ marginTop: "8px" }}>{t("query.model")}</div>
+          <select
+            value={selectedModel}
+            onChange={(event) => setSelectedModel(event.target.value)}
+            style={{
+              width: "100%",
+              padding: "6px 8px",
+              border: "1px solid rgba(160, 140, 110, 0.18)",
+              borderRadius: "6px",
+              background: "rgba(255,255,255,0.82)",
+              color: "#5c4a32",
+              fontSize: "0.65rem",
+              outline: "none",
+              marginTop: "4px",
+            }}
+          >
+            <option value="openrouter">OpenRouter</option>
+            <option value="openai">OpenAI</option>
+            <option value="dashscope">DashScope / 阿里百炼</option>
+            <option value="zhipu">Zhipu / 智谱</option>
+            <option value="moonshot">Moonshot / Kimi</option>
+            <option value="deepseek">DeepSeek</option>
+          </select>
+          <div className="compact-label" style={{ marginTop: "8px" }}>{t("query.apiKey")}</div>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(event) => setApiKey(event.target.value)}
+            placeholder={t("query.apiKeyPlaceholder")}
+            style={{
+              width: "100%",
+              padding: "6px 8px",
+              border: "1px solid rgba(160, 140, 110, 0.18)",
+              borderRadius: "6px",
+              background: "rgba(255,255,255,0.82)",
+              color: "#5c4a32",
+              fontSize: "0.65rem",
+              outline: "none",
+              marginTop: "4px",
+              boxSizing: "border-box",
+            }}
+          />
+          <div style={{ fontSize: "0.55rem", color: "#8b7355", marginTop: "4px", lineHeight: 1.4 }}>
+            {locale === "en"
+              ? "Key stored only in your browser — not sent to any third-party server beyond your chosen model provider."
+              : "密钥仅存储在本地浏览器中，不会发送至您所选模型提供商以外的任何第三方服务器。"}
+          </div>
           <button
             onClick={runAnalysis}
             disabled={analysisMode.loading || !currentQuery.trim()}
