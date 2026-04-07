@@ -360,10 +360,11 @@ If you are landing here from X, Reddit, Hacker News, or Product Hunt:
 
 Current local validation includes:
 
-- `pytest tests/` passing
-- `ruff check` on changed files
-- diagnostics clean on source files
+- `pytest tests/` passing (127 tests: unit, integration, comprehensive boundary)
+- `ruff check` on all source and test files
+- diagnostics clean on source files (39 Python files + frontend)
 - frontend build (`npm run build`) passing in `frontend/`
+- real data sources (ArXiv, Semantic Scholar, DuckDuckGo) confirmed live
 
 ---
 

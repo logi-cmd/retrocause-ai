@@ -12,6 +12,10 @@
 - independent pipeline evaluation step (evidence sufficiency, probability coherence, chain diversity)
 - LLM call retry with exponential backoff
 - config-driven request timeout
+- 127 automated tests (unit + integration + comprehensive boundary)
+- real data sources: ArXiv, Semantic Scholar, DuckDuckGo (all live HTTP, not stubs)
+- topic-aware demo fallback (SVB, stock, crisis, rent, default)
+- explicit demo vs real analysis labeling across browser UI, API, and Streamlit
 
 ## Current Limitations
 

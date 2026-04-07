@@ -1,3 +1,10 @@
+## Done recently (更新 2026-04-07 晚)
+- 全面测试：新增 38 个边界测试（`tests/test_comprehensive.py`），覆盖 demo topic 检测、API V2 schema 转换、Pydantic 序列化 round-trip、evaluation 分数边界、providers 配置完整性、pipeline 空运行/故障捕获、demo 结果完整性与一致性。总测试数 127，全绿 - 完成于 21:30
+- 真实数据链路审查确认：ArXiv / Semantic Scholar / DuckDuckGo 三个数据源均为真实 HTTP 实现（非 stub），`run_real_analysis()` 完整接入 engine pipeline。无 API key 时优雅降级到 topic-aware demo - 完成于 21:45
+- OSS/Pro 边界规划确认：单轮搜索→Pro 迭代、无 RAG→Pro 向量检索、LLM 依赖证据质量→Pro RAGAS/TruLens 评分、静默回退→Pro 拒绝静默回退 - 完成于 21:45
+- OSS 剩余事项盘点：发布前仅差手动 smoke test（必须）和 README 截图/GIF（推荐），P2+ 功能均属后续迭代或 Pro 方向 - 完成于 21:50
+
+## Done recently (更新 2026-04-07)
 - H5 工程硬化：新增 `evaluation.py`（独立评估步骤），在 pipeline 末尾对输出做全面质量评估（证据充分性、概率自洽性、链间多样性、综合置信度），`AnalysisResult` 新增 `evaluation` 字段，新增 18 个测试（89 passed） - 完成于 19:50
 - OSS 收尾：GitHub Actions CI（Python 3.10/3.11/3.12 + ruff + pytest + Node 20 + npm build） - 完成于 22:55
 - OSS 收尾：API V2 响应新增 `evaluation` 字段（PipelineEvaluationV2），前端左侧面板新增 "Analysis Quality" 区域（置信度 + 薄弱点 + 建议） - 完成于 22:55
