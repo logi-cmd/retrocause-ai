@@ -8,3 +8,9 @@
 - 首页 `page.tsx` 已修复 API v2 类型映射与顶层语句问题，`frontend npm run build` 恢复通过 - 完成于 23:35
 - 首页已补齐链切换联动：切链重算便签布局、重置选中节点与画布偏移，并新增推荐链标识 - 完成于 23:42
 - 右侧证据面板已改为优先跟随选中节点/当前链过滤，并补充证据强弱、低置信度、低覆盖、高不确定性提示 - 完成于 23:45
+- 已新增 `docs/oss-pro-positioning.md`，明确 OSS / Pro 边界、付费逻辑、用户痛点、场景价值、技术壁垒与差异化原则 - 完成于 23:58
+- README / roadmap / DECISIONS 已同步更新，将“最小可公开 OSS 发布门槛”与“未来 Pro 价值”正式写入公开文档 - 完成于 23:59
+- P0 发布前清单已推进：新增 `.env.example`、`LICENSE`、`.gitignore` 忽略 `.env`，修复 README / CONTRIBUTING / issue template 端口与 console 残留叙事，CLI 现在在无 key 时走 honest demo fallback、有 key 时走真实分析链路 - 完成于 00:08
+- `docs/oss-pro-positioning.md` 已补入 evidence-grounded quality / workflow-specific outputs / trust-preserving behavior / reusable domain packs 的公开研究依据，作为后续 moat / Pro 路线参考 - 完成于 00:12
+- Browser UI 已接入本地 API key / model 输入并向 `/api/analyze/v2` 发送 `query` / `model` / `api_key`，保持 evidence board 首页方向不变 - 完成于 21:31
+- V1 API / V2 API / Streamlit 已统一 `is_demo` / `demo_topic` honesty；Streamlit 首屏与无 key 路径已改为 topic-aware demo 并显示持久 warning - 完成于 21:38

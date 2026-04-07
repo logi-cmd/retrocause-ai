@@ -87,7 +87,7 @@ This opens:
 
 The homepage can now send your question to the v2 API and render the recommended chain as an interactive evidence board. When real analysis is unavailable, the UI explicitly falls back to demo mode instead of silently pretending the result is live.
 
-The fuller three-panel console workflow still exists in the codebase and remains a useful internal/reference UI path, but the current public OSS homepage is the primary entry point.
+The current public OSS entry point is the homepage evidence board. Some older multi-panel console components still exist in the codebase as implementation leftovers, but they are not the current public workflow and should not be treated as a stable user-facing route.
 
 Without an API key, the UI may load demo data so you can explore the interface. This fallback is now explicitly labeled.
 
@@ -109,7 +109,7 @@ streamlit run retrocause/app/entry.py
 
 The demo mode works without an API key.
 
-To use real analysis, provide your own API key in the UI.
+To use real analysis in the browser/API workflow today, configure your provider key in the backend environment (see `.env.example`).
 
 Supported provider modes:
 
@@ -222,6 +222,37 @@ The open-source repo is intended to be:
 
 The open-source version focuses on the causal reasoning workflow itself.
 
+The OSS release is **not** intended to be a watered-down teaser. It should stand on its own as a useful, honest, inspectable product for:
+
+- exploring why-questions with structured causal chains
+- comparing competing explanations instead of accepting one answer
+- inspecting evidence coverage, confidence, and uncertainty signals
+- demonstrating how a causal explanation interface differs from a normal chat response
+
+The OSS release should be published only when it reaches a **minimally usable open-source bar**:
+
+- the browser UI is stable and understandable
+- demo fallback is explicit and honest
+- docs make setup and limitations obvious
+- key workflows feel coherent rather than partially stitched together
+
+The future Pro version is expected to differentiate on **quality, workflow depth, and reliability**, not by hiding the core idea.
+
+This is not just a product opinion. It aligns with emerging practice around:
+
+- evidence-grounded evaluation (for example RAGAS / TruLens / factual consistency scoring)
+- trust-preserving UX (explicit fallback and uncertainty handling)
+- workflow-specific outputs instead of generic answer text
+- reusable domain packs / templates for repeated high-value explanation jobs
+
+Likely Pro-only areas:
+
+- stronger real-analysis quality and reliability controls
+- better source and evidence management
+- richer chain comparison and scenario simulation
+- saved workspaces, shareable reports, and team-facing explainability workflows
+- higher-confidence templates for recurring domains such as finance, market events, and strategic postmortems
+
 Some commercial and planning documents are intentionally kept local and are not pushed to the remote repository.
 
 ---
@@ -230,6 +261,7 @@ Some commercial and planning documents are intentionally kept local and are not 
 
 - `docs/market-analysis-overseas-c.md` — overseas consumer market analysis
 - `docs/open-source-growth-strategy.md` — GitHub open-source growth strategy
+- `docs/oss-pro-positioning.md` — OSS boundary, Pro value, pain points, and moat analysis
 - `docs/engineering-audit.md` — engineering strengths, weak points, and optimization roadmap
 - `docs/DECISIONS.md` — technical and product decisions
 - `docs/manual-smoke-test.md` — manual smoke checklist for the OSS demo
@@ -245,11 +277,19 @@ No. It is currently a research-grade alpha and open-source demo product.
 
 ### Does the OSS UI clearly distinguish demo vs real analysis?
 
-Yes. The homepage now explicitly marks whether the current board is showing a real API result or a demo fallback.
+Yes.
+
+- the homepage evidence board explicitly marks whether the current board is showing a live API result or a demo fallback
+- the API now returns `is_demo` and `demo_topic`
+- the Streamlit path now also shows a persistent demo warning instead of silently loading example output
 
 ### Does it need an API key?
 
-Only for real analysis. The browser UI and Streamlit demo can run without an API key, showing demo data.
+Only for real analysis.
+
+- the Browser UI can accept a locally entered API key directly on the homepage
+- the backend can also use environment-based credentials
+- without a key, the Browser UI / API / Streamlit paths fall back to clearly labeled demo data
 
 ### What is already working today?
 
@@ -270,6 +310,17 @@ Only for real analysis. The browser UI and Streamlit demo can run without an API
 - stronger intervention math
 - deeper sensitivity analysis
 - consumer product polish
+
+### What would make a future Pro version worth paying for?
+
+Not “more AI” by itself. The strongest Pro direction is:
+
+- higher-trust explanation quality for repeated real-world use
+- more reliable evidence handling and comparison workflows
+- better outputs for teams who need to explain causality to clients, teammates, or decision-makers
+- domain-specific templates where being wrong is costly and uncertainty must be explicit
+
+In other words: OSS should make the product understandable and usable; Pro should make it dependable enough for higher-frequency and higher-stakes workflows.
 
 ### Is this open source?
 

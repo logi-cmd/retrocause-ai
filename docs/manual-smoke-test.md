@@ -75,6 +75,37 @@ Expected:
 
 ---
 
+## Scenario 3.5 — Browser UI local real-analysis path
+
+1. Open the homepage left panel.
+2. Enter a supported provider mode.
+3. Paste a valid API key.
+4. Submit a query.
+
+Expected:
+
+- request body includes `query`, `model`, and `api_key`
+- homepage does not claim hosted/SaaS-grade credential handling
+- if the backend succeeds, the board is labeled as live analysis
+- if the backend fails, the board falls back to explicitly labeled demo data
+
+---
+
+## Scenario 3.6 — Streamlit demo honesty
+
+1. Launch `streamlit run retrocause/app/entry.py` without an API key.
+2. Observe the initial screen.
+3. Run a query without entering a key.
+
+Expected:
+
+- Streamlit shows a persistent demo warning banner
+- the result is clearly presented as demo/example output
+- the demo can be topic-aware rather than always defaulting to the dinosaur example
+- the app does not silently imply the result is real analysis
+
+---
+
 ## Scenario 4 — Multi-hop tracing
 
 1. Click a node in the main chain.

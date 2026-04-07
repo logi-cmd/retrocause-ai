@@ -567,3 +567,78 @@ EvidenceCollection → GraphBuilding → HypothesisGeneration → EvidenceAnchor
 - `frontend npm run build` 通过（Next.js 16.2.2）
 - `python -m ruff check retrocause tests` 通过
 - `pytest tests/` 通过（71 passed）
+
+---
+
+## 2026-04-07 OSS / Pro 边界与商业化原则公开化
+
+### 背景
+用户明确要求：在 OSS 版本真正做到“可用的最小开源版本”之前不要发布，同时要提前想清楚：
+
+- OSS 与未来 Pro 的区别到底是什么
+- 有没有真实用户痛点与实际场景
+- 是否能激发付费意愿
+- 是否有足够的技术壁垒和差异化
+
+这意味着项目不能只停留在“能跑 demo”和“README 会讲故事”，而需要把公开叙事、产品边界和商业化原则写清楚。
+
+### 决策
+- 新增公开文档 `docs/oss-pro-positioning.md`
+- README 中补充：
+  - OSS 的发布门槛不只是 demo 可运行，还必须达到“诚实、稳定、可理解”的最低可用标准
+  - Pro 的价值不应来自隐藏核心想法，而应来自更高质量、更高可信度、更强工作流深度
+- roadmap 中新增：
+  - P0：最小可公开 OSS 版本的发布前清单
+  - P6：围绕真实 jobs-to-be-done 构建未来 Pro，而不是泛化 feature gating
+
+### 核心判断
+- OSS 应保留核心产品心智：why-question → 竞争链路 → 证据 → 不确定性 → 可检视解释界面
+- Pro 应建立在“高频、高损失、需要对别人解释”的工作流上，而不是仅仅提供更多模型输出
+- 当前项目真正可形成差异化的方向不是“更聪明的 AI 回答”，而是：
+  - explanation as structure
+  - explicit evidence attachment
+  - explicit uncertainty signaling
+  - competing causal chains as first-class output
+- 当前真正值得继续投资的壁垒方向是：
+  - evidence-grounded quality
+  - workflow-specific explanation outputs
+  - trust-preserving product behavior
+  - repeated-use templates / domain packs / reusable explanation assets
+
+### 理由
+- 用户已经明确指出：如果准确性和可信度不够，产品价值会显著受损。因此商业化判断必须围绕“信任”和“工作流价值”展开，而不是围绕表层功能数量展开。
+- 对开源项目而言，过早发布一个“概念正确但体验不完整”的版本，会伤害后续口碑和分发效率。
+- 提前把 OSS / Pro 原则公开化，可以让后续功能取舍更一致，也能减少开源访客对项目成熟度和商业意图的误解。
+
+### 补充研究依据
+- evidence-grounded quality 方向的公开依据已补充到 `docs/oss-pro-positioning.md`，重点参考了 DoWhy、RAGAS、TruLens、Vectara FCS 等公开资料。
+- workflow-specific explanation outputs、trust-preserving product behavior、reusable domain packs 方向的公开依据已一并收口到该文档中，用于指导后续 Pro 路线不偏向“更多模型输出”，而偏向“更高可信度和更强工作流价值”。
+
+---
+
+## 2026-04-07 Browser UI 真实分析接通与 demo honesty 统一
+
+### 背景
+此前 OSS 虽然已经有首页 evidence board、CLI honest fallback 和 `/api/analyze/v2`，但仍存在三个关键不一致：
+
+- Browser UI 只能发 `query`，不能直接走用户本地输入 key 的真实分析
+- V1 API 不返回 demo 元数据
+- Streamlit 初始加载与无 key 路径仍容易让用户误读为真实分析
+
+### 决策
+- 首页 `frontend/src/app/page.tsx` 增加本地 API key 与 provider/model 输入，并把请求体统一为 `query` / `model` / `api_key`
+- FastAPI 的 V1 / V2 endpoint 在有 key 时优先调用真实分析，在失败或无 key 时统一回退到 `topic_aware_demo_result(query)`
+- `AnalysisResult` 增加 `is_demo` 与 `demo_topic`
+- Browser UI / API / Streamlit 统一暴露 demo 元数据与显式提示
+- Streamlit 首屏默认结果与无 key 运行路径都改为 topic-aware demo，并显示持久 warning banner
+
+### 理由
+- 本地开源工具允许用户在 Browser UI 中输入 key 是合理的，但前提是必须保持 trust-preserving copy，不能伪装成云端托管安全模型
+- demo fallback 合理，但如果产品不同入口的诚实度不一致，会直接损害 OSS 的可信度
+- 统一 `is_demo` / `demo_topic` 可以让前端、API、文档和后续 smoke test 使用同一套真值来源
+
+### 验证结果
+- `frontend/src/app/page.tsx` diagnostics clean
+- `retrocause/api/main.py` diagnostics clean
+- `retrocause/app/demo_data.py` diagnostics clean
+- 后续以 `pytest tests/`、`ruff check retrocause tests`、`frontend npm run build` 作为统一发布前验证
