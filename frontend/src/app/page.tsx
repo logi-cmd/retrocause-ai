@@ -58,6 +58,14 @@ type AnalyzeResponseV2 = {
     supporting_evidence_ids: string[];
     refuting_evidence_ids: string[];
   }>;
+  evaluation?: {
+    evidence_sufficiency: number;
+    probability_coherence: number;
+    chain_diversity: number;
+    overall_confidence: number;
+    weaknesses: string[];
+    recommended_actions: string[];
+  } | null;
 };
 
 function toLocalChain(
@@ -551,6 +559,7 @@ export default function Home() {
   const [availableChains, setAvailableChains] = useState<AnalyzeResponseV2["chains"]>([]);
   const [recommendedChainId, setRecommendedChainId] = useState<string | null>(null);
   const [evidencePool, setEvidencePool] = useState<AnalyzeResponseV2["evidences"]>([]);
+  const [pipelineEval, setPipelineEval] = useState<AnalyzeResponseV2["evaluation"]>(null);
   const [analysisMode, setAnalysisMode] = useState<{ isDemo: boolean; demoTopic: string | null; loading: boolean }>({
     isDemo: true,
     demoTopic: null,
@@ -576,6 +585,7 @@ export default function Home() {
     setAvailableChains([]);
     setRecommendedChainId(null);
     setEvidencePool([]);
+    setPipelineEval(null);
     setSelectedNodeId(null);
     setPanOffset({ x: 0, y: 0 });
   }, [localizedDemo]);
@@ -802,6 +812,7 @@ export default function Home() {
       setAvailableChains(payload.chains);
       setRecommendedChainId(payload.recommended_chain_id);
       setEvidencePool(payload.evidences);
+      setPipelineEval(payload.evaluation ?? null);
       setActiveChain(toLocalChain(recommended, locale, payload.evidences));
 
       setAnalysisMode({
@@ -825,6 +836,7 @@ export default function Home() {
       setAvailableChains([]);
       setRecommendedChainId(null);
       setEvidencePool([]);
+      setPipelineEval(null);
       setAnalysisMode({ isDemo: true, demoTopic: null, loading: false });
       setSelectedNodeId(null);
       setPanOffset({ x: 0, y: 0 });
@@ -1229,6 +1241,68 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {pipelineEval && (
+          <>
+            <h2 className="panel-title" style={{ marginTop: "16px" }}>
+              {t("home.evaluation.title")}
+            </h2>
+            <div className="compact-item">
+              <div style={{ color: "#8b7355" }}>{t("home.evaluation.confidence")}</div>
+              <div style={{ 
+                fontSize: "1.2rem", 
+                fontWeight: 600, 
+                color: pipelineEval.overall_confidence >= 0.7 
+                  ? "#5a8a5a" 
+                  : pipelineEval.overall_confidence >= 0.4 
+                    ? "#a08040" 
+                    : "#a0503c"
+              }}>
+                {Math.round(pipelineEval.overall_confidence * 100)}%
+              </div>
+            </div>
+            {pipelineEval.weaknesses.length > 0 && (
+              <div className="compact-item">
+                <div style={{ color: "#8b7355", marginBottom: "4px" }}>{t("home.evaluation.weaknesses")}</div>
+                {pipelineEval.weaknesses.slice(0, 3).map((weakness, i) => (
+                  <div 
+                    key={i} 
+                    style={{ 
+                      fontSize: "0.6rem", 
+                      color: "#a0503c", 
+                      lineHeight: 1.4,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      marginBottom: "2px"
+                    }}
+                  >
+                    {weakness}
+                  </div>
+                ))}
+              </div>
+            )}
+            {pipelineEval.recommended_actions.length > 0 && (
+              <div className="compact-item">
+                <div style={{ color: "#8b7355", marginBottom: "4px" }}>{t("home.evaluation.actions")}</div>
+                {pipelineEval.recommended_actions.slice(0, 2).map((action, i) => (
+                  <div 
+                    key={i} 
+                    style={{ 
+                      fontSize: "0.58rem", 
+                      color: "#5c4a32", 
+                      fontStyle: "italic",
+                      lineHeight: 1.4,
+                      marginBottom: "2px"
+                    }}
+                  >
+                    {action}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </aside>
 
       <aside

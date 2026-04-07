@@ -160,6 +160,15 @@ class UpstreamMapV2(BaseModel):
     entries: List[UpstreamMapEntryV2]
 
 
+class PipelineEvaluationV2(BaseModel):
+    evidence_sufficiency: float
+    probability_coherence: float
+    chain_diversity: float
+    overall_confidence: float
+    weaknesses: List[str] = []
+    recommended_actions: List[str] = []
+
+
 class AnalyzeResponseV2(BaseModel):
     """
     Enriched top-level response for multi-hop causal tracing.
@@ -178,6 +187,8 @@ class AnalyzeResponseV2(BaseModel):
     evidences: List[EvidenceBindingV2]
     # Upstream drill-down map
     upstream_map: UpstreamMapV2
+    # Pipeline quality evaluation (absent for demo results)
+    evaluation: Optional[PipelineEvaluationV2] = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -251,6 +262,16 @@ def _collect_evidence_bindings(
 def _result_to_v2(
     result: AnalysisResult, *, is_demo: bool = False, demo_topic: Optional[str] = None
 ) -> AnalyzeResponseV2:
+    evaluation_v2: Optional[PipelineEvaluationV2] = None
+    if result.evaluation is not None:
+        evaluation_v2 = PipelineEvaluationV2(
+            evidence_sufficiency=result.evaluation.evidence_sufficiency,
+            probability_coherence=result.evaluation.probability_coherence,
+            chain_diversity=result.evaluation.chain_diversity,
+            overall_confidence=result.evaluation.overall_confidence,
+            weaknesses=result.evaluation.weaknesses,
+            recommended_actions=result.evaluation.recommended_actions,
+        )
     all_edges_by_chain: dict[str, list[tuple[str, str]]] = {}
     for hyp in result.hypotheses:
         all_edges_by_chain[hyp.id] = [(e.source, e.target) for e in hyp.edges]
@@ -381,6 +402,7 @@ def _result_to_v2(
         chains=chains_v2,
         evidences=_collect_evidence_bindings(chains_v2),
         upstream_map=_build_upstream_map(list(all_nodes_v2.values())),
+        evaluation=evaluation_v2,
     )
 
 

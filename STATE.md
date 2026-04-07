@@ -1,4 +1,7 @@
 - H5 工程硬化：新增 `evaluation.py`（独立评估步骤），在 pipeline 末尾对输出做全面质量评估（证据充分性、概率自洽性、链间多样性、综合置信度），`AnalysisResult` 新增 `evaluation` 字段，新增 18 个测试（89 passed） - 完成于 19:50
+- OSS 收尾：GitHub Actions CI（Python 3.10/3.11/3.12 + ruff + pytest + Node 20 + npm build） - 完成于 22:55
+- OSS 收尾：API V2 响应新增 `evaluation` 字段（PipelineEvaluationV2），前端左侧面板新增 "Analysis Quality" 区域（置信度 + 薄弱点 + 建议） - 完成于 22:55
+- OSS 收尾：roadmap 文档标记 P0/P1/P1.5/P1.6/P3/P4 已完成项 - 完成于 22:55
 
 ## Done recently (更新 2026-04-07)
 - H3 工程硬化：llm.py 所有 5 个 LLM 调用已改为通过 `_call_with_retry` 走指数退避重试（最多 3 次，仅限 RateLimitError / APITimeoutError / APIConnectionError） - 完成于 19:30

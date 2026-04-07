@@ -9,6 +9,9 @@
 - browser-based evidence-board UI
 - multi-hop causal tracing in the frontend
 - unified local startup via `python start.py`
+- independent pipeline evaluation step (evidence sufficiency, probability coherence, chain diversity)
+- LLM call retry with exponential backoff
+- config-driven request timeout
 
 ## Current Limitations
 
@@ -62,21 +65,34 @@ It is:
 
 ## Near-Term Roadmap
 
-### P0 — Reach the minimum usable OSS release bar
+### P0 — Reach the minimum usable OSS release bar ✅
 
-- add `.env.example` and clarify required / optional provider configuration
-- add `LICENSE` file to match the MIT declaration already present in metadata
-- make CLI fallback behavior honest when no real analysis is available
-- resolve confusing dead paths / route references (for example old console expectations)
-- ensure README / CONTRIBUTING / issue templates describe the actual current product and ports
+- add `.env.example` and clarify required / optional provider configuration ✅
+- add `LICENSE` file to match the MIT declaration already present in metadata ✅
+- make CLI fallback behavior honest when no real analysis is available ✅
+- resolve confusing dead paths / route references (for example old console expectations) ✅
+- ensure README / CONTRIBUTING / issue templates describe the actual current product and ports ✅
 
-### P1 — Make real analysis mode clearer
+### P1 — Make real analysis mode clearer ✅
 
 - show stronger distinction between real analysis and demo mode ✅
 - allow local Browser UI key entry while keeping trust-preserving copy ✅
 - unify `is_demo` / `demo_topic` signaling across Browser UI, API, CLI, and Streamlit ✅
-- optionally surface model / source availability in the UI
-- surface evidence coverage / support-vs-refutation balance more prominently
+- surface model / source availability in the UI ✅
+- surface evidence coverage / support-vs-refutation balance ✅
+
+### P1.5 — Engineering hardening ✅
+
+- HookEngine wired into Pipeline.run() ✅
+- Pipeline step error isolation (try/except) ✅
+- LLM call retry with exponential backoff ✅
+- Config timeout passed to OpenAI client ✅
+- Independent evaluation step (generator/evaluator separation) ✅
+- Evaluation data surfaced in API V2 response ✅
+
+### P1.6 — CI and release infrastructure ✅
+
+- GitHub Actions CI (ruff + pytest + frontend build) ✅
 
 ### P2 — Improve node and evidence workflows
 
@@ -85,15 +101,15 @@ It is:
 - stronger edge explanation affordances
 - richer right-panel rendering of real API evidence pools
 
-### P3 — Strengthen query-specific fallback behavior
+### P3 — Strengthen query-specific fallback behavior ✅
 
-- move from generic demo chain fallback toward topic-aware or query-shaped demo responses
+- move from generic demo chain fallback toward topic-aware or query-shaped demo responses ✅
 
 ### P4 — Better OSS onboarding
 
 - add screenshots / GIFs
-- add issue templates
-- add contributor setup notes
+- add issue templates ✅
+- add contributor setup notes ✅
 
 ### P5 — Deeper reasoning fidelity
 
