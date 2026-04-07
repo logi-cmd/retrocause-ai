@@ -1,3 +1,5 @@
+- H5 工程硬化：新增 `evaluation.py`（独立评估步骤），在 pipeline 末尾对输出做全面质量评估（证据充分性、概率自洽性、链间多样性、综合置信度），`AnalysisResult` 新增 `evaluation` 字段，新增 18 个测试（89 passed） - 完成于 19:50
+
 ## Done recently (更新 2026-04-07)
 - H3 工程硬化：llm.py 所有 5 个 LLM 调用已改为通过 `_call_with_retry` 走指数退避重试（最多 3 次，仅限 RateLimitError / APITimeoutError / APIConnectionError） - 完成于 19:30
 - H4 工程硬化：LLMClient 新增 `timeout` 参数；`run_real_analysis()` 现在从 `RetroCauseConfig.from_env()` 读取 `request_timeout_seconds` 并传入 OpenAI 客户端 - 完成于 19:30

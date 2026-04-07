@@ -668,3 +668,31 @@ engineering-audit.md 中的 H3 和 H4 长期标记为待完成：
 - `pytest tests/ -v` 通过（71 passed）
 - `ruff check retrocause tests` 通过
 - `llm.py` / `demo_data.py` lsp diagnostics clean
+
+---
+
+## 2026-04-07 工程硬化：独立评估步骤（generator/evaluator 分离）
+
+### 背景
+engineering-audit.md 的 H5 指出：pipeline 缺少独立评估者。每个步骤既生成内容又隐式自验证，HookEngine 的规则检查是逐步骤的局部检查，没有最终全面评估。这是 harness engineering 中"generator 必须与 evaluator 分离"的典型反模式。
+
+### 决策
+- 新增 `retrocause/evaluation.py`，包含 `EvaluationStep(PipelineStep)` 和 `PipelineEvaluation` 数据类
+- `EvaluationStep` 作为 pipeline 的最后一步运行，只读取不生成：
+  - **evidence_sufficiency**（权重 40%）：证据覆盖率、未锚定边比例、总证据数
+  - **probability_coherence**（权重 35%）：概率边界、置信区间、链间概率分配合理性
+  - **chain_diversity**（权重 25%）：竞争链变量集 Jaccard 相似度
+  - **overall_confidence**：加权综合得分，步骤错误额外惩罚
+- `PipelineContext` 新增 `evaluation` 字段
+- `AnalysisResult` 新增 `evaluation: PipelineEvaluation | None` 字段
+- 新增 18 个测试覆盖三个评估维度和集成场景
+
+### 理由
+- 分离 generator 和 evaluator 是 harness engineering 的基本原则，避免"自己评价自己"
+- 评估结果可被前端 / API 消费，向用户展示分析结果的可信度信号
+- 纯规则评估（不依赖 LLM）意味着零额外 API 成本和确定性测试
+
+### 验证结果
+- `pytest tests/ -v` 通过（89 passed，新增 18）
+- `ruff check retrocause tests` 通过
+- `evaluation.py` / `engine.py` / `models.py` / `pipeline.py` diagnostics clean

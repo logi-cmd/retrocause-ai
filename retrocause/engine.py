@@ -15,6 +15,7 @@ from retrocause.config import RetroCauseConfig
 from retrocause.pipeline import Pipeline, PipelineContext, PipelineStep
 from retrocause.anchoring import EvidenceAnchoringStep
 from retrocause.counterfactual import CounterfactualVerificationStep
+from retrocause.evaluation import EvaluationStep
 from retrocause.protocols import LLMProvider, SourceAdapter
 from retrocause.hooks import HookEngine
 from retrocause.rules import (
@@ -192,6 +193,7 @@ class RetroCauseEngine:
                         llm_client=self._llm_client,
                     )
                 ),
+                EvaluationStep(),
             ],
             hook_engine=hook_engine,
         )
@@ -212,6 +214,7 @@ class RetroCauseEngine:
             edges=ctx.edges,
             hypotheses=ctx.hypotheses,
             total_evidence_count=len(self.collector.get_evidence()),
+            evaluation=ctx.evaluation,
         )
         result.total_uncertainty = float(len(ctx.violations) + len(ctx.step_errors))
         if ctx.violations:

@@ -366,7 +366,7 @@ ordered by impact:
 | H2 | Add try/except to Pipeline.run() | Failure recovery | pipeline.py:55-62 has no error handling | **Done** — step errors captured in ctx.step_errors |
 | H3 | Add retry to LLM calls | Failure recovery | llm.py every method silently catches errors | **Done** — _call_with_retry with exponential backoff (3 retries) |
 | H4 | Add timeout to OpenAI client | Failure recovery | config.py has timeout but llm.py never uses it | **Done** — LLMClient accepts timeout param, run_real_analysis passes config timeout |
-| H5 | Separate evaluator from generator | Evaluation | engine.py evaluates its own output | 2h |
+| H5 | Separate evaluator from generator | Evaluation | engine.py evaluates its own output | **Done** — EvaluationStep as last pipeline step |
 
 ---
 

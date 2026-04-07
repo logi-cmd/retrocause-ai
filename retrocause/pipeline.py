@@ -5,9 +5,12 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from retrocause.hooks import HookEngine
+
+if TYPE_CHECKING:
+    from retrocause.evaluation import PipelineEvaluation
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +27,7 @@ class PipelineContext:
     extra: dict = field(default_factory=dict)
     violations: list[dict] = field(default_factory=list)
     step_errors: list[dict] = field(default_factory=list)
+    evaluation: PipelineEvaluation | None = None
 
 
 class PipelineStep(ABC):

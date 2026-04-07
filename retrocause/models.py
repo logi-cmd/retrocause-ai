@@ -3,7 +3,10 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from retrocause.evaluation import PipelineEvaluation
 
 
 class EvidenceType(str, Enum):
@@ -126,3 +129,4 @@ class AnalysisResult:
     recommended_next_steps: list[str] = field(default_factory=list)
     is_demo: bool = False
     demo_topic: Optional[str] = None
+    evaluation: PipelineEvaluation | None = None
