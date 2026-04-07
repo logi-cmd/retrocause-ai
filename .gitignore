@@ -18,6 +18,11 @@ frontend/out/
 uvicorn_stdout.log
 uvicorn_stderr.log
 
+# Local environment config
+.env
+.env.*
+!.env.example
+
 # Local-only business / planning docs (must not be pushed)
 docs-private/
 *.local.md
