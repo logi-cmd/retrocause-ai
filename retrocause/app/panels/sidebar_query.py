@@ -3,7 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 from retrocause.models import AnalysisResult
-from retrocause.app.demo_data import PROVIDERS, demo_result, run_real_analysis
+from retrocause.app.demo_data import PROVIDERS, run_real_analysis, topic_aware_demo_result
 
 
 def render_sidebar_query(result: AnalysisResult | None) -> AnalysisResult | None:
@@ -80,9 +80,13 @@ def render_sidebar_query(result: AnalysisResult | None) -> AnalysisResult | None
                 st.info(
                     "No API key provided — using demo data. Add a key to enable real inference."
                 )
-                return demo_result()
+                demo = topic_aware_demo_result(query)
+                demo.is_demo = True
+                return demo
 
         if demo_clicked:
-            return demo_result()
+            demo = topic_aware_demo_result(query)
+            demo.is_demo = True
+            return demo
 
     return result

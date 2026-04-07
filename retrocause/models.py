@@ -124,3 +124,5 @@ class AnalysisResult:
     total_evidence_count: int = 0
     total_uncertainty: float = 0.0
     recommended_next_steps: list[str] = field(default_factory=list)
+    is_demo: bool = False
+    demo_topic: Optional[str] = None

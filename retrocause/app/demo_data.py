@@ -521,6 +521,8 @@ def demo_result() -> AnalysisResult:
             "分析更多 K-Pg 界线的生物标志物",
             "运行多因素耦合的气候-生态模型",
         ],
+        is_demo=True,
+        demo_topic="default",
     )
 
 
@@ -652,6 +654,8 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
                 "补充利率路径与资产久期敏感性分析",
                 "比较储户结构与挤兑速度对结果的影响",
             ],
+            is_demo=True,
+            demo_topic="svb",
         )
 
     if topic == "stock":
@@ -765,6 +769,8 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
                 "比较业绩因素与市场风格轮动的相对贡献",
                 "加入事件时间线以区分盘前与盘中冲击",
             ],
+            is_demo=True,
+            demo_topic="stock",
         )
 
     if topic == "crisis":
@@ -851,6 +857,8 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
                 "比较杠杆与证券化结构的相对贡献",
                 "补充监管与流动性事件时间线",
             ],
+            is_demo=True,
+            demo_topic="crisis",
         )
 
     if topic == "rent":
@@ -947,10 +955,14 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
                 "比较分区限制与成本因素的边际影响",
                 "引入人口迁移与就业集聚的细粒度数据",
             ],
+            is_demo=True,
+            demo_topic="rent",
         )
 
     result = demo_result()
     result.query = query
+    result.is_demo = True
+    result.demo_topic = "default"
     return result
 
 

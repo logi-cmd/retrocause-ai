@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from retrocause.app.demo_data import DEMO_EVIDENCES, PROVIDERS, demo_result, run_real_analysis  # noqa: F401
+from retrocause.app.demo_data import DEMO_EVIDENCES, topic_aware_demo_result
 from retrocause.app.helpers import (  # noqa: F401
     _get_evidences,
     _prob_color,
@@ -38,9 +38,17 @@ def main() -> None:
     result = st.session_state["result"]
 
     if result is None:
-        st.session_state["result"] = demo_result()
+        st.session_state["result"] = topic_aware_demo_result("恐龙为什么灭绝？")
+        st.session_state["result"].is_demo = True
         st.session_state["demo_evidences"] = list(DEMO_EVIDENCES)
         result = st.session_state["result"]
+
+    if result.is_demo:
+        topic_label = result.demo_topic or "default"
+        st.warning(
+            f"⚠️ **Demo mode** — showing pre-built example data (topic: *{topic_label}*). "
+            "Provide an API key in the sidebar to run real causal inference."
+        )
 
     render_graph_panel(result)
 

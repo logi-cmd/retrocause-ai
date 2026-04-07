@@ -3,8 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 
-from retrocause.engine import analyze
-from retrocause.app.demo_data import topic_aware_demo_result
+from retrocause.app.demo_data import (
+    PROVIDERS,
+    detect_demo_topic,
+    topic_aware_demo_result,
+)
 from retrocause.models import AnalysisResult
 
 app = FastAPI(title="RetroCause API", description="Backend API for RetroCause Engine")
@@ -182,6 +185,8 @@ class AnalyzeResponse(BaseModel):
     nodes: List[GraphNode]
     edges: List[GraphEdge]
     evidences: List[Evidence]
+    is_demo: bool = False
+    demo_topic: Optional[str] = None
 
 
 def _classify_node_type(name: str, upstream_ids: List[str], downstream_ids: List[str]) -> str:
@@ -387,10 +392,37 @@ async def root():
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 async def analyze_query(request: AnalyzeRequest):
     try:
-        result = analyze(request.query)
+        is_demo = False
+        demo_topic: Optional[str] = None
+        result: AnalysisResult | None = None
 
-        if not result.variables and not result.edges:
+        if request.api_key:
+            from retrocause.app.demo_data import run_real_analysis
+
+            provider_cfg = PROVIDERS.get(request.model)
+            base_url = provider_cfg["base_url"] if provider_cfg else None
+            model_name = list(provider_cfg["models"].keys())[0] if provider_cfg else request.model
+            try:
+                result = run_real_analysis(request.query, request.api_key, model_name, base_url)
+            except Exception:
+                import traceback
+
+                traceback.print_exc()
+                result = None
+
+            if result is not None:
+                is_demo = False
+            else:
+                result = topic_aware_demo_result(request.query)
+                is_demo = True
+                demo_topic = detect_demo_topic(request.query) or "default"
+        else:
             result = topic_aware_demo_result(request.query)
+            is_demo = True
+            demo_topic = detect_demo_topic(request.query) or "default"
+
+        result.is_demo = is_demo
+        result.demo_topic = demo_topic
 
         nodes = [
             GraphNode(
@@ -429,6 +461,8 @@ async def analyze_query(request: AnalyzeRequest):
             nodes=nodes,
             edges=edges,
             evidences=evidences,
+            is_demo=is_demo,
+            demo_topic=demo_topic,
         )
 
     except Exception as e:
@@ -441,22 +475,37 @@ async def analyze_query(request: AnalyzeRequest):
 @app.post("/api/analyze/v2", response_model=AnalyzeResponseV2)
 async def analyze_query_v2(request: AnalyzeRequest):
     try:
-        result = analyze(request.query)
-        is_demo = False
-        demo_topic = None
+        is_demo = True
+        demo_topic: Optional[str] = None
+        result: AnalysisResult | None = None
 
-        if not result.variables and not result.edges:
+        # ── Attempt real analysis when the caller supplies an API key ──
+        if request.api_key:
+            from retrocause.app.demo_data import run_real_analysis
+
+            provider_cfg = PROVIDERS.get(request.model)
+            base_url = provider_cfg["base_url"] if provider_cfg else None
+            model_name = list(provider_cfg["models"].keys())[0] if provider_cfg else request.model
+            try:
+                result = run_real_analysis(request.query, request.api_key, model_name, base_url)
+            except Exception:
+                import traceback
+
+                traceback.print_exc()
+                result = None
+
+            if result is not None:
+                is_demo = False
+
+        # ── Fallback: topic-aware demo data ──
+        if result is None:
             result = topic_aware_demo_result(request.query)
             is_demo = True
-            topic_map = {
-                "demo_svb_primary": "svb",
-                "demo_stock_primary": "stock",
-                "demo_crisis_primary": "crisis",
-                "demo_rent_primary": "rent",
-                "h1": "default",
-            }
-            if result.hypotheses:
-                demo_topic = topic_map.get(result.hypotheses[0].id, "default")
+            demo_topic = detect_demo_topic(request.query) or "default"
+
+        # Stamp honesty fields on the dataclass itself
+        result.is_demo = is_demo
+        result.demo_topic = demo_topic
 
         return _result_to_v2(result, is_demo=is_demo, demo_topic=demo_topic)
 
