@@ -13,6 +13,7 @@
 - LLM call retry with exponential backoff
 - config-driven request timeout
 - 127 automated tests (unit + integration + comprehensive boundary)
+- API smoke test (38/38 PASS) and UI smoke test (21/21 PASS, Playwright/Chromium)
 - real data sources: ArXiv, Semantic Scholar, DuckDuckGo (all live HTTP, not stubs)
 - topic-aware demo fallback (SVB, stock, crisis, rent, default)
 - explicit demo vs real analysis labeling across browser UI, API, and Streamlit
@@ -111,7 +112,7 @@ It is:
 
 ### P4 — Better OSS onboarding
 
-- add screenshots / GIFs
+- add screenshots / GIFs ✅
 - add issue templates ✅
 - add contributor setup notes ✅
 

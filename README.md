@@ -68,6 +68,22 @@ Still evolving:
 
 ---
 
+## Screenshots
+
+**Evidence board (demo mode) — sticky notes with causal strings on a cork board**
+
+![Evidence Board Demo](docs/images/evidence-board-demo.png)
+
+**Node selected — click any sticky note to inspect its upstream causes and evidence**
+
+![Evidence Board Selected](docs/images/evidence-board-selected.png)
+
+**Chinese locale — toggle between English and Chinese**
+
+![Evidence Board Chinese](docs/images/evidence-board-zh.png)
+
+---
+
 ## Quick start
 
 ### Browser UI (recommended)
