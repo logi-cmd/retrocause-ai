@@ -23,7 +23,7 @@ body:
       description: How can we see the same behavior?
       placeholder: |
         1. Run `python start.py`
-        2. Open http://localhost:3000
+        2. Open http://localhost:3005
         3. Submit query "Why did SVB collapse?"
         4. Click the first upstream cause in the right panel
         5. See error

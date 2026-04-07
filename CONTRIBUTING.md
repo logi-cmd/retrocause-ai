@@ -41,7 +41,7 @@ cd ..
 python start.py
 ```
 
-This starts both the FastAPI backend (port 8000) and the Next.js frontend (port 3000). The frontend loads demo data when no API key is configured, so you can explore the UI right away.
+This starts both the FastAPI backend (port 8000) and the Next.js frontend (port 3005). The frontend loads demo data when no API key is configured, so you can explore the UI right away.
 
 ## Validation Commands
 
