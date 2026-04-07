@@ -14,9 +14,9 @@
 
 ### 1. Demo fallback is still important
 
-Without a configured real model / evidence collection path, the browser experience can fall back to demo data.
+Without a configured real model / evidence collection path, the browser or Streamlit experience can fall back to demo data.
 
-This is now **explicitly labeled in the UI**, and the homepage can call `/api/analyze/v2` directly, but it still means:
+This is now **explicitly labeled in the UI**, the homepage can call `/api/analyze/v2` directly, and Browser UI users can supply a local API key, but it still means:
 
 - not every user query yields a truly query-specific causal chain
 - the OSS demo is reliable for interaction testing, not guaranteed real analysis quality
@@ -38,11 +38,43 @@ Automated browser QA depends on local Chrome / Playwright availability.
 
 The current OSS is a strong demoable alpha, not a production-grade end-user application.
 
+### 6. The release bar is higher than “demo works”
+
+The OSS version should not be published just because the main demo flow looks good.
+
+Before public release, the project should also have:
+
+- setup clarity (`.env.example`, clear provider expectations)
+- honest fallback behavior across browser UI and CLI
+- coherent docs and route structure
+- a stable main workflow that does not feel partially stitched together
+
+### 7. Future Pro value depends on trust and workflow depth
+
+The likely Pro opportunity is not “more AI output.”
+
+It is:
+
+- better real-analysis quality
+- better explanation reuse and comparison workflows
+- stronger team / report / stakeholder communication outputs
+- domain-specific higher-trust workflows where being wrong is costly
+
 ## Near-Term Roadmap
+
+### P0 — Reach the minimum usable OSS release bar
+
+- add `.env.example` and clarify required / optional provider configuration
+- add `LICENSE` file to match the MIT declaration already present in metadata
+- make CLI fallback behavior honest when no real analysis is available
+- resolve confusing dead paths / route references (for example old console expectations)
+- ensure README / CONTRIBUTING / issue templates describe the actual current product and ports
 
 ### P1 — Make real analysis mode clearer
 
 - show stronger distinction between real analysis and demo mode ✅
+- allow local Browser UI key entry while keeping trust-preserving copy ✅
+- unify `is_demo` / `demo_topic` signaling across Browser UI, API, CLI, and Streamlit ✅
 - optionally surface model / source availability in the UI
 - surface evidence coverage / support-vs-refutation balance more prominently
 
@@ -69,6 +101,13 @@ The current OSS is a strong demoable alpha, not a production-grade end-user appl
 - richer sensitivity analysis
 - more robust evidence grounding and uncertainty communication
 - clearer failure states so the product never overstates confidence when real analysis is weak
+- evaluate groundedness / factual consistency metrics with tools such as RAGAS / TruLens / FCS-style scoring
+
+### P6 — Shape the future Pro tier around real jobs-to-be-done
+
+- identify one repeated workflow where explanation quality is materially more valuable than generic chat answers
+- build better comparison / report / stakeholder-facing workflows
+- invest in trust-preserving domain packs before broad feature expansion
 
 ## Release Readiness Heuristic
 
@@ -84,3 +123,19 @@ It is not yet suitable for:
 - guaranteed real-world causal correctness
 - production decision support
 - claims of validated causal inference at scientific or enterprise reliability levels
+
+## OSS vs Pro Heuristic
+
+OSS should provide the full product idea clearly:
+
+- evidence-backed why-question exploration
+- competing chains
+- explicit uncertainty and demo labeling
+- a usable evidence-board interface
+
+Pro should justify payment by improving workflow outcomes:
+
+- higher-trust real analysis
+- better explanation comparison and reuse
+- stronger scenario / intervention workflows
+- outputs that help users explain causality to teams, clients, or decision-makers
