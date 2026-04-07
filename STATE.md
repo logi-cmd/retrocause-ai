@@ -1,3 +1,9 @@
+## Done recently (更新 2026-04-08)
+- API smoke test：新增 `scripts/smoke_test.py`（38 个检查项），覆盖后端 root、V2 API 5 个 demo topic、V1 兼容、边变量完整性、前端 HTML。38/38 PASS - 完成于 02:50
+- UI smoke test：新增 `scripts/ui_smoke_test.py`（Playwright/Chromium，21 个检查项），覆盖 Scenario 1-5（初始加载、demo 透明度、查询流、节点点击/多跳、语言切换）。21/21 PASS - 完成于 03:15
+- Playwright Chromium 已安装（Chrome 因 Windows 权限不足未安装，Chromium 可正常使用） - 完成于 02:55
+- 前端启动端口确认：需通过 `set PORT=3005` 环境变量指定（Next.js 默认 3000） - 完成于 03:00
+
 ## Done recently (更新 2026-04-07 晚)
 - 全面测试：新增 38 个边界测试（`tests/test_comprehensive.py`），覆盖 demo topic 检测、API V2 schema 转换、Pydantic 序列化 round-trip、evaluation 分数边界、providers 配置完整性、pipeline 空运行/故障捕获、demo 结果完整性与一致性。总测试数 127，全绿 - 完成于 21:30
 - 真实数据链路审查确认：ArXiv / Semantic Scholar / DuckDuckGo 三个数据源均为真实 HTTP 实现（非 stub），`run_real_analysis()` 完整接入 engine pipeline。无 API key 时优雅降级到 topic-aware demo - 完成于 21:45

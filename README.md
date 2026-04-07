@@ -365,6 +365,8 @@ Current local validation includes:
 - diagnostics clean on source files (39 Python files + frontend)
 - frontend build (`npm run build`) passing in `frontend/`
 - real data sources (ArXiv, Semantic Scholar, DuckDuckGo) confirmed live
+- API smoke test (`scripts/smoke_test.py`): 38/38 PASS — backend root, V2 API (5 demo topics), V1 compat, edge variable integrity, frontend HTML
+- UI smoke test (`scripts/ui_smoke_test.py`): 21/21 PASS — Playwright/Chromium headless tests covering initial load, demo transparency, query flow, node click/multi-hop, language toggle
 
 ---
 
