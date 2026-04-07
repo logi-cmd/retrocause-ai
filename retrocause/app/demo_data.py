@@ -1033,12 +1033,16 @@ PROVIDERS: dict[str, dict] = {
 def run_real_analysis(
     query: str, api_key: str, model: str, base_url: str | None
 ) -> AnalysisResult | None:
+    from retrocause.config import RetroCauseConfig as _Config
     from retrocause.engine import analyze as _analyze
     from retrocause.llm import LLMClient as _LLMClient
     from retrocause.sources.arxiv import ArxivSourceAdapter as _Arxiv
     from retrocause.sources.semantic_scholar import SemanticScholarAdapter as _SS
     from retrocause.sources.web import WebSearchAdapter as _Web
 
-    llm = _LLMClient(api_key=api_key, model=model, base_url=base_url)
+    cfg = _Config.from_env()
+    llm = _LLMClient(
+        api_key=api_key, model=model, base_url=base_url, timeout=cfg.request_timeout_seconds
+    )
     sources = [_Arxiv(), _SS(), _Web()]
-    return _analyze(query, llm_client=llm, source_adapters=sources)
+    return _analyze(query, llm_client=llm, source_adapters=sources, config=cfg)

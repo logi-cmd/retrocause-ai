@@ -3,12 +3,26 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import time
 from dataclasses import dataclass, field
 
 import openai
 
 from retrocause.models import HypothesisChain
+
+logger = logging.getLogger(__name__)
+
+# LLM 调用可重试的异常类型
+_RETRYABLE_ERRORS = (
+    openai.RateLimitError,
+    openai.APITimeoutError,
+    openai.APIConnectionError,
+)
+
+_DEFAULT_MAX_RETRIES = 3
+_DEFAULT_RETRY_BASE_DELAY = 1.0  # seconds
 
 
 @dataclass
@@ -21,6 +35,33 @@ class ExtractedEvidence:
     confidence: float = 0.5
 
 
+def _call_with_retry(fn, *args, max_retries=_DEFAULT_MAX_RETRIES, **kwargs):
+    """带指数退避的 LLM 调用包装器。
+
+    仅对可重试的异常（限流、超时、连接错误）进行重试。
+    其他异常（如 AuthenticationError）立即抛出。
+    """
+    last_exc = None
+    for attempt in range(max_retries + 1):
+        try:
+            return fn(*args, **kwargs)
+        except _RETRYABLE_ERRORS as exc:
+            last_exc = exc
+            if attempt < max_retries:
+                delay = _DEFAULT_RETRY_BASE_DELAY * (2**attempt)
+                logger.warning(
+                    "LLM 调用失败 (attempt %d/%d): %s — %.1fs 后重试",
+                    attempt + 1,
+                    max_retries + 1,
+                    exc,
+                    delay,
+                )
+                time.sleep(delay)
+            else:
+                logger.error("LLM 调用最终失败 (共 %d 次尝试): %s", max_retries + 1, exc)
+    raise last_exc  # type: ignore[misc]
+
+
 class LLMClient:
     """封装 OpenAI API，为 RetroCause 提供证据收集能力。"""
 
@@ -29,6 +70,7 @@ class LLMClient:
         api_key: str | None = None,
         model: str = "gpt-4o-mini",
         base_url: str | None = None,
+        timeout: float | None = None,
     ):
         """
         初始化 LLM 客户端。
@@ -37,6 +79,7 @@ class LLMClient:
             api_key: API 密钥，为 None 时依次尝试 OPENROUTER_API_KEY / OPENAI_API_KEY 环境变量。
             model: 模型名称（OpenRouter 格式如 "deepseek/deepseek-chat-v3-0324"）。
             base_url: API 地址，默认 https://openrouter.ai/api/v1 或 https://api.openai.com/v1。
+            timeout: 请求超时秒数，为 None 时回退到 OPENAI_TIMEOUT 环境变量（默认 60s）。
         """
         resolved_key = (
             api_key or os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
@@ -48,10 +91,12 @@ class LLMClient:
         else:
             resolved_base = None
 
+        resolved_timeout = timeout or float(os.environ.get("OPENAI_TIMEOUT", "60"))
+
         self.client = openai.OpenAI(
             api_key=resolved_key,
             base_url=resolved_base,
-            timeout=float(os.environ.get("OPENAI_TIMEOUT", "60")),
+            timeout=resolved_timeout,
         )
         self.model = model
 
@@ -93,7 +138,8 @@ class LLMClient:
         )
 
         try:
-            response = self.client.chat.completions.create(
+            response = _call_with_retry(
+                self.client.chat.completions.create,
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -150,7 +196,8 @@ class LLMClient:
         )
 
         try:
-            response = self.client.chat.completions.create(
+            response = _call_with_retry(
+                self.client.chat.completions.create,
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -220,7 +267,8 @@ class LLMClient:
         )
 
         try:
-            response = self.client.chat.completions.create(
+            response = _call_with_retry(
+                self.client.chat.completions.create,
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -273,7 +321,8 @@ class LLMClient:
         )
 
         try:
-            response = self.client.chat.completions.create(
+            response = _call_with_retry(
+                self.client.chat.completions.create,
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -311,7 +360,8 @@ class LLMClient:
         )
 
         try:
-            response = self.client.chat.completions.create(
+            response = _call_with_retry(
+                self.client.chat.completions.create,
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
