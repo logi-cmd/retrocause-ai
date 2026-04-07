@@ -1,3 +1,8 @@
+## Done recently (更新 2026-04-07)
+- H3 工程硬化：llm.py 所有 5 个 LLM 调用已改为通过 `_call_with_retry` 走指数退避重试（最多 3 次，仅限 RateLimitError / APITimeoutError / APIConnectionError） - 完成于 19:30
+- H4 工程硬化：LLMClient 新增 `timeout` 参数；`run_real_analysis()` 现在从 `RetroCauseConfig.from_env()` 读取 `request_timeout_seconds` 并传入 OpenAI 客户端 - 完成于 19:30
+- `docs/engineering-audit.md` 已更新：H1-H4 全部标记为 Done - 完成于 19:30
+
 ## Done recently (更新 2026-04-04)
 - 证据墙首页已支持真实因果红线、图钉锚点、便签拖动、纸张/墙面真实感增强 - 完成于 22:41
 - OSS 文档中的前端访问端口已统一更新为 3005 - 完成于 22:42

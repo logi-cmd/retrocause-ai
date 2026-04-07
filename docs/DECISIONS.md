@@ -642,3 +642,29 @@ EvidenceCollection → GraphBuilding → HypothesisGeneration → EvidenceAnchor
 - `retrocause/api/main.py` diagnostics clean
 - `retrocause/app/demo_data.py` diagnostics clean
 - 后续以 `pytest tests/`、`ruff check retrocause tests`、`frontend npm run build` 作为统一发布前验证
+
+---
+
+## 2026-04-07 工程硬化：LLM 重试与 config timeout 接入
+
+### 背景
+engineering-audit.md 中的 H3 和 H4 长期标记为待完成：
+- H3：所有 LLM 调用静默 catch `openai.OpenAIError` 后返回空值，无重试，无区分可恢复错误与不可恢复错误
+- H4：`config.py` 的 `request_timeout_seconds` 未传入 OpenAI 客户端构造，`llm.py` 硬编码使用 `OPENAI_TIMEOUT` 环境变量
+
+### 决策
+- 新增 `_call_with_retry()` 模块级函数：指数退避（base delay 1s × 2^attempt），最多 3 次重试
+- 仅对可重试异常重试：`RateLimitError`、`APITimeoutError`、`APIConnectionError`
+- 其他异常（`AuthenticationError`、`BadRequestError` 等）立即抛出，不做无意义重试
+- `LLMClient.__init__` 新增 `timeout` 参数，替代硬编码环境变量
+- `run_real_analysis()` 现在从 `RetroCauseConfig.from_env()` 获取 timeout 并传入 `LLMClient`
+
+### 理由
+- 限流、超时、连接断开是 LLM API 的常见瞬态故障，自动重试可显著减少"第一次调用偶然失败 → 整条 pipeline 返回空结果"的问题
+- 重试只针对可恢复错误，避免在认证失败等不可恢复场景下浪费时间
+- config timeout 被定义了但从未使用是典型的"结构存在但未接通"问题，修复成本极低
+
+### 验证结果
+- `pytest tests/ -v` 通过（71 passed）
+- `ruff check retrocause tests` 通过
+- `llm.py` / `demo_data.py` lsp diagnostics clean
