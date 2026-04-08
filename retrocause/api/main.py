@@ -420,7 +420,7 @@ async def list_providers():
         "providers": {
             key: {
                 "label": cfg["label"],
-                "models": cfg["models"],
+                "models": {mid: mcfg["label"] for mid, mcfg in cfg["models"].items()},
             }
             for key, cfg in PROVIDERS.items()
         }

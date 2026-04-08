@@ -145,14 +145,19 @@ class LLMClient:
                     {"role": "user", "content": user_prompt},
                 ],
             }
+            kwargs["response_format"] = {"type": "json_object"}
             try:
-                kwargs["response_format"] = {"type": "json_object"}
-            except Exception:
-                pass
-            response = _call_with_retry(
-                self.client.chat.completions.create,
-                **kwargs,
-            )
+                response = _call_with_retry(
+                    self.client.chat.completions.create,
+                    **kwargs,
+                )
+            except openai.BadRequestError:
+                kwargs.pop("response_format", None)
+                logger.warning("Provider does not support response_format, retrying without it")
+                response = _call_with_retry(
+                    self.client.chat.completions.create,
+                    **kwargs,
+                )
             data = json.loads(response.choices[0].message.content)
             queries = data.get("queries", [])
             if not isinstance(queries, list):
@@ -209,14 +214,19 @@ class LLMClient:
                     {"role": "user", "content": user_prompt},
                 ],
             }
+            kwargs["response_format"] = {"type": "json_object"}
             try:
-                kwargs["response_format"] = {"type": "json_object"}
-            except Exception:
-                pass
-            response = _call_with_retry(
-                self.client.chat.completions.create,
-                **kwargs,
-            )
+                response = _call_with_retry(
+                    self.client.chat.completions.create,
+                    **kwargs,
+                )
+            except openai.BadRequestError:
+                kwargs.pop("response_format", None)
+                logger.warning("Provider does not support response_format, retrying without it")
+                response = _call_with_retry(
+                    self.client.chat.completions.create,
+                    **kwargs,
+                )
             data = json.loads(response.choices[0].message.content)
             items = data.get("evidence", [])
             if not isinstance(items, list):
@@ -286,14 +296,19 @@ class LLMClient:
                     {"role": "user", "content": user_prompt},
                 ],
             }
+            kwargs["response_format"] = {"type": "json_object"}
             try:
-                kwargs["response_format"] = {"type": "json_object"}
-            except Exception:
-                pass
-            response = _call_with_retry(
-                self.client.chat.completions.create,
-                **kwargs,
-            )
+                response = _call_with_retry(
+                    self.client.chat.completions.create,
+                    **kwargs,
+                )
+            except openai.BadRequestError:
+                kwargs.pop("response_format", None)
+                logger.warning("Provider does not support response_format, retrying without it")
+                response = _call_with_retry(
+                    self.client.chat.completions.create,
+                    **kwargs,
+                )
             data = json.loads(response.choices[0].message.content)
             score = float(data.get("score", 0.5))
             return max(0.0, min(1.0, score))
@@ -346,14 +361,19 @@ class LLMClient:
                     {"role": "user", "content": user_prompt},
                 ],
             }
+            kwargs["response_format"] = {"type": "json_object"}
             try:
-                kwargs["response_format"] = {"type": "json_object"}
-            except Exception:
-                pass
-            response = _call_with_retry(
-                self.client.chat.completions.create,
-                **kwargs,
-            )
+                response = _call_with_retry(
+                    self.client.chat.completions.create,
+                    **kwargs,
+                )
+            except openai.BadRequestError:
+                kwargs.pop("response_format", None)
+                logger.warning("Provider does not support response_format, retrying without it")
+                response = _call_with_retry(
+                    self.client.chat.completions.create,
+                    **kwargs,
+                )
             data = json.loads(response.choices[0].message.content)
             if not isinstance(data, dict):
                 return {}
@@ -391,14 +411,19 @@ class LLMClient:
                     {"role": "user", "content": user_prompt},
                 ],
             }
+            kwargs["response_format"] = {"type": "json_object"}
             try:
-                kwargs["response_format"] = {"type": "json_object"}
-            except Exception:
-                pass
-            response = _call_with_retry(
-                self.client.chat.completions.create,
-                **kwargs,
-            )
+                response = _call_with_retry(
+                    self.client.chat.completions.create,
+                    **kwargs,
+                )
+            except openai.BadRequestError:
+                kwargs.pop("response_format", None)
+                logger.warning("Provider does not support response_format, retrying without it")
+                response = _call_with_retry(
+                    self.client.chat.completions.create,
+                    **kwargs,
+                )
             data = json.loads(response.choices[0].message.content)
             if not isinstance(data, dict):
                 return {}
