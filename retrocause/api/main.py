@@ -544,6 +544,10 @@ async def analyze_query_v2(request: AnalyzeRequest):
                 error_msg = f"{type(exc).__name__}: {exc}"
                 result = None
 
+            if result is not None and len(result.hypotheses) == 0:
+                error_msg = f"LLM calls failed for {model_name} — empty result (check API key balance and model access)"
+                result = None
+
             if result is not None:
                 is_demo = False
 
