@@ -35,10 +35,12 @@ class EvidenceCollectionStep(PipelineStep):
         collector: EvidenceCollector,
         llm_client: LLMProvider | None = None,
         source_adapters: list[SourceAdapter] | None = None,
+        config: RetroCauseConfig | None = None,
     ):
         self.collector = collector
         self._llm_client = llm_client
         self._source_adapters = source_adapters
+        self._config = config or RetroCauseConfig()
 
     def execute(self, ctx: PipelineContext) -> PipelineContext:
         if self._llm_client is None or self._source_adapters is None:
@@ -49,6 +51,8 @@ class EvidenceCollectionStep(PipelineStep):
             domain=ctx.domain,
             llm_client=self._llm_client,
             source_adapters=self._source_adapters,
+            max_sub_queries=self._config.max_sub_queries,
+            max_results_per_source=self._config.max_results_per_source,
         )
         ctx.total_evidence_count = len(self.collector.get_evidence())
         return ctx
@@ -182,7 +186,12 @@ class RetroCauseEngine:
         )
         return Pipeline(
             [
-                EvidenceCollectionStep(self.collector, self._llm_client, self._source_adapters),
+                EvidenceCollectionStep(
+                    self.collector,
+                    self._llm_client,
+                    self._source_adapters,
+                    config=self._config,
+                ),
                 GraphBuildingStep(self.graph, self.collector, self._llm_client),
                 HypothesisGenerationStep(self.graph, HypothesisGenerator()),
                 EvidenceAnchoringStep(self.collector),

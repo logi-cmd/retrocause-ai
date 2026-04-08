@@ -38,8 +38,9 @@ class _DDGResultParser(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attr_dict = dict(attrs)
+        class_names = set((attr_dict.get("class") or "").split())
 
-        if tag == "div" and attr_dict.get("class") and "result" in (attr_dict.get("class") or ""):
+        if tag == "div" and "result" in class_names:
             self._in_result = True
             self._current_url = ""
             self._current_title = ""
@@ -49,7 +50,7 @@ class _DDGResultParser(HTMLParser):
         if not self._in_result:
             return
 
-        if tag == "a" and "result__a" in (attr_dict.get("class") or ""):
+        if tag == "a" and "result__a" in class_names:
             href = attr_dict.get("href", "")
             if href:
                 # DDG 用 //uddg= 参数传递真实 URL
@@ -61,7 +62,7 @@ class _DDGResultParser(HTMLParser):
             self._capture = "title"
             self._capture_buf = []
 
-        if tag == "a" and "result__snippet" in (attr_dict.get("class") or ""):
+        if tag == "a" and "result__snippet" in class_names:
             self._capture = "snippet"
             self._capture_buf = []
 
@@ -104,11 +105,14 @@ class WebSearchAdapter(BaseSourceAdapter):
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         """用 DuckDuckGo HTML 版搜索，返回 SearchResult 列表。"""
         try:
-            response = httpx.post(
+            response = httpx.get(
                 _DD_URL,
-                data={"q": query},
+                params={"q": query},
                 timeout=_TIMEOUT,
-                headers={"User-Agent": _USER_AGENT},
+                headers={
+                    "User-Agent": _USER_AGENT,
+                    "Referer": "https://html.duckduckgo.com/",
+                },
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:

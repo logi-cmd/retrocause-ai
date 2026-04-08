@@ -65,6 +65,7 @@ class EvidenceCollector:
         domain: str,
         llm_client: object | None = None,
         source_adapters: list[object] | None = None,
+        max_sub_queries: int | None = None,
         max_results_per_source: int = 5,
     ) -> list[Evidence]:
         """
@@ -79,6 +80,7 @@ class EvidenceCollector:
             domain: 查询领域
             llm_client: LLMClient 实例（需有 decompose_query / extract_evidence 方法）
             source_adapters: BaseSourceAdapter 实例列表
+            max_sub_queries: 最大子查询数，None 表示不截断
             max_results_per_source: 每个证据源的最大返回数
 
         Returns:
@@ -93,6 +95,8 @@ class EvidenceCollector:
         if not sub_queries:
             logger.warning("auto_collect: 查询分解返回空，使用原始查询")
             sub_queries = [query]
+        elif max_sub_queries is not None:
+            sub_queries = sub_queries[:max_sub_queries]
 
         logger.info("auto_collect: 分解为 %d 个子查询", len(sub_queries))
 

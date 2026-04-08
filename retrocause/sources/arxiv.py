@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 _ATOM_NS = "{http://www.w3.org/2005/Atom}"
 _ARXIV_NS = "{http://arxiv.org/schemas/atom}"
 
-_API_URL = "http://export.arxiv.org/api/query"
+_API_URL = "https://export.arxiv.org/api/query"
 _TIMEOUT = 15.0
 
 
