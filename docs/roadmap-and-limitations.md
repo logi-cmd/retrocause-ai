@@ -124,11 +124,31 @@ It is:
 - clearer failure states so the product never overstates confidence when real analysis is weak
 - evaluate groundedness / factual consistency metrics with tools such as RAGAS / TruLens / FCS-style scoring
 
+### P5.5 — Frontier techniques that fit OSS
+
+- add citation-grounded outputs so chains and edges can point back to evidence more explicitly
+- add support-vs-refutation balance and provenance completeness into the evaluation layer
+- add lightweight graph-guided retrieval / CausalRAG-style retrieval on top of the existing pipeline and optional vector store
+- add uncertainty communication that distinguishes thin evidence, conflicting evidence, and low-confidence reasoning
+- add reasoning-trace summaries only where they improve inspectability without pretending to expose ground-truth model cognition
+
 ### P6 — Shape the future Pro tier around real jobs-to-be-done
 
 - identify one repeated workflow where explanation quality is materially more valuable than generic chat answers
 - build better comparison / report / stakeholder-facing workflows
 - invest in trust-preserving domain packs before broad feature expansion
+
+## Not planned for OSS by default
+
+The following directions are intentionally treated as **Pro-first** unless the OSS mission changes:
+
+- persistent workspaces and saved analysis history
+- shareable report workflows for teams / clients / stakeholders
+- streaming-first long-running analysis UX
+- strong provenance ledger / audit trail for repeated operational use
+- heavy multi-agent orchestration as a core product promise
+- domain packs designed for high-stakes repeated workflows
+- infrastructure changes whose main value is operating scale rather than OSS inspectability
 
 ## Release Readiness Heuristic
 
@@ -160,3 +180,9 @@ Pro should justify payment by improving workflow outcomes:
 - better explanation comparison and reuse
 - stronger scenario / intervention workflows
 - outputs that help users explain causality to teams, clients, or decision-makers
+
+## OSS vs Pro architecture heuristic
+
+- **OSS** keeps the current Python + FastAPI + Next.js stack and should prioritize visible quality, explicit limits, and contribution friendliness.
+- **Pro** may diverge into a separate Rust full-stack runtime where the payoff is in strong typing, streaming workflows, graph/runtime performance, shared models, and operational cost.
+- Rust should not be treated as the magic source of better causal correctness. Better correctness should mostly come from stronger evaluation, evidence grounding, calibration, and refutation patterns.

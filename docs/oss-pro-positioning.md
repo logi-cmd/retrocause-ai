@@ -94,12 +94,31 @@ It should mean **better workflow outcomes** for users whose cost of being wrong 
    - investment/news postmortems
    - strategic retrospectives
 
+6. **A more operationally robust product substrate**
+   - streaming-first analysis UX
+   - shared typed models from backend to frontend
+   - lower-latency graph/layout operations
+   - lower infra cost for sustained real-analysis usage
+
+The current planning direction is that this substrate may live in a separate **full-stack Rust Pro architecture**, rather than being forced into the OSS stack by default.
+
 ### What should stay in OSS
 
 - the core evidence-board idea
 - basic why-question exploration
 - visible competing chains
 - visible uncertainty / demo labeling
+
+### Architecture split
+
+- **OSS should continue to ship on the current Python stack** (`FastAPI + Python pipeline + Next.js evidence board`).
+- **Pro can diverge architecturally** if that materially improves reliability, streaming UX, shared typing, and cost structure.
+- The current direction is to treat Pro as a **separate full-stack Rust line**, not as a thin feature gate over the OSS codebase.
+
+This split exists because the two products have different jobs:
+
+- OSS must be runnable, inspectable, and contribution-friendly.
+- Pro must be dependable enough for repeated, higher-stakes workflows.
 
 If the core idea is hidden, OSS stops being a strong distribution engine.
 
@@ -328,6 +347,29 @@ Recent high-signal references point in four practical directions:
 ---
 
 ## 9. Recommended Product Strategy
+
+### Frontier placement
+
+**Good OSS frontier bets**:
+
+- evidence-grounded evaluation
+- citation-grounded explanation output
+- support vs refutation balance
+- lightweight graph-guided retrieval / CausalRAG-style retrieval
+- uncertainty communication that makes weak evidence and weak chains explicit
+
+These strengthen the core OSS promise: inspectable, honest, evidence-aware explanation.
+
+**Better Pro-first frontier bets**:
+
+- strong provenance ledger and reusable organization memory
+- persistent workspaces and history
+- heavy multi-agent workflows
+- streaming long-running analysis UX
+- stakeholder / client reporting flows
+- reusable domain packs for repeated high-stakes explanation jobs
+
+These are more naturally productized around repeated work, operational depth, and team use—not around first-touch OSS understanding.
 
 ### Near term
 

@@ -269,6 +269,12 @@ Likely Pro-only areas:
 - saved workspaces, shareable reports, and team-facing explainability workflows
 - higher-confidence templates for recurring domains such as finance, market events, and strategic postmortems
 
+Architecture split going forward:
+
+- **OSS stays on the current Python + FastAPI + Next.js stack** so the open-source version remains runnable, inspectable, and easy to contribute to.
+- **Pro is planned as a separate full-stack Rust product line** focused on higher reliability, stronger workflow depth, and lower operating cost at scale.
+- This means the OSS roadmap optimizes for honest usability and clear product learning, while the Pro roadmap can optimize for performance, streaming workflows, shared workspaces, and more operationally demanding use cases.
+
 Some commercial and planning documents are intentionally kept local and are not pushed to the remote repository.
 
 ---
@@ -335,6 +341,7 @@ Not “more AI” by itself. The strongest Pro direction is:
 - more reliable evidence handling and comparison workflows
 - better outputs for teams who need to explain causality to clients, teammates, or decision-makers
 - domain-specific templates where being wrong is costly and uncertainty must be explicit
+- a more operationally robust product architecture, currently planned as a separate **full-stack Rust** implementation rather than a thin feature flag layer on top of OSS
 
 In other words: OSS should make the product understandable and usable; Pro should make it dependable enough for higher-frequency and higher-stakes workflows.
 
@@ -369,6 +376,46 @@ If you are landing here from X, Reddit, Hacker News, or Product Hunt:
 | backend API | FastAPI (Python) with `/api/analyze/v2` |
 | frontend | Next.js + Tailwind CSS (evidence-board UI) |
 | interface (fallback) | Streamlit + streamlit-agraph |
+
+Current OSS runtime architecture (high level):
+
+| Layer | Current OSS implementation |
+|---|---|
+| launcher | `start.py` starts FastAPI (`:8000`) + Next.js (`:3005`) |
+| API contract | `retrocause/api/main.py` exposes `/api/analyze/v2`, `/api/providers`, demo/real metadata |
+| inference runtime | `retrocause/engine.py` staged pipeline: evidence -> graph -> hypotheses -> anchoring -> counterfactual -> debate -> evaluation |
+| evidence sources | `retrocause/sources/*` adapters for DuckDuckGo, ArXiv, Semantic Scholar |
+| model routing | `retrocause/llm.py` + provider config in `retrocause/app/demo_data.py` |
+| browser product surface | Next.js evidence-board homepage + interactive graph/canvas panels |
+| fallback UX | Streamlit path remains available as a demo-oriented backup interface |
+
+Planned future Pro architecture (private planning direction):
+
+- frontend: Dioxus (Rust)
+- backend: Axum (Rust)
+- graph engine: petgraph
+- shared typed models across client/server
+- Python remains in the loop only where mature probabilistic tooling is still worth bridging (for example via PyO3 + NumPyro)
+
+Frontier capability placement (current recommendation):
+
+| Capability | OSS now / next | Pro-first |
+|---|---|---|
+| evidence-grounded evaluation | ✅ yes |
+| citation-grounded outputs | ✅ yes |
+| support vs refutation balance | ✅ yes |
+| lightweight CausalRAG / graph-guided retrieval | ✅ yes |
+| explicit uncertainty communication | ✅ yes |
+| strong provenance ledger / reusable workspaces |  | ✅ yes |
+| streaming long-running analysis workflows |  | ✅ yes |
+| domain packs / repeated-use workflow templates |  | ✅ yes |
+| heavy multi-agent orchestration |  | ✅ yes |
+| team/client report workflows |  | ✅ yes |
+
+Rule of thumb:
+
+- **OSS** should improve inspectability, honesty, and explanation quality.
+- **Pro** should improve operational reliability, repeated workflow depth, and collaborative usefulness.
 
 ---
 
