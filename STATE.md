@@ -1,3 +1,8 @@
+## Done recently (更新 2026-04-09)
+- 架构/文档同步：README、roadmap、OSS/Pro positioning、DECISIONS、私有 Rust 方案文档已统一补充 OSS 当前架构、frontier 技术落点、Pro-first 能力范围，以及 Rust 重写 / Python bridge 的改造边界 - 完成于 00:52
+- 文档同步：README / `docs/oss-pro-positioning.md` / `docs-private/retrocause-pro-rust-architecture.md` 已统一写明 OSS/Pro 分层原则：OSS 继续沿用 Python + FastAPI + Next.js，Pro 规划为独立全栈 Rust 产品线 - 完成于 00:35
+- 真实分析修复：修复 DuckDuckGo 适配器请求方式与 HTML 解析 bug，ArXiv 切换到 HTTPS，并降低在线模式默认调用规模；有效 OpenRouter key 下 `/api/analyze/v2` 已返回 `is_demo=False` 的真实结果 - 完成于 00:34
+
 ## Done recently (更新 2026-04-08)
 - API smoke test：新增 `scripts/smoke_test.py`（38 个检查项），覆盖后端 root、V2 API 5 个 demo topic、V1 兼容、边变量完整性、前端 HTML。38/38 PASS - 完成于 02:50
 - UI smoke test：新增 `scripts/ui_smoke_test.py`（Playwright/Chromium，21 个检查项），覆盖 Scenario 1-5（初始加载、demo 透明度、查询流、节点点击/多跳、语言切换）。21/21 PASS - 完成于 03:15

@@ -761,3 +761,78 @@ OSS 发布前需要验证应用端到端可用性。手动 smoke test（`docs/ma
 - API smoke test: 38/38 PASS
 - UI smoke test: 21/21 PASS
 - 全部测试脚本已提交（commit `8fb0ec5`）
+
+---
+
+## 2026-04-09 OSS / Pro 分层与 Pro 全栈 Rust 方向同步
+
+### 背景
+用户明确要求继续做好 OSS / Pro 分层，并特别指出：**Pro 版后续计划走全栈 Rust**。因此需要把这一点同步进公开文档与私有架构文档，避免“产品定位说一套、架构规划写另一套”。
+
+### 决策
+- `README.md` 补充架构分层说明：
+  - OSS 保持当前 Python + FastAPI + Next.js 路线
+  - Pro 规划为独立全栈 Rust 产品线，而不是单纯 feature gating
+- `docs/oss-pro-positioning.md` 补充 “Architecture split” 小节
+- `docs-private/retrocause-pro-rust-architecture.md` 新增 “OSS / Pro 分层原则” 前置章节，明确该文档描述的是 Pro 目标架构，不是 OSS 近期迁移计划
+
+### 理由
+- OSS 的首要目标是 runnable / inspectable / contribution-friendly
+- Pro 的首要目标是更高可靠性、更深工作流、更低单位成本与更强团队交付能力
+- 两者的约束不同，过早强行共用一套 Web 架构会让 OSS 过重、让 Pro 受限
+- “产品心智共享，代码实现允许分叉”更符合当前阶段
+
+### 同步结果
+- 公开文档与私有规划文档的叙事已统一
+- 后续可继续在 Pro Rust 文档中深化工程方案，而不影响 OSS 发布叙事
+
+---
+
+## 2026-04-09 Frontier 技术落点与 Rust Pro 改造边界
+
+### 背景
+在完成真实分析修复后，用户进一步要求：
+
+- 不只是讨论前沿技术，还要分析这些技术应如何融入项目
+- 需要明确当前 OSS 版本的技术架构
+- 需要明确未来 Pro 全栈 Rust 应该重写哪些部分、桥接哪些部分
+- 文档需要同步到统一叙事
+
+并行分析（explore / librarian / oracle）后的结论是：
+**共享产品契约，运行时分叉** 是当前最合理的路线。
+
+### 决策
+- OSS 只优先接入那些能直接增强“inspectability / honesty / evidence quality”的 frontier 技术：
+  - evidence-grounded evaluation
+  - citation-grounded outputs
+  - support-vs-refutation balance
+  - lightweight graph-guided retrieval / CausalRAG-style retrieval
+  - uncertainty communication
+- Pro-first 保留给更像“工作流产品底座”的能力：
+  - persistent workspaces
+  - strong provenance ledger
+  - streaming long-running analysis UX
+  - domain packs / repeated-use workflows
+  - heavy multi-agent orchestration
+  - stakeholder/client report workflows
+- Pro 全栈 Rust 的重写重点放在：
+  - API / session layer
+  - 流式编排
+  - 图遍历 / 比较 / 布局
+  - typed models
+  - workspace / cache / permission / multi-tenant substrate
+- Python 继续保留在 loop 中的部分：
+  - NumPyro / JAX 概率推理
+  - DoWhy / PyWhy / refutation 等研究型内核
+  - 原则上采用**粗粒度 bridge**，避免细粒度 FFI
+
+### 理由
+- Rust 更适合解决高并发、强类型、低延迟、长连接、运营复杂度问题；它**不是**自动提高因果正确性的来源
+- 因果正确性和可信度的主要提升，仍来自更好的 evidence grounding、校准、评估、反驳与敏感性分析
+- OSS 的任务是把产品核心心智讲清楚并保持诚实；Pro 的任务是让高频和高风险用户愿意反复依赖
+
+### 同步结果
+- `README.md` 增加了 OSS 当前 runtime architecture 和 frontier capability placement
+- `docs/roadmap-and-limitations.md` 增加了 OSS 可做 / Not planned for OSS / architecture heuristic
+- `docs/oss-pro-positioning.md` 增加了 frontier placement
+- `docs-private/retrocause-pro-rust-architecture.md` 增加了共享产品契约、Rust rewrite / Python bridge 边界、迁移映射
