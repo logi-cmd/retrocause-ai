@@ -617,6 +617,12 @@ export default function Home() {
     demoTopic: null,
     loading: false,
   });
+  const [pipelineProgress, setPipelineProgress] = useState<{
+    step: string;
+    stepIndex: number;
+    totalSteps: number;
+    message: string;
+  } | null>(null);
 
   const mockPrimaryChain = activeChain;
   
@@ -919,35 +925,20 @@ export default function Home() {
 
   const runAnalysis = useCallback(async () => {
     const query = currentQuery.trim();
-    if (!query) {
-      return;
-    }
+    if (!query) return;
 
     setAnalysisMode((current) => ({ ...current, loading: true }));
+    setPipelineProgress(null);
     setStatusNote(locale === "en" ? "Running live analysis…" : "正在执行真实分析…");
     setLastQuery(query);
 
-    try {
-      const body: Record<string, unknown> = { query, model: selectedModel, api_key: apiKey };
-      if (selectedExplicitModel) {
-        body.explicit_model = selectedExplicitModel;
-      }
-      const response = await fetch("http://127.0.0.1:8000/api/analyze/v2", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+    const body: Record<string, unknown> = { query, model: selectedModel, api_key: apiKey };
+    if (selectedExplicitModel) body.explicit_model = selectedExplicitModel;
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const payload = (await response.json()) as AnalyzeResponseV2;
+    // Helper to process a successful payload (shared between SSE done and fallback)
+    const processPayload = (payload: AnalyzeResponseV2) => {
       const recommended = payload.chains.find((chain) => chain.chain_id === payload.recommended_chain_id) ?? payload.chains[0];
-
-      if (!recommended) {
-        throw new Error("No chains returned");
-      }
+      if (!recommended) throw new Error("No chains returned");
 
       setAvailableChains(payload.chains);
       setRecommendedChainId(payload.recommended_chain_id);
@@ -985,7 +976,10 @@ export default function Home() {
             : "真实分析已返回推荐因果链。请先检查证据覆盖，再决定是否相信结果。"
         );
       }
-    } catch {
+    };
+
+    // Helper for fallback on error
+    const fallbackToDemo = () => {
       setActiveChain(localizedDemo.primaryChain);
       setAvailableChains([]);
       setRecommendedChainId(null);
@@ -1000,8 +994,89 @@ export default function Home() {
           ? "Live analysis failed; showing local demo board instead."
           : "真实分析失败，当前回退到本地 demo 证据墙。"
       );
+    };
+
+    try {
+      // Try SSE streaming endpoint first
+      const response = await fetch("http://127.0.0.1:8000/api/analyze/v2/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const contentType = response.headers.get("content-type") ?? "";
+
+      // If the response is SSE (text/event-stream), consume the stream
+      if (contentType.includes("text/event-stream") && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Parse SSE lines: "data: {...}\n\n"
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() ?? ""; // keep incomplete chunk in buffer
+
+          for (const part of parts) {
+            const dataLine = part.trim();
+            if (!dataLine.startsWith("data: ")) continue;
+
+            try {
+              const event = JSON.parse(dataLine.slice(6));
+
+              if (event.type === "progress") {
+                setPipelineProgress({
+                  step: event.step ?? "",
+                  stepIndex: event.step_index ?? 0,
+                  totalSteps: event.total_steps ?? 0,
+                  message: event.message ?? "",
+                });
+                setStatusNote(event.message ?? "");
+              } else if (event.type === "done") {
+                setPipelineProgress(null);
+                const payload = (event.data ?? event) as AnalyzeResponseV2;
+                processPayload(payload);
+              } else if (event.type === "error") {
+                setPipelineProgress(null);
+                setAnalysisMode({ isDemo: true, demoTopic: null, loading: false });
+                setStatusNote(
+                  locale === "en"
+                    ? `Analysis error: ${event.error}. Showing demo fallback.`
+                    : `分析错误：${event.error}，当前显示 demo 回退数据。`
+                );
+                // Load demo data as fallback
+                fallbackToDemo();
+              }
+            } catch {
+              // Skip malformed JSON lines
+            }
+          }
+        }
+
+        // If we exhausted the stream without a "done" event, fall back
+        setPipelineProgress(null);
+        if (analysisMode.loading) {
+          fallbackToDemo();
+        }
+      } else {
+        // Non-SSE response (fallback) — treat as regular JSON
+        const payload = (await response.json()) as AnalyzeResponseV2;
+        processPayload(payload);
+      }
+    } catch {
+      setPipelineProgress(null);
+      fallbackToDemo();
     }
-  }, [currentQuery, selectedModel, selectedExplicitModel, apiKey, locale, localizedDemo.primaryChain]);
+  }, [currentQuery, selectedModel, selectedExplicitModel, apiKey, locale, localizedDemo.primaryChain, analysisMode.loading]);
 
   return (
     <div
@@ -1160,6 +1235,33 @@ export default function Home() {
                   : t("header.status.live")}
             </span>
           </div>
+          {pipelineProgress && analysisMode.loading && (
+            <div style={{ display: "flex", alignItems: "center", gap: "4px", flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  flex: 1,
+                  height: "3px",
+                  background: "rgba(139, 115, 85, 0.15)",
+                  borderRadius: "2px",
+                  overflow: "hidden",
+                  minWidth: 0,
+                }}
+              >
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${pipelineProgress.totalSteps > 0 ? (pipelineProgress.stepIndex / pipelineProgress.totalSteps) * 100 : 0}%`,
+                    background: "linear-gradient(90deg, #7cb87c, #5a9e5a)",
+                    borderRadius: "2px",
+                    transition: "width 0.4s ease",
+                  }}
+                />
+              </div>
+              <span style={{ fontSize: "0.55rem", color: "#8b7355", whiteSpace: "nowrap" }}>
+                {pipelineProgress.stepIndex}/{pipelineProgress.totalSteps}
+              </span>
+            </div>
+          )}
           <button
             onClick={() => setLocale(locale === "en" ? "zh" : "en")}
             style={{
@@ -1579,7 +1681,18 @@ export default function Home() {
 
         <div className="compact-item" style={{ background: analysisMode.isDemo ? "rgba(255,248,240,0.9)" : "rgba(240,248,244,0.9)" }}>
           <div className="compact-label">{analysisMode.isDemo ? t("status.demoMode") : t("header.status.live")}</div>
-          <div style={{ fontSize: "0.65rem", lineHeight: 1.5 }}>{statusNote || (analysisMode.isDemo ? t("demo.banner") : t("status.liveAnalysis"))}</div>
+          <div
+            style={{
+              fontSize: "0.65rem",
+              lineHeight: 1.5,
+              color: (statusNote && (statusNote.includes("失败") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "#c0392b" : undefined,
+              background: (statusNote && (statusNote.includes("失败") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "rgba(192, 57, 43, 0.08)" : undefined,
+              borderLeft: (statusNote && (statusNote.includes("失败") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "2px solid #c0392b" : undefined,
+              padding: (statusNote && (statusNote.includes("失败") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "2px 6px" : undefined,
+            }}
+          >
+            {statusNote || (analysisMode.isDemo ? t("demo.banner") : t("status.liveAnalysis"))}
+          </div>
         </div>
 
         {uncertaintyReport && !analysisMode.isDemo && (

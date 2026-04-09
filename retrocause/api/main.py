@@ -1,7 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
+import threading
+import json
+import queue
 
 from retrocause.app.demo_data import (
     PROVIDERS,
@@ -24,9 +28,35 @@ app.add_middleware(
 
 class AnalyzeRequest(BaseModel):
     query: str
-    model: str = "openrouter"  # provider key (e.g. "zhipu") or explicit model name
+    model: str = "openrouter"
     api_key: Optional[str] = None
-    explicit_model: Optional[str] = None  # user-selected model name (e.g. "glm-4-air")
+    explicit_model: Optional[str] = None
+
+
+class _TimeoutError(Exception):
+    pass
+
+
+def _run_with_timeout(fn, timeout_seconds: float, *args, **kwargs):
+    result_box: list = []
+    exc_box: list = []
+
+    def target():
+        try:
+            result_box.append(fn(*args, **kwargs))
+        except Exception as exc:
+            exc_box.append(exc)
+
+    t = threading.Thread(target=target, daemon=True)
+    t.start()
+    t.join(timeout=timeout_seconds)
+
+    if t.is_alive():
+        raise _TimeoutError(f"Operation timed out after {timeout_seconds}s")
+
+    if exc_box:
+        raise exc_box[0]
+    return result_box[0] if result_box else None
 
 
 class GraphNode(BaseModel):
@@ -532,7 +562,9 @@ async def analyze_query(request: AnalyzeRequest):
                     list(provider_cfg["models"].keys())[0] if provider_cfg else request.model
                 )
             try:
-                result = run_real_analysis(request.query, request.api_key, model_name, base_url)
+                result = _run_with_timeout(
+                    run_real_analysis, 120, request.query, request.api_key, model_name, base_url
+                )
             except Exception:
                 import traceback
 
@@ -608,7 +640,6 @@ async def analyze_query_v2(request: AnalyzeRequest):
         demo_topic: Optional[str] = None
         result: AnalysisResult | None = None
 
-        # ── Attempt real analysis when the caller supplies an API key ──
         if request.api_key:
             from retrocause.app.demo_data import run_real_analysis
 
@@ -622,7 +653,14 @@ async def analyze_query_v2(request: AnalyzeRequest):
                 )
             error_msg: str | None = None
             try:
-                result = run_real_analysis(request.query, request.api_key, model_name, base_url)
+                result = _run_with_timeout(
+                    run_real_analysis, 120, request.query, request.api_key, model_name, base_url
+                )
+            except _TimeoutError:
+                error_msg = (
+                    "Analysis timed out (120s limit). Try a simpler query or try again later."
+                )
+                result = None
             except Exception as exc:
                 import traceback
 
@@ -637,13 +675,11 @@ async def analyze_query_v2(request: AnalyzeRequest):
             if result is not None:
                 is_demo = False
 
-        # ── Fallback: topic-aware demo data ──
         if result is None:
             result = topic_aware_demo_result(request.query)
             is_demo = True
             demo_topic = detect_demo_topic(request.query) or "default"
 
-        # Stamp honesty fields on the dataclass itself
         result.is_demo = is_demo
         result.demo_topic = demo_topic
 
@@ -656,3 +692,101 @@ async def analyze_query_v2(request: AnalyzeRequest):
 
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/analyze/v2/stream")
+async def analyze_query_v2_stream(request: AnalyzeRequest):
+    def generate():
+        eq: queue.Queue[dict | None] = queue.Queue()
+
+        def on_progress(step_name: str, step_index: int, total: int, message: str):
+            eq.put(
+                {
+                    "type": "progress",
+                    "step": step_name,
+                    "step_index": step_index + 1,
+                    "total_steps": total,
+                    "message": message,
+                }
+            )
+
+        def worker():
+            try:
+                if not request.api_key:
+                    eq.put({"type": "error", "error": "No API key provided"})
+                    return
+
+                from retrocause.app.demo_data import run_real_analysis_with_progress
+
+                provider_cfg = PROVIDERS.get(request.model)
+                base_url = provider_cfg["base_url"] if provider_cfg else None
+                model_name = (
+                    request.explicit_model
+                    if request.explicit_model
+                    else (list(provider_cfg["models"].keys())[0] if provider_cfg else request.model)
+                )
+
+                result = None
+                error_msg = None
+                try:
+                    result = _run_with_timeout(
+                        run_real_analysis_with_progress,
+                        120,
+                        request.query,
+                        request.api_key,
+                        model_name,
+                        base_url,
+                        on_progress,
+                    )
+                except _TimeoutError:
+                    error_msg = "Analysis timed out (120s limit)"
+                except Exception as exc:
+                    import traceback
+
+                    traceback.print_exc()
+                    error_msg = f"{type(exc).__name__}: {exc}"
+
+                if result is not None and len(result.hypotheses) == 0:
+                    error_msg = f"LLM calls failed for {model_name} — empty result"
+                    result = None
+
+                if result is not None:
+                    result.is_demo = False
+                    resp = _result_to_v2(result, is_demo=False)
+                    eq.put({"type": "done", "is_demo": False, "data": resp.model_dump(mode="json")})
+                else:
+                    demo_result = topic_aware_demo_result(request.query)
+                    demo_topic = detect_demo_topic(request.query) or "default"
+                    demo_result.is_demo = True
+                    demo_result.demo_topic = demo_topic
+                    resp = _result_to_v2(demo_result, is_demo=True, demo_topic=demo_topic)
+                    eq.put(
+                        {
+                            "type": "done",
+                            "is_demo": True,
+                            "demo_topic": demo_topic,
+                            "error": error_msg,
+                            "data": resp.model_dump(mode="json"),
+                        }
+                    )
+
+            except Exception as exc:
+                eq.put({"type": "error", "error": f"{type(exc).__name__}: {exc}"})
+            finally:
+                eq.put(None)
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+
+        while True:
+            try:
+                item = eq.get(timeout=130)
+            except queue.Empty:
+                break
+            if item is None:
+                break
+            yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+            if item.get("type") in ("done", "error"):
+                break
+
+    return StreamingResponse(generate(), media_type="text/event-stream")

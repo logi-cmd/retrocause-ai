@@ -12,7 +12,7 @@ from retrocause.hypothesis import HypothesisGenerator
 from retrocause.debate import DebateOrchestrator
 from retrocause.formatter import ReportFormatter
 from retrocause.config import RetroCauseConfig
-from retrocause.pipeline import Pipeline, PipelineContext, PipelineStep
+from retrocause.pipeline import Pipeline, PipelineContext, PipelineStep, ProgressCallback
 from retrocause.anchoring import EvidenceAnchoringStep
 from retrocause.counterfactual import CounterfactualVerificationStep
 from retrocause.evaluation import EvaluationStep
@@ -144,7 +144,9 @@ class DebateRefinementStep(PipelineStep):
 
 
 class CausalRAGStep(PipelineStep):
-    """graph-guided 第二轮检索 — 基于图结构补充薄弱区域的证据"""
+    """graph-guided 第二轮检索 — 仅在证据覆盖不足时触发"""
+
+    COVERAGE_THRESHOLD = 0.5
 
     def __init__(
         self,
@@ -161,6 +163,22 @@ class CausalRAGStep(PipelineStep):
             return ctx
         if not ctx.variables or not ctx.edges:
             return ctx
+
+        covered_vars = sum(1 for v in ctx.variables if v.evidence_ids)
+        coverage = covered_vars / max(len(ctx.variables), 1)
+        if coverage >= self.COVERAGE_THRESHOLD:
+            logger.info(
+                "CausalRAGStep: 变量覆盖率 %.0f%% >= %.0f%%，跳过第二轮检索",
+                coverage * 100,
+                self.COVERAGE_THRESHOLD * 100,
+            )
+            return ctx
+
+        logger.info(
+            "CausalRAGStep: 变量覆盖率 %.0f%% < %.0f%%，启动定向补充检索",
+            coverage * 100,
+            self.COVERAGE_THRESHOLD * 100,
+        )
 
         self.collector.graph_guided_collect(
             query=ctx.query,
@@ -246,8 +264,8 @@ class RetroCauseEngine:
             hook_engine=hook_engine,
         )
 
-    def run(self) -> AnalysisResult:
-        ctx = PipelineContext(query=self.query, domain=self.parsed.domain)
+    def run(self, on_progress: ProgressCallback | None = None) -> AnalysisResult:
+        ctx = PipelineContext(query=self.query, domain=self.parsed.domain, on_progress=on_progress)
         ctx = self._pipeline.run(ctx)
         self.hypotheses = ctx.hypotheses
         self.variables = ctx.variables
@@ -282,10 +300,11 @@ def analyze(
     llm_client: LLMProvider | None = None,
     source_adapters: list[SourceAdapter] | None = None,
     config: RetroCauseConfig | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> AnalysisResult:
     return RetroCauseEngine(
         query, llm_client=llm_client, source_adapters=source_adapters, config=config
-    ).run()
+    ).run(on_progress=on_progress)
 
 
 def analyze_and_print(
@@ -293,6 +312,13 @@ def analyze_and_print(
     llm_client: LLMProvider | None = None,
     source_adapters: list[SourceAdapter] | None = None,
     config: RetroCauseConfig | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> str:
-    result = analyze(query, llm_client=llm_client, source_adapters=source_adapters, config=config)
+    result = analyze(
+        query,
+        llm_client=llm_client,
+        source_adapters=source_adapters,
+        config=config,
+        on_progress=on_progress,
+    )
     return ReportFormatter().format(result)

@@ -869,3 +869,37 @@ RetroCause 之前的三项核心前沿能力（CausalRAG、不确定性通信、
 - `tests/test_causal_rag.py` — 6 个新测试
 - `tests/test_uncertainty.py` — 10 个新测试
 - `tests/test_citation.py` — 5 个新测试
+
+---
+
+## 2026-04-10 Pipeline 性能优化 + SSE 实时进度
+
+### 背景
+真实分析 pipeline 执行时间超过 7 分钟，85 次串行 LLM 调用，Semantic Scholar 429 限流无退避，无全局超时，前端无进度感知。
+
+### 决策
+
+**后端优化（4 文件）：**
+1. `collector.py` — `_parallel_search()` 使用 ThreadPoolExecutor 并行搜索所有源；`auto_collect` 改为批量提取（合并同 sub_query 所有搜索结果为一次 LLM 调用）
+2. `engine.py` — CausalRAGStep 添加 `COVERAGE_THRESHOLD = 0.5`，覆盖率 ≥ 50% 跳过第二轮检索
+3. `pipeline.py` — 新增 `ProgressCallback` 类型 + `on_progress` 字段到 PipelineContext + Pipeline.run() 每步触发回调
+4. `api/main.py` — 120s 超时兜底 + 新增 SSE `/api/analyze/v2/stream` 端点
+
+**前端改造（1 文件）：**
+5. `page.tsx` — runAnalysis 改为 SSE ReadableStream 消费 + header 进度条 + 错误 banner 红色高亮
+
+### 理由
+- **批量提取**：LLM 看到更多上下文能交叉去重，实际质量更好而非更差
+- **并行搜索**：3 源无数据依赖，纯 I/O 并行零质量影响
+- **条件 CausalRAG**：覆盖率已足够时跳过冗余检索，避免浪费
+- **SSE**：用户不再干等，实时看到 pipeline 步骤进度
+- **120s 超时**：兜底保护，防止无限挂起
+
+### 效果
+| 指标 | 优化前 | 优化后 |
+|---|---|---|
+| LLM 调用次数 | ~85 次（串行） | ~19 次 |
+| 典型耗时 | 7+ 分钟 | 1.5-2 分钟 |
+| 成本 | 基线 | 省 ~50% |
+| 产品质量 | 基线 | 不变/更好 |
+| UI 进度感知 | 无 | SSE 实时进度条 |

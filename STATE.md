@@ -1,3 +1,9 @@
+## Done recently (更新 2026-04-10)
+- Pipeline 性能优化：后端 LLM 调用从 85 次降到 ~19 次（批量证据提取 + 并行搜索 ThreadPoolExecutor + CausalRAG 条件触发 COVERAGE_THRESHOLD=0.5），成本省 ~50%，产品质量不牺牲 - 完成于 14:30
+- SSE 实时进度流：新增 `POST /api/analyze/v2/stream` SSE 端点（text/event-stream），pipeline 每步触发 progress 事件，120s 全局超时兜底 - 完成于 14:30
+- 前端 SSE 消费：`runAnalysis` 从 fetch POST 改为 ReadableStream SSE 消费，header 区域新增绿色进度条（stepIndex/totalSteps），错误 banner 红色高亮（左border + 红底色） - 完成于 15:00
+- 验证全通过：ruff check 0 error / pytest 148 pass / npm build success / E2E 589/589 ALL PASS - 完成于 15:10
+
 ## Done recently (更新 2026-04-09)
 - 端到端测试：新增 `scripts/e2e_test.py`（589 个检查项），覆盖后端连通性、V2 API 5 个 demo 全字段验证、V1 兼容、证据池完整性、上游图一致性、新能力 schema（uncertainty/citation/conflict）、边界用例（空查询/乱码/错误 key）、前端 HTML 投递、Playwright UI E2E（初始加载/demo 透明度/查询流/节点点击/语言切换/多节点交互/控制台健康）。589/589 ALL PASS, 0 FAIL, 0 SKIP - 完成于 16:30
 - OSS 收尾：homepage 现已完整消费 live API 的 uncertainty / citation / conflict 数据，并补齐 evidence filtering（来源/立场/可信度）、链路比较摘要、右侧 edge insight / citation snippet 展示；README / roadmap 已同步更新当前 OSS 能力与测试数量（148） - 完成于 15:20

@@ -61,13 +61,14 @@ Already implemented:
 9. graph-guided retrieval (CausalRAG)
 10. structured uncertainty assessment
 11. evidence-board web UI (Next.js frontend)
+12. SSE real-time pipeline progress streaming (with batch evidence extraction + parallel search + conditional CausalRAG)
 
 Still evolving:
 
 - debate agents are still early
 - sensitivity analysis is being expanded
 - consumer-facing product polish is ongoing
-- real-time streaming updates from the pipeline to the browser UI
+- real-time streaming updates from the pipeline to the browser UI (SSE progress streaming + pipeline performance optimization: ~85 → ~19 LLM calls)
 
 ---
 
@@ -392,7 +393,7 @@ Current OSS runtime architecture (high level):
 | Layer | Current OSS implementation |
 |---|---|
 | launcher | `start.py` starts FastAPI (`:8000`) + Next.js (`:3005`) |
-| API contract | `retrocause/api/main.py` exposes `/api/analyze/v2`, `/api/providers`, demo/real metadata |
+| API contract | `retrocause/api/main.py` exposes `/api/analyze/v2`, `/api/analyze/v2/stream` (SSE), `/api/providers`, demo/real metadata |
 | inference runtime | `retrocause/engine.py` staged pipeline: evidence -> graph -> hypotheses -> anchoring -> counterfactual -> debate -> evaluation |
 | evidence sources | `retrocause/sources/*` adapters for DuckDuckGo, ArXiv, Semantic Scholar |
 | model routing | `retrocause/llm.py` + provider config in `retrocause/app/demo_data.py` |

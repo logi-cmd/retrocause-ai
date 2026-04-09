@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from retrocause.hooks import HookEngine
 
@@ -13,6 +13,9 @@ if TYPE_CHECKING:
     from retrocause.evaluation import PipelineEvaluation
 
 logger = logging.getLogger(__name__)
+
+# 进度回调签名: (step_name, step_index, total_steps, message) -> None
+ProgressCallback = Callable[[str, int, int, str], None]
 
 
 @dataclass
@@ -28,6 +31,7 @@ class PipelineContext:
     violations: list[dict] = field(default_factory=list)
     step_errors: list[dict] = field(default_factory=list)
     evaluation: PipelineEvaluation | None = None
+    on_progress: ProgressCallback | None = None
 
 
 class PipelineStep(ABC):
@@ -58,8 +62,14 @@ class Pipeline:
 
     def run(self, ctx: PipelineContext | None = None) -> PipelineContext:
         ctx = ctx or PipelineContext()
-        for step in self.steps:
+        total = len(self.steps)
+        for idx, step in enumerate(self.steps):
             logger.info("Pipeline step: %s", step.name)
+            if ctx.on_progress is not None:
+                try:
+                    ctx.on_progress(step.name, idx, total, f"Running {step.name}")
+                except Exception:
+                    pass
             try:
                 ctx = step.execute(ctx)
             except Exception as exc:
@@ -76,4 +86,9 @@ class Pipeline:
                         {"step": step.name, "rule": v.rule_name, "message": v.message}
                     )
 
+        if ctx.on_progress is not None:
+            try:
+                ctx.on_progress("complete", total, total, "Pipeline complete")
+            except Exception:
+                pass
         return ctx
