@@ -903,3 +903,48 @@ RetroCause 之前的三项核心前沿能力（CausalRAG、不确定性通信、
 | 成本 | 基线 | 省 ~50% |
 | 产品质量 | 基线 | 不变/更好 |
 | UI 进度感知 | 无 | SSE 实时进度条 |
+
+---
+
+## 2026-04-10 前端 Dev Server Hydration 修复
+
+### 背景
+Next.js 16.2.2 dev server 在 `127.0.0.1` 上 HMR WebSocket 握手失败（`ERR_INVALID_HTTP_RESPONSE`），导致 React 19 的 `debugChannel` 流永远不关闭 → `createRoot().render()` 不执行 → 整个客户端 hydration 卡死。SSR HTML 正常但 `useEffect` 不触发、便签不渲染。Production build 不受影响。
+
+上游确认：vercel/next.js Discussion #91770，影响 16.2.x 系列。
+
+### 决策
+1. `package.json` dev 脚本改为 `next dev --hostname localhost`（而非默认的 `0.0.0.0`）
+2. `next.config.ts` 添加 `devIndicators: false`
+
+### 理由
+- `localhost` 在现代浏览器和 Node.js 中有特殊处理（可能走 IPv6 loopback `::1`），WebSocket 升级正常工作
+- `127.0.0.1` 强制 IPv4，某些环境下 Next.js dev server 的 WS handler 不兼容
+- Production build 不依赖 WebSocket/HMR，所以完全不受影响
+- `--hostname localhost` 是最小改动，不需要降级 Next.js 版本或禁用 Turbopack
+
+---
+
+## 2026-04-10 真实分析 Pipeline 修复
+
+### 背景
+用户使用 OpenRouter + DeepSeek 模型测试时，pipeline 完成全部 9 步但返回空 hypothesis，触发 demo fallback（`is_demo=True`）。根因：LLM 返回的 `content` 字段有时为 `None`、有时被 markdown code fence 包裹、有时返回 JSON 数组而非对象——这些异常格式未被处理，导致 `json.loads()` 失败被静默捕获，下游步骤无数据可用。
+
+### 决策
+1. `llm.py` 新增 `_safe_parse_json()` 函数，5 层容错解析：直接解析 → markdown fence 提取 → 花括号提取 → 方括号提取 → 数组包装为对象
+2. `debate.py` 重写 DebateOrchestrator：从 6 个 DebateAgent 实例改为单次 `debate_hypothesis()` 调用（6N → N 次 LLM 调用）
+3. `engine.py` 在 EvidenceCollectionStep、GraphBuildingStep、HypothesisGenerationStep 添加 warning 日志
+4. `models.py` 添加 `UncertaintyType.MODEL` 枚举值
+5. SSE stream 超时从 120s 提高到 300s
+
+### 理由
+- LLM 输出格式不可控，必须做防御性解析
+- DebateOrchestrator 的 6 个 agent 各自调用 `debate_hypothesis()` 但只提取一个 role，其余丢弃——纯浪费 token
+- 300s 超时匹配实际 pipeline 耗时（实测 185.9s）
+- 最小改动原则：不改 pipeline 架构，只修复解析和超时
+
+### 验证
+- ruff check: 0 errors
+- pytest: 148/148 passed
+- 直接 Python 调用: `is_demo=False`, 1 hypothesis, 7 variables, 6 edges, 12 evidence, 185.9s
+- SSE endpoint: 新代码已加载验证（无效 key 返回正确的 "empty result" 消息）；真实 key 测试因 ArXiv/Semantic Scholar rate limiting 暂受阻

@@ -3,6 +3,8 @@
 - SSE 实时进度流：新增 `POST /api/analyze/v2/stream` SSE 端点（text/event-stream），pipeline 每步触发 progress 事件，120s 全局超时兜底 - 完成于 14:30
 - 前端 SSE 消费：`runAnalysis` 从 fetch POST 改为 ReadableStream SSE 消费，header 区域新增绿色进度条（stepIndex/totalSteps），错误 banner 红色高亮（左border + 红底色） - 完成于 15:00
 - 验证全通过：ruff check 0 error / pytest 148 pass / npm build success / E2E 589/589 ALL PASS - 完成于 15:10
+- 前端 dev server hydration 修复：Next.js 16.2.2 在 `127.0.0.1` 上 WebSocket HMR 握手失败导致 React hydration 卡死，改用 `--hostname localhost` 解决；`package.json` dev 脚本和 `next.config.ts` 已更新 - 完成于 17:30
+- 真实分析 pipeline 修复：LLM 返回空 hypothesis 导致 demo fallback。根因：content=None、markdown 包裹 JSON、JSON 数组等异常格式未被解析。修复：`_safe_parse_json()` 5 层容错解析；DebateOrchestrator 从 6N 优化到 N 次 LLM 调用；SSE 超时从 120s 提到 300s；添加 `UncertaintyType.MODEL` 枚举。直接 Python 调用验证通过（is_demo=False, 1 hypothesis, 7 variables, 6 edges, 12 evidence, 185.9s） - 完成于 03:30
 
 ## Done recently (更新 2026-04-09)
 - 端到端测试：新增 `scripts/e2e_test.py`（589 个检查项），覆盖后端连通性、V2 API 5 个 demo 全字段验证、V1 兼容、证据池完整性、上游图一致性、新能力 schema（uncertainty/citation/conflict）、边界用例（空查询/乱码/错误 key）、前端 HTML 投递、Playwright UI E2E（初始加载/demo 透明度/查询流/节点点击/语言切换/多节点交互/控制台健康）。589/589 ALL PASS, 0 FAIL, 0 SKIP - 完成于 16:30
