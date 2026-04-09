@@ -16,6 +16,7 @@ from retrocause.pipeline import Pipeline, PipelineContext, PipelineStep
 from retrocause.anchoring import EvidenceAnchoringStep
 from retrocause.counterfactual import CounterfactualVerificationStep
 from retrocause.evaluation import EvaluationStep
+from retrocause.uncertainty import UncertaintyAssessmentStep
 from retrocause.protocols import LLMProvider, SourceAdapter
 from retrocause.hooks import HookEngine
 from retrocause.rules import (
@@ -142,6 +143,38 @@ class DebateRefinementStep(PipelineStep):
         return ctx
 
 
+class CausalRAGStep(PipelineStep):
+    """graph-guided 第二轮检索 — 基于图结构补充薄弱区域的证据"""
+
+    def __init__(
+        self,
+        collector: EvidenceCollector,
+        llm_client: LLMProvider | None = None,
+        source_adapters: list[SourceAdapter] | None = None,
+    ):
+        self.collector = collector
+        self._llm_client = llm_client
+        self._source_adapters = source_adapters
+
+    def execute(self, ctx: PipelineContext) -> PipelineContext:
+        if self._llm_client is None or self._source_adapters is None:
+            return ctx
+        if not ctx.variables or not ctx.edges:
+            return ctx
+
+        self.collector.graph_guided_collect(
+            query=ctx.query,
+            domain=ctx.domain,
+            variables=ctx.variables,
+            edges=ctx.edges,
+            llm_client=self._llm_client,
+            source_adapters=self._source_adapters,
+            max_results_per_source=3,
+        )
+        ctx.total_evidence_count = len(self.collector.get_evidence())
+        return ctx
+
+
 class RetroCauseEngine:
     """向后兼容的引擎封装"""
 
@@ -195,6 +228,11 @@ class RetroCauseEngine:
                 GraphBuildingStep(self.graph, self.collector, self._llm_client),
                 HypothesisGenerationStep(self.graph, HypothesisGenerator()),
                 EvidenceAnchoringStep(self.collector),
+                CausalRAGStep(
+                    self.collector,
+                    self._llm_client,
+                    self._source_adapters,
+                ),
                 CounterfactualVerificationStep(self.graph, self._config),
                 DebateRefinementStep(
                     DebateOrchestrator(
@@ -202,6 +240,7 @@ class RetroCauseEngine:
                         llm_client=self._llm_client,
                     )
                 ),
+                UncertaintyAssessmentStep(self.collector),
                 EvaluationStep(),
             ],
             hook_engine=hook_engine,
@@ -224,8 +263,9 @@ class RetroCauseEngine:
             hypotheses=ctx.hypotheses,
             total_evidence_count=len(self.collector.get_evidence()),
             evaluation=ctx.evaluation,
+            uncertainty_report=ctx.extra.get("uncertainty_report"),
         )
-        result.total_uncertainty = float(len(ctx.violations) + len(ctx.step_errors))
+        result.total_uncertainty = ctx.total_uncertainty
         if ctx.violations:
             result.recommended_next_steps.extend(
                 [f"Review validation warning: {item['message']}" for item in ctx.violations]

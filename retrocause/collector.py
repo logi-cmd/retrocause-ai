@@ -1,10 +1,10 @@
-"""证据收集协调器 — 手动 + LLM 自动收集"""
+"""证据收集协调器 — 手动 + LLM 自动收集 + graph-guided retrieval"""
 
 from __future__ import annotations
 
 import logging
 
-from retrocause.models import Evidence, EvidenceType
+from retrocause.models import CausalEdge, CausalVariable, Evidence, EvidenceType
 
 logger = logging.getLogger(__name__)
 
@@ -127,4 +127,122 @@ class EvidenceCollector:
                             new_evidence.append(ev)
 
         logger.info("auto_collect: 新增 %d 条证据（去重后）", len(new_evidence))
+        return new_evidence
+
+    def graph_guided_collect(
+        self,
+        query: str,
+        domain: str,
+        variables: list[CausalVariable],
+        edges: list[CausalEdge],
+        llm_client: object | None = None,
+        source_adapters: list[object] | None = None,
+        max_sub_queries: int | None = None,
+        max_results_per_source: int = 5,
+    ) -> list[Evidence]:
+        """
+        基于因果图结构的第二轮检索 — 针对薄弱边和低覆盖变量定向补充证据。
+
+        生成 graph-aware 子查询：
+        - 无证据支撑的边 → "A 如何因果影响 B" 的定向检索
+        - 无关联证据的变量 → 针对变量名的补充检索
+        """
+        if llm_client is None or source_adapters is None:
+            logger.info("graph_guided_collect: 缺少 llm_client 或 source_adapters，跳过")
+            return []
+
+        sub_queries = self._build_graph_aware_subqueries(query, variables, edges)
+        if max_sub_queries is not None:
+            sub_queries = sub_queries[:max_sub_queries]
+
+        if not sub_queries:
+            logger.info("graph_guided_collect: 无需补充检索（图已充分覆盖）")
+            return []
+
+        logger.info("graph_guided_collect: 生成 %d 个定向子查询", len(sub_queries))
+        return self._execute_subqueries(
+            query, sub_queries, llm_client, source_adapters, max_results_per_source
+        )
+
+    def search_by_causal_path(
+        self,
+        query: str,
+        path_variables: list[str],
+        llm_client: object | None = None,
+        source_adapters: list[object] | None = None,
+        max_results_per_source: int = 5,
+    ) -> list[Evidence]:
+        """沿因果路径检索 — 针对 A→B→C 链式结构搜索跨跳证据。"""
+        if llm_client is None or source_adapters is None or len(path_variables) < 2:
+            return []
+
+        path_str = " → ".join(path_variables)
+        chain_query = f"{query} causal chain {path_str} evidence mechanism"
+        sub_queries = [chain_query]
+
+        for i in range(len(path_variables) - 1):
+            src, tgt = path_variables[i], path_variables[i + 1]
+            sub_queries.append(f"{query} {src} causes {tgt} evidence")
+
+        logger.info("search_by_causal_path: %d 个链式子查询 (%s)", len(sub_queries), path_str)
+        return self._execute_subqueries(
+            query, sub_queries, llm_client, source_adapters, max_results_per_source
+        )
+
+    def _build_graph_aware_subqueries(
+        self,
+        query: str,
+        variables: list[CausalVariable],
+        edges: list[CausalEdge],
+    ) -> list[str]:
+        sub_queries: list[str] = []
+
+        for edge in edges:
+            has_support = bool(edge.supporting_evidence_ids)
+            if not has_support:
+                src_label = edge.source.replace("_", " ")
+                tgt_label = edge.target.replace("_", " ")
+                sub_queries.append(f"{query} how does {src_label} causally affect {tgt_label}")
+
+        for var in variables:
+            if not var.evidence_ids:
+                var_label = var.name.replace("_", " ")
+                sub_queries.append(f"{query} {var_label} evidence {var.description}")
+
+        return sub_queries
+
+    def _execute_subqueries(
+        self,
+        original_query: str,
+        sub_queries: list[str],
+        llm_client: object,
+        source_adapters: list[object],
+        max_results_per_source: int,
+    ) -> list[Evidence]:
+        new_evidence: list[Evidence] = []
+        for sub_q in sub_queries:
+            for adapter in source_adapters:
+                try:
+                    search_results = adapter.search(sub_q, max_results=max_results_per_source)
+                except Exception:
+                    logger.warning("搜索失败: %s (query=%s)", adapter.name, sub_q)
+                    continue
+
+                for result in search_results:
+                    raw_text = f"Title: {result.title}\n\n{result.content}"
+                    extracted = llm_client.extract_evidence(
+                        original_query, raw_text, result.source_type.value
+                    )
+                    for ext in extracted:
+                        ev = self.add_evidence(
+                            content=ext.content,
+                            source_type=result.source_type,
+                            source_url=result.url,
+                            linked_variables=ext.variables,
+                            reliability=ext.confidence,
+                        )
+                        if ev is not None:
+                            new_evidence.append(ev)
+
+        logger.info("_execute_subqueries: 新增 %d 条证据（去重后）", len(new_evidence))
         return new_evidence

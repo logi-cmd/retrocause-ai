@@ -81,6 +81,31 @@ class UpstreamNodeV2(BaseModel):
     depth: int  # distance from the root of the chain
 
 
+class CitationSpanV2(BaseModel):
+    evidence_id: str
+    start_char: int
+    end_char: int
+    quoted_text: str
+    relevance_score: float = 0.5
+
+
+class UncertaintyAssessmentV2(BaseModel):
+    uncertainty_types: List[str] = []
+    overall_score: float = 0.0
+    data_uncertainty: float = 0.0
+    model_uncertainty: float = 0.0
+    explanation: str = ""
+
+
+class UncertaintyReportV2(BaseModel):
+    per_node: dict = {}
+    per_edge: dict = {}
+    evidence_conflicts: dict = {}
+    overall_uncertainty: float = 0.0
+    dominant_uncertainty_type: Optional[str] = None
+    summary: str = ""
+
+
 class GraphNodeV2(BaseModel):
     """
     Chain-aware node with full provenance.
@@ -96,6 +121,7 @@ class GraphNodeV2(BaseModel):
     upstream_ids: List[str]  # ids of direct upstream (parent) nodes
     supporting_evidence_ids: List[str]
     refuting_evidence_ids: List[str]
+    uncertainty: Optional[UncertaintyAssessmentV2] = None
 
 
 class GraphEdgeV2(BaseModel):
@@ -111,6 +137,8 @@ class GraphEdgeV2(BaseModel):
     type: str  # e.g. "causes", "prevents", "mediates"
     supporting_evidence_ids: List[str]
     refuting_evidence_ids: List[str]
+    citation_spans: List[CitationSpanV2] = []
+    evidence_conflict: str = "none"
 
 
 class CounterfactualItemV2(BaseModel):
@@ -190,6 +218,8 @@ class AnalyzeResponseV2(BaseModel):
     upstream_map: UpstreamMapV2
     # Pipeline quality evaluation (absent for demo results)
     evaluation: Optional[PipelineEvaluationV2] = None
+    # Uncertainty report
+    uncertainty_report: Optional[UncertaintyReportV2] = None
     # Error message when real analysis fails (non-empty = something went wrong)
     error: Optional[str] = None
 
@@ -305,6 +335,16 @@ def _result_to_v2(
                     ref_ev.update(edge.refuting_evidence_ids)
             supp_ev.update(var.evidence_ids)
 
+            node_uncertainty = None
+            if var.uncertainty:
+                node_uncertainty = UncertaintyAssessmentV2(
+                    uncertainty_types=[t.value for t in var.uncertainty.uncertainty_types],
+                    overall_score=var.uncertainty.overall_score,
+                    data_uncertainty=var.uncertainty.data_uncertainty,
+                    model_uncertainty=var.uncertainty.model_uncertainty,
+                    explanation=var.uncertainty.explanation,
+                )
+
             nodes_v2.append(
                 GraphNodeV2(
                     id=var.name,
@@ -316,11 +356,22 @@ def _result_to_v2(
                     upstream_ids=ups,
                     supporting_evidence_ids=sorted(supp_ev),
                     refuting_evidence_ids=sorted(ref_ev),
+                    uncertainty=node_uncertainty,
                 )
             )
 
         edges_v2: List[GraphEdgeV2] = []
         for edge in hyp.edges:
+            spans_v2 = [
+                CitationSpanV2(
+                    evidence_id=cs.evidence_id,
+                    start_char=cs.start_char,
+                    end_char=cs.end_char,
+                    quoted_text=cs.quoted_text,
+                    relevance_score=cs.relevance_score,
+                )
+                for cs in edge.citation_spans
+            ]
             edges_v2.append(
                 GraphEdgeV2(
                     id=f"{edge.source}_{edge.target}",
@@ -330,6 +381,8 @@ def _result_to_v2(
                     type="causes",
                     supporting_evidence_ids=edge.supporting_evidence_ids,
                     refuting_evidence_ids=edge.refuting_evidence_ids,
+                    citation_spans=spans_v2,
+                    evidence_conflict=edge.evidence_conflict.value,
                 )
             )
 
@@ -397,6 +450,38 @@ def _result_to_v2(
                     refuting_evidence_ids=n.refuting_evidence_ids,
                 )
 
+    uncertainty_v2: Optional[UncertaintyReportV2] = None
+    if result.uncertainty_report:
+        ur = result.uncertainty_report
+        per_node_v2 = {}
+        for k, v in ur.per_node.items():
+            per_node_v2[k] = UncertaintyAssessmentV2(
+                uncertainty_types=[t.value for t in v.uncertainty_types],
+                overall_score=v.overall_score,
+                data_uncertainty=v.data_uncertainty,
+                model_uncertainty=v.model_uncertainty,
+                explanation=v.explanation,
+            )
+        per_edge_v2 = {}
+        for k, v in ur.per_edge.items():
+            per_edge_v2[k] = UncertaintyAssessmentV2(
+                uncertainty_types=[t.value for t in v.uncertainty_types],
+                overall_score=v.overall_score,
+                data_uncertainty=v.data_uncertainty,
+                model_uncertainty=v.model_uncertainty,
+                explanation=v.explanation,
+            )
+        uncertainty_v2 = UncertaintyReportV2(
+            per_node=per_node_v2,
+            per_edge=per_edge_v2,
+            evidence_conflicts={k: v.value for k, v in ur.evidence_conflicts.items()},
+            overall_uncertainty=ur.overall_uncertainty,
+            dominant_uncertainty_type=ur.dominant_uncertainty_type.value
+            if ur.dominant_uncertainty_type
+            else None,
+            summary=ur.summary,
+        )
+
     return AnalyzeResponseV2(
         query=result.query,
         is_demo=is_demo,
@@ -406,6 +491,7 @@ def _result_to_v2(
         evidences=_collect_evidence_bindings(chains_v2),
         upstream_map=_build_upstream_map(list(all_nodes_v2.values())),
         evaluation=evaluation_v2,
+        uncertainty_report=uncertainty_v2,
     )
 
 

@@ -836,3 +836,35 @@ OSS 发布前需要验证应用端到端可用性。手动 smoke test（`docs/ma
 - `docs/roadmap-and-limitations.md` 增加了 OSS 可做 / Not planned for OSS / architecture heuristic
 - `docs/oss-pro-positioning.md` 增加了 frontier placement
 - `docs-private/retrocause-pro-rust-architecture.md` 增加了共享产品契约、Rust rewrite / Python bridge 边界、迁移映射
+
+---
+
+## 2026-04-09 CausalRAG / Uncertainty / Citation Grounding 实现
+
+### 背景
+RetroCause 之前的三项核心前沿能力（CausalRAG、不确定性通信、span-level citation grounding）仅在文档中规划，未落地到代码。证据收集是平面子查询检索，不确定性评估是 heuristic 计数，证据锚定仅通过 variable name overlap 绑定 evidence id。
+
+### 决策
+1. **CausalRAG**: 在 `collector.py` 新增 `graph_guided_collect` 和 `search_by_causal_path` 方法，基于因果图结构（薄弱边、低覆盖变量）生成定向子查询，补充第二轮检索
+2. **Uncertainty Modeling**: 新增 `uncertainty.py` 模块，实现 per-node / per-edge 的结构化不确定性评估（epistemic vs data vs thin evidence vs conflicting vs low-confidence reasoning），生成 `UncertaintyReport` 汇总
+3. **Citation Grounding**: 升级 `anchoring.py` 的 `ground_citation_spans`，从证据文本中定位与因果断言相关的句子级片段（CitationSpan），支持 start_char / end_char / quoted_text
+4. **Pipeline 整合**: 在 `engine.py` 的 pipeline 中新增 `CausalRAGStep`（在 anchoring 之后、counterfactual 之前）和 `UncertaintyAssessmentStep`（在 debate 之后、evaluation 之前）
+5. **API 扩展**: V2 schema 新增 `CitationSpanV2`、`UncertaintyAssessmentV2`、`UncertaintyReportV2`、edge 上 `evidence_conflict` 字段
+
+### 理由
+- 这三项是 RetroCause 与直接用 ChatGPT 的核心差异点
+- CausalRAG 使检索不再是平面的，而是因果图结构感知的
+- 不确定性从 heuristic 计数升级为结构化分类，使分析结果更可检查
+- Citation grounding 从 id-level 升级为 span-level，让用户能看到证据中的具体支撑片段
+- 所有改动向后兼容：新增字段有默认值，现有 pipeline 步骤不变
+
+### 改动文件
+- `retrocause/models.py` — 新增 UncertaintyType, EvidenceConflictType, CitationSpan, UncertaintyAssessment, UncertaintyReport
+- `retrocause/collector.py` — 新增 graph_guided_collect, search_by_causal_path, _build_graph_aware_subqueries, _execute_subqueries
+- `retrocause/uncertainty.py` — 新模块（assess_variable_uncertainty, assess_edge_uncertainty, detect_evidence_conflict, build_uncertainty_report, UncertaintyAssessmentStep）
+- `retrocause/anchoring.py` — 新增 ground_citation_spans, _extract_relevant_span, _compute_span_relevance；升级 EvidenceAnchoringStep
+- `retrocause/engine.py` — 新增 CausalRAGStep，pipeline 中插入 CausalRAGStep + UncertaintyAssessmentStep
+- `retrocause/api/main.py` — V2 schema 扩展（CitationSpanV2, UncertaintyAssessmentV2, UncertaintyReportV2, edge.evidence_conflict）
+- `tests/test_causal_rag.py` — 6 个新测试
+- `tests/test_uncertainty.py` — 10 个新测试
+- `tests/test_citation.py` — 5 个新测试

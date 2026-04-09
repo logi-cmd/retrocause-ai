@@ -27,6 +27,47 @@ class HypothesisStatus(str, Enum):
     COLLAPSED = "collapsed"
 
 
+class UncertaintyType(str, Enum):
+    """不确定性来源分类"""
+
+    EPISTEMIC = "epistemic"  # 知识/模型不确定性
+    DATA = "data"  # 数据稀疏或冲突
+    THIN_EVIDENCE = "thin_evidence"  # 证据薄弱
+    CONFLICTING_EVIDENCE = "conflicting_evidence"  # 证据互相矛盾
+    LOW_CONFIDENCE_REASONING = "low_confidence_reasoning"  # 推理置信度低
+
+
+class EvidenceConflictType(str, Enum):
+    """证据冲突分类"""
+
+    NONE = "none"  # 无冲突
+    PARTIAL = "partial"  # 部分冲突
+    DIRECT = "direct"  # 直接矛盾
+    TEMPORAL = "temporal"  # 时间线冲突
+
+
+@dataclass
+class CitationSpan:
+    """证据中的引用跨度 — 标记证据中与特定因果断言相关的片段"""
+
+    evidence_id: str
+    start_char: int  # 证据文本中的起始字符位置（近似）
+    end_char: int  # 证据文本中的结束字符位置（近似）
+    quoted_text: str  # 被引用的原文片段
+    relevance_score: float = 0.5  # 该片段与因果断言的相关度 0-1
+
+
+@dataclass
+class UncertaintyAssessment:
+    """单个节点或边的不确定性评估"""
+
+    uncertainty_types: list[UncertaintyType] = field(default_factory=list)
+    overall_score: float = 0.0  # 0 = 完全确定, 1 = 完全不确定
+    data_uncertainty: float = 0.0  # 数据层面的不确定性
+    model_uncertainty: float = 0.0  # 模型/知识层面的不确定性
+    explanation: str = ""  # 不确定性的自然语言解释
+
+
 @dataclass
 class Evidence:
     id: str
@@ -46,6 +87,7 @@ class CausalVariable:
     evidence_ids: list[str] = field(default_factory=list)
     posterior_support: float = 0.5
     uncertainty_contribution: float = 0.0
+    uncertainty: Optional[UncertaintyAssessment] = None
 
 
 @dataclass
@@ -56,6 +98,9 @@ class CausalEdge:
     confidence_interval: tuple[float, float] = (0.0, 1.0)
     supporting_evidence_ids: list[str] = field(default_factory=list)
     refuting_evidence_ids: list[str] = field(default_factory=list)
+    citation_spans: list[CitationSpan] = field(default_factory=list)
+    uncertainty: Optional[UncertaintyAssessment] = None
+    evidence_conflict: EvidenceConflictType = EvidenceConflictType.NONE
 
 
 @dataclass
@@ -118,6 +163,18 @@ class SensitivityPoint:
 
 
 @dataclass
+class UncertaintyReport:
+    """全 pipeline 不确定性汇总"""
+
+    per_node: dict[str, UncertaintyAssessment] = field(default_factory=dict)
+    per_edge: dict[str, UncertaintyAssessment] = field(default_factory=dict)
+    evidence_conflicts: dict[str, EvidenceConflictType] = field(default_factory=dict)
+    overall_uncertainty: float = 0.0
+    dominant_uncertainty_type: Optional[UncertaintyType] = None
+    summary: str = ""
+
+
+@dataclass
 class AnalysisResult:
     query: str
     domain: str
@@ -130,3 +187,4 @@ class AnalysisResult:
     is_demo: bool = False
     demo_topic: Optional[str] = None
     evaluation: PipelineEvaluation | None = None
+    uncertainty_report: Optional[UncertaintyReport] = None

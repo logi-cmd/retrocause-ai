@@ -178,9 +178,13 @@ Question
   → evidence collection from multiple sources
   → causal graph construction
   → competing hypothesis generation
-  → evidence anchoring
+  → evidence anchoring (span-level citation grounding)
+  → graph-guided retrieval (CausalRAG) — targeted re-search for thin coverage areas
   → counterfactual verification
   → factor intervention / impact comparison
+  → debate refinement (6-role)
+  → uncertainty assessment (per-node / per-edge structured uncertainty)
+  → pipeline evaluation
   → multi-hop causal tracing
   → interactive explanation output (browser UI or CLI)
 ```
@@ -318,10 +322,13 @@ Only for real analysis.
 - evidence collection orchestration
 - causal graph construction
 - hypothesis generation
-- evidence anchoring
+- evidence anchoring with span-level citation grounding
+- graph-guided retrieval (CausalRAG)
 - counterfactual verification
 - factor impact analysis MVP
 - sensitivity profile MVP
+- structured uncertainty assessment (per-node / per-edge)
+- evidence conflict detection
 - interactive visualization
 - multi-hop causal tracing (API v2)
 - evidence-board web UI (Next.js frontend)
