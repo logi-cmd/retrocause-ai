@@ -55,7 +55,10 @@ class EvidenceCollectionStep(PipelineStep):
             max_sub_queries=self._config.max_sub_queries,
             max_results_per_source=self._config.max_results_per_source,
         )
-        ctx.total_evidence_count = len(self.collector.get_evidence())
+        evidence = self.collector.get_evidence()
+        ctx.total_evidence_count = len(evidence)
+        if not evidence:
+            logger.warning("EvidenceCollectionStep: 证据收集结果为空")
         return ctx
 
 
@@ -74,19 +77,23 @@ class GraphBuildingStep(PipelineStep):
 
     def execute(self, ctx: PipelineContext) -> PipelineContext:
         if self._llm_client is None:
+            logger.warning("GraphBuildingStep: 无 LLM 客户端，跳过")
             return ctx
 
         if not hasattr(self._llm_client, "build_causal_graph"):
+            logger.warning("GraphBuildingStep: LLM 客户端无 build_causal_graph 方法")
             return ctx
 
         evidence = self.collector.get_evidence()
         if not evidence:
+            logger.warning("GraphBuildingStep: 无证据，跳过因果图构建")
             return ctx
 
         evidence_texts = [ev.content for ev in evidence]
         result = self._llm_client.build_causal_graph(ctx.query, evidence_texts, ctx.domain)
 
         if not result:
+            logger.warning("GraphBuildingStep: build_causal_graph 返回空结果")
             return ctx
 
         for var_data in result.get("variables", []):
@@ -107,6 +114,12 @@ class GraphBuildingStep(PipelineStep):
             ctx.edges.append(edge)
 
         ctx.extra["result_variable"] = result.get("result_variable", "")
+        logger.info(
+            "GraphBuildingStep: 构建 %d 变量, %d 边, result=%s",
+            len(ctx.variables),
+            len(ctx.edges),
+            ctx.extra["result_variable"],
+        )
 
         return ctx
 
@@ -121,6 +134,11 @@ class HypothesisGenerationStep(PipelineStep):
     def execute(self, ctx: PipelineContext) -> PipelineContext:
         result_node = ctx.extra.get("result_variable", "")
         if not result_node or not ctx.variables:
+            logger.warning(
+                "HypothesisGenerationStep: 跳过 (result_node=%s, variables=%d)",
+                result_node or "(empty)",
+                len(ctx.variables),
+            )
             return ctx
         ctx.hypotheses = self.gen.generate_from_graph(
             self.graph,
@@ -128,6 +146,7 @@ class HypothesisGenerationStep(PipelineStep):
             ctx.variables,
             ctx.edges,
         )
+        logger.info("HypothesisGenerationStep: 生成 %d 条假说链", len(ctx.hypotheses))
         return ctx
 
 

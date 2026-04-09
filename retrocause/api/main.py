@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import threading
 import json
+import logging
 import queue
 
 from retrocause.app.demo_data import (
@@ -13,6 +14,8 @@ from retrocause.app.demo_data import (
     topic_aware_demo_result,
 )
 from retrocause.models import AnalysisResult
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="RetroCause API", description="Backend API for RetroCause Engine")
 
@@ -731,7 +734,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                 try:
                     result = _run_with_timeout(
                         run_real_analysis_with_progress,
-                        120,
+                        300,
                         request.query,
                         request.api_key,
                         model_name,
@@ -739,11 +742,10 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                         on_progress,
                     )
                 except _TimeoutError:
-                    error_msg = "Analysis timed out (120s limit)"
+                    error_msg = "Analysis timed out (300s). Try a simpler query or try again later."
+                    logger.warning("SSE stream analysis timed out after 300s")
                 except Exception as exc:
-                    import traceback
-
-                    traceback.print_exc()
+                    logger.error(f"SSE stream analysis error: {type(exc).__name__}: {exc}")
                     error_msg = f"{type(exc).__name__}: {exc}"
 
                 if result is not None and len(result.hypotheses) == 0:
@@ -780,7 +782,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
 
         while True:
             try:
-                item = eq.get(timeout=130)
+                item = eq.get(timeout=310)
             except queue.Empty:
                 break
             if item is None:

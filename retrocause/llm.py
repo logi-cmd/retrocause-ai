@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -33,6 +34,69 @@ class ExtractedEvidence:
     relevance: float
     variables: list[str] = field(default_factory=list)
     confidence: float = 0.5
+
+
+def _safe_parse_json(content: str | None) -> dict | None:
+    """安全解析 LLM 返回的 JSON。
+
+    处理以下常见问题：
+    - content 为 None（部分 provider 在特殊情况下返回 null）
+    - Markdown 包裹的 JSON（```json ... ```）
+    - 前后有多余空白或非 JSON 文本
+    """
+    if content is None:
+        logger.warning("_safe_parse_json: LLM 返回 content=None")
+        return None
+
+    text = content.strip()
+    if not text:
+        logger.warning("_safe_parse_json: LLM 返回空 content")
+        return None
+
+    # 尝试直接解析
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+        if isinstance(parsed, list):
+            logger.warning("_safe_parse_json: LLM 返回了 JSON 数组而非对象，尝试包装")
+            return {"items": parsed}
+        return None
+    except json.JSONDecodeError:
+        pass
+
+    # 尝试提取 Markdown 代码块中的 JSON
+    fence_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+    if fence_match:
+        try:
+            parsed = json.loads(fence_match.group(1).strip())
+            if isinstance(parsed, dict):
+                return parsed
+            if isinstance(parsed, list):
+                return {"items": parsed}
+        except json.JSONDecodeError:
+            pass
+
+    brace_match = re.search(r"\{.*\}", text, re.DOTALL)
+    if brace_match:
+        try:
+            parsed = json.loads(brace_match.group(0))
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+    bracket_match = re.search(r"\[.*\]", text, re.DOTALL)
+    if bracket_match:
+        try:
+            parsed = json.loads(bracket_match.group(0))
+            if isinstance(parsed, list):
+                return {"items": parsed}
+        except json.JSONDecodeError:
+            pass
+
+    logger.error("_safe_parse_json: 无法解析 LLM 响应为 JSON (前200字符): %s", text[:200])
+    return None
 
 
 def _call_with_retry(fn, *args, max_retries=_DEFAULT_MAX_RETRIES, **kwargs):
@@ -158,12 +222,17 @@ class LLMClient:
                     self.client.chat.completions.create,
                     **kwargs,
                 )
-            data = json.loads(response.choices[0].message.content)
+            raw_content = response.choices[0].message.content
+            data = _safe_parse_json(raw_content)
+            if data is None:
+                logger.error("decompose_query: LLM 响应无法解析为 JSON")
+                return []
             queries = data.get("queries", [])
             if not isinstance(queries, list):
                 return []
             return [str(q) for q in queries if isinstance(q, str)]
-        except openai.OpenAIError:
+        except openai.OpenAIError as exc:
+            logger.error("decompose_query: OpenAI 错误 — %s", exc)
             return []
 
     # ------------------------------------------------------------------
@@ -227,7 +296,11 @@ class LLMClient:
                     self.client.chat.completions.create,
                     **kwargs,
                 )
-            data = json.loads(response.choices[0].message.content)
+            raw_content = response.choices[0].message.content
+            data = _safe_parse_json(raw_content)
+            if data is None:
+                logger.error("extract_evidence: LLM 响应无法解析为 JSON")
+                return []
             items = data.get("evidence", [])
             if not isinstance(items, list):
                 return []
@@ -254,7 +327,8 @@ class LLMClient:
                     )
                 )
             return results
-        except openai.OpenAIError:
+        except openai.OpenAIError as exc:
+            logger.error("extract_evidence: OpenAI 错误 — %s", exc)
             return []
 
     # ------------------------------------------------------------------
@@ -309,10 +383,15 @@ class LLMClient:
                     self.client.chat.completions.create,
                     **kwargs,
                 )
-            data = json.loads(response.choices[0].message.content)
+            raw_content = response.choices[0].message.content
+            data = _safe_parse_json(raw_content)
+            if data is None:
+                logger.warning("score_relevance: LLM 响应无法解析为 JSON, 返回默认分数")
+                return 0.5
             score = float(data.get("score", 0.5))
             return max(0.0, min(1.0, score))
-        except openai.OpenAIError:
+        except openai.OpenAIError as exc:
+            logger.error("score_relevance: OpenAI 错误 — %s", exc)
             return 0.5
 
     # ------------------------------------------------------------------
@@ -374,11 +453,17 @@ class LLMClient:
                     self.client.chat.completions.create,
                     **kwargs,
                 )
-            data = json.loads(response.choices[0].message.content)
+            raw_content = response.choices[0].message.content
+            data = _safe_parse_json(raw_content)
+            if data is None:
+                logger.error("build_causal_graph: LLM 响应无法解析为 JSON")
+                return {}
             if not isinstance(data, dict):
+                logger.error("build_causal_graph: LLM 响应不是 JSON 对象")
                 return {}
             return data
-        except (openai.OpenAIError, json.JSONDecodeError):
+        except (openai.OpenAIError, json.JSONDecodeError) as exc:
+            logger.error("build_causal_graph: 错误 — %s", exc)
             return {}
 
     def debate_hypothesis(self, hypothesis: HypothesisChain, context: str) -> dict:
@@ -424,9 +509,15 @@ class LLMClient:
                     self.client.chat.completions.create,
                     **kwargs,
                 )
-            data = json.loads(response.choices[0].message.content)
+            raw_content = response.choices[0].message.content
+            data = _safe_parse_json(raw_content)
+            if data is None:
+                logger.error("debate_hypothesis: LLM 响应无法解析为 JSON")
+                return {}
             if not isinstance(data, dict):
+                logger.error("debate_hypothesis: LLM 响应不是 JSON 对象")
                 return {}
             return data
-        except (openai.OpenAIError, json.JSONDecodeError):
+        except (openai.OpenAIError, json.JSONDecodeError) as exc:
+            logger.error("debate_hypothesis: 错误 — %s", exc)
             return {}

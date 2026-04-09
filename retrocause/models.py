@@ -30,11 +30,12 @@ class HypothesisStatus(str, Enum):
 class UncertaintyType(str, Enum):
     """不确定性来源分类"""
 
-    EPISTEMIC = "epistemic"  # 知识/模型不确定性
-    DATA = "data"  # 数据稀疏或冲突
-    THIN_EVIDENCE = "thin_evidence"  # 证据薄弱
-    CONFLICTING_EVIDENCE = "conflicting_evidence"  # 证据互相矛盾
-    LOW_CONFIDENCE_REASONING = "low_confidence_reasoning"  # 推理置信度低
+    EPISTEMIC = "epistemic"
+    DATA = "data"
+    MODEL = "model"
+    THIN_EVIDENCE = "thin_evidence"
+    CONFLICTING_EVIDENCE = "conflicting_evidence"
+    LOW_CONFIDENCE_REASONING = "low_confidence_reasoning"
 
 
 class EvidenceConflictType(str, Enum):
