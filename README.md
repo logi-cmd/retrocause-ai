@@ -440,6 +440,7 @@ Current local validation includes:
 - real data sources (ArXiv, Semantic Scholar, DuckDuckGo) confirmed live
 - API smoke test (`scripts/smoke_test.py`): 38/38 PASS — backend root, V2 API (5 demo topics), V1 compat, edge variable integrity, frontend HTML
 - UI smoke test (`scripts/ui_smoke_test.py`): 21/21 PASS — Playwright/Chromium headless tests covering initial load, demo transparency, query flow, node click/multi-hop, language toggle
+- end-to-end test (`scripts/e2e_test.py`): 589/589 PASS — full-stack E2E covering backend connectivity, V2 API (all 5 demos with field-level validation), V1 backward compat, evidence pool integrity, upstream map consistency, new capability schemas (uncertainty / citation / conflict), edge cases (empty query / single char / nonsense / bad key), frontend HTML delivery, and Playwright UI E2E (load / demo transparency / query flow / node interaction / language toggle / multi-node / console health)
 
 ---
 

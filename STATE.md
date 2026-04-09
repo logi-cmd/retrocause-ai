@@ -1,4 +1,5 @@
 ## Done recently (更新 2026-04-09)
+- 端到端测试：新增 `scripts/e2e_test.py`（589 个检查项），覆盖后端连通性、V2 API 5 个 demo 全字段验证、V1 兼容、证据池完整性、上游图一致性、新能力 schema（uncertainty/citation/conflict）、边界用例（空查询/乱码/错误 key）、前端 HTML 投递、Playwright UI E2E（初始加载/demo 透明度/查询流/节点点击/语言切换/多节点交互/控制台健康）。589/589 ALL PASS, 0 FAIL, 0 SKIP - 完成于 16:30
 - OSS 收尾：homepage 现已完整消费 live API 的 uncertainty / citation / conflict 数据，并补齐 evidence filtering（来源/立场/可信度）、链路比较摘要、右侧 edge insight / citation snippet 展示；README / roadmap 已同步更新当前 OSS 能力与测试数量（148） - 完成于 15:20
 - Frontier 落地：CausalRAG / structured uncertainty / span-level citation grounding 已接入主 pipeline、API V2 与测试体系；新增 21 个测试，总测试数提升到 148，全量 pytest 通过 - 完成于 14:45
 - 架构/文档同步：README、roadmap、OSS/Pro positioning、DECISIONS、私有 Rust 方案文档已统一补充 OSS 当前架构、frontier 技术落点、Pro-first 能力范围，以及 Rust 重写 / Python bridge 的改造边界 - 完成于 00:52
