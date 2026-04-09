@@ -12,11 +12,16 @@
 - independent pipeline evaluation step (evidence sufficiency, probability coherence, chain diversity)
 - LLM call retry with exponential backoff
 - config-driven request timeout
-- 127 automated tests (unit + integration + comprehensive boundary)
+- 148 automated tests (unit + integration + comprehensive boundary + CausalRAG / uncertainty / citation)
 - API smoke test (38/38 PASS) and UI smoke test (21/21 PASS, Playwright/Chromium)
 - real data sources: ArXiv, Semantic Scholar, DuckDuckGo (all live HTTP, not stubs)
 - topic-aware demo fallback (SVB, stock, crisis, rent, default)
 - explicit demo vs real analysis labeling across browser UI, API, and Streamlit
+- graph-guided retrieval / CausalRAG second pass for thin-coverage graph regions
+- span-level citation grounding on edges
+- structured uncertainty report (per-node / per-edge) and evidence conflict classification
+- homepage evidence filtering by source / stance / confidence
+- homepage chain comparison snapshot and richer right-panel rendering for live API evidence
 
 ## Current Limitations
 
@@ -101,10 +106,10 @@ It is:
 
 ### P2 — Improve node and evidence workflows
 
-- evidence filtering by source / support / confidence
-- better chain comparison workflows
-- stronger edge explanation affordances
-- richer right-panel rendering of real API evidence pools
+- evidence filtering by source / support / confidence ✅
+- better chain comparison workflows (homepage compare snapshot) ✅
+- stronger edge explanation affordances ✅
+- richer right-panel rendering of real API evidence pools ✅
 
 ### P3 — Strengthen query-specific fallback behavior ✅
 
@@ -126,10 +131,10 @@ It is:
 
 ### P5.5 — Frontier techniques that fit OSS
 
-- add citation-grounded outputs so chains and edges can point back to evidence more explicitly
-- add support-vs-refutation balance and provenance completeness into the evaluation layer
-- add lightweight graph-guided retrieval / CausalRAG-style retrieval on top of the existing pipeline and optional vector store
-- add uncertainty communication that distinguishes thin evidence, conflicting evidence, and low-confidence reasoning
+- add citation-grounded outputs so chains and edges can point back to evidence more explicitly ✅
+- add support-vs-refutation balance and provenance completeness into the evaluation layer ✅
+- add lightweight graph-guided retrieval / CausalRAG-style retrieval on top of the existing pipeline and optional vector store ✅
+- add uncertainty communication that distinguishes thin evidence, conflicting evidence, and low-confidence reasoning ✅
 - add reasoning-trace summaries only where they improve inspectability without pretending to expose ground-truth model cognition
 
 ### P6 — Shape the future Pro tier around real jobs-to-be-done

@@ -23,6 +23,13 @@ type ApiNode = {
   upstream_ids: string[];
   supporting_evidence_ids: string[];
   refuting_evidence_ids: string[];
+  uncertainty?: {
+    uncertainty_types: string[];
+    overall_score: number;
+    data_uncertainty: number;
+    model_uncertainty: number;
+    explanation: string;
+  } | null;
 };
 
 type ApiEdge = {
@@ -33,6 +40,34 @@ type ApiEdge = {
   type: string;
   supporting_evidence_ids: string[];
   refuting_evidence_ids: string[];
+  citation_spans?: Array<{
+    evidence_id: string;
+    start_char: number;
+    end_char: number;
+    quoted_text: string;
+    relevance_score: number;
+  }>;
+  evidence_conflict?: string;
+};
+
+type ApiEvidence = {
+  id: string;
+  content: string;
+  source: string;
+  reliability: string;
+  is_supporting: boolean;
+};
+
+type ApiChain = {
+  chain_id: string;
+  label: string;
+  description: string;
+  probability: number;
+  depth: number;
+  nodes: ApiNode[];
+  edges: ApiEdge[];
+  supporting_evidence_ids: string[];
+  refuting_evidence_ids: string[];
 };
 
 type AnalyzeResponseV2 = {
@@ -40,24 +75,8 @@ type AnalyzeResponseV2 = {
   is_demo: boolean;
   demo_topic: string | null;
   recommended_chain_id: string | null;
-  evidences: Array<{
-    id: string;
-    content: string;
-    source: string;
-    reliability: string;
-    is_supporting: boolean;
-  }>;
-  chains: Array<{
-    chain_id: string;
-    label: string;
-    description: string;
-    probability: number;
-    depth: number;
-    nodes: ApiNode[];
-    edges: ApiEdge[];
-    supporting_evidence_ids: string[];
-    refuting_evidence_ids: string[];
-  }>;
+  evidences: ApiEvidence[];
+  chains: ApiChain[];
   evaluation?: {
     evidence_sufficiency: number;
     probability_coherence: number;
@@ -66,13 +85,39 @@ type AnalyzeResponseV2 = {
     weaknesses: string[];
     recommended_actions: string[];
   } | null;
+  uncertainty_report?: {
+    per_node: Record<
+      string,
+      {
+        uncertainty_types: string[];
+        overall_score: number;
+        data_uncertainty: number;
+        model_uncertainty: number;
+        explanation: string;
+      }
+    >;
+    per_edge: Record<
+      string,
+      {
+        uncertainty_types: string[];
+        overall_score: number;
+        data_uncertainty: number;
+        model_uncertainty: number;
+        explanation: string;
+      }
+    >;
+    evidence_conflicts: Record<string, string>;
+    overall_uncertainty: number;
+    dominant_uncertainty_type: string | null;
+    summary: string;
+  } | null;
   error?: string | null;
 };
 
 function toLocalChain(
-  chain: AnalyzeResponseV2["chains"][number],
+  chain: ApiChain,
   locale: "zh" | "en",
-  evidencePool: AnalyzeResponseV2["evidences"]
+  evidencePool: ApiEvidence[]
 ): CausalChain {
   const mapNodeType = (type: string): CausalNodeType => {
     if (type === "cause") return "factor";
@@ -563,6 +608,10 @@ export default function Home() {
   const [recommendedChainId, setRecommendedChainId] = useState<string | null>(null);
   const [evidencePool, setEvidencePool] = useState<AnalyzeResponseV2["evidences"]>([]);
   const [pipelineEval, setPipelineEval] = useState<AnalyzeResponseV2["evaluation"]>(null);
+  const [uncertaintyReport, setUncertaintyReport] = useState<AnalyzeResponseV2["uncertainty_report"]>(null);
+  const [evidenceSourceFilter, setEvidenceSourceFilter] = useState<string>("all");
+  const [evidenceStanceFilter, setEvidenceStanceFilter] = useState<"all" | "supporting" | "refuting">("all");
+  const [evidenceConfidenceFilter, setEvidenceConfidenceFilter] = useState<"all" | "strong" | "medium" | "weak">("all");
   const [analysisMode, setAnalysisMode] = useState<{ isDemo: boolean; demoTopic: string | null; loading: boolean }>({
     isDemo: true,
     demoTopic: null,
@@ -589,6 +638,7 @@ export default function Home() {
     setRecommendedChainId(null);
     setEvidencePool([]);
     setPipelineEval(null);
+    setUncertaintyReport(null);
     setSelectedNodeId(null);
     setPanOffset({ x: 0, y: 0 });
   }, [localizedDemo]);
@@ -645,6 +695,18 @@ export default function Home() {
     connectedNodeIds.add(selectedNodeId);
   }
   const primaryChainTitle = mockPrimaryChain.metadata.title;
+  const activeApiChain = useMemo(
+    () => availableChains.find((chain) => chain.chain_id === mockPrimaryChain.metadata.id) ?? null,
+    [availableChains, mockPrimaryChain.metadata.id]
+  );
+  const selectedApiNode = activeApiChain?.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedApiEdges = useMemo(
+    () =>
+      activeApiChain?.edges.filter(
+        (edge) => edge.source === selectedNodeId || edge.target === selectedNodeId
+      ) ?? [],
+    [activeApiChain, selectedNodeId]
+  );
   const nodeTypeCounts = mockPrimaryChain.nodes.reduce(
     (acc, node) => {
       acc[node.type] += 1;
@@ -665,7 +727,11 @@ export default function Home() {
     0
   );
   const selectedNodeUncertainty = selectedNodeData
-    ? Math.max(0, 100 - selectedNodeData.probability)
+    ? Math.round(
+        ((selectedApiNode?.uncertainty?.overall_score ??
+          uncertaintyReport?.per_node?.[selectedNodeData.id]?.overall_score ??
+          Math.max(0, 1 - selectedNodeData.probability / 100)) * 100)
+      )
     : Math.max(0, 100 - Math.round(mockPrimaryChain.metadata.confidence * 100));
   const selectedEdgeIds = selectedNodeId
     ? new Set(
@@ -684,6 +750,16 @@ export default function Home() {
   const activeChainEvidenceIds = new Set(
     mockPrimaryChain.edges.flatMap((edge) => edge.evidence.map((item) => item.evidenceId))
   );
+  const selectedNodeCitationByEvidenceId = useMemo(() => {
+    const entries = selectedApiEdges.flatMap((edge) =>
+      (edge.citation_spans ?? []).map((span) => [span.evidence_id, span] as const)
+    );
+    return new Map(entries);
+  }, [selectedApiEdges]);
+  const sourceFilterOptions = useMemo(
+    () => ["all", ...Array.from(new Set(evidencePool.map((item) => item.source))).sort()],
+    [evidencePool]
+  );
   const relatedEvidence = evidencePool.filter((item) => {
     if (selectedNodeEvidenceIds.length > 0) {
       return selectedNodeEvidenceIds.includes(item.id);
@@ -695,7 +771,7 @@ export default function Home() {
 
     return false;
   });
-  const visibleEvidence = (relatedEvidence.length > 0 ? relatedEvidence : evidencePool).slice(0, 3);
+  const evidenceBase = relatedEvidence.length > 0 ? relatedEvidence : evidencePool;
   const getReliabilityLabel = (reliability: string) => {
     const score = Number(reliability);
     if (Number.isNaN(score)) {
@@ -709,6 +785,43 @@ export default function Home() {
     }
     return t("home.evidence.weak");
   };
+  const visibleEvidence = evidenceBase.filter((item) => {
+    if (evidenceSourceFilter !== "all" && item.source !== evidenceSourceFilter) {
+      return false;
+    }
+    if (evidenceStanceFilter === "supporting" && !item.is_supporting) {
+      return false;
+    }
+    if (evidenceStanceFilter === "refuting" && item.is_supporting) {
+      return false;
+    }
+
+    const label = getReliabilityLabel(item.reliability);
+    if (evidenceConfidenceFilter === "strong" && label !== t("home.evidence.strong")) {
+      return false;
+    }
+    if (evidenceConfidenceFilter === "medium" && label !== t("home.evidence.medium")) {
+      return false;
+    }
+    if (evidenceConfidenceFilter === "weak" && label !== t("home.evidence.weak")) {
+      return false;
+    }
+
+    return true;
+  });
+  const chainCompareItems = useMemo(
+    () =>
+      availableChains.slice(0, 4).map((chain) => ({
+        chain_id: chain.chain_id,
+        label: chain.label,
+        probability: Math.round(chain.probability * 100),
+        supportCount: chain.supporting_evidence_ids.length,
+        refuteCount: chain.refuting_evidence_ids.length,
+        edgeCount: chain.edges.length,
+        nodeCount: chain.nodes.length,
+      })),
+    [availableChains]
+  );
 
   // Background drag handlers
   const handleBoardMouseDown = useCallback((e: React.MouseEvent) => {
@@ -840,7 +953,11 @@ export default function Home() {
       setRecommendedChainId(payload.recommended_chain_id);
       setEvidencePool(payload.evidences);
       setPipelineEval(payload.evaluation ?? null);
+      setUncertaintyReport(payload.uncertainty_report ?? null);
       setActiveChain(toLocalChain(recommended, locale, payload.evidences));
+      setEvidenceSourceFilter("all");
+      setEvidenceStanceFilter("all");
+      setEvidenceConfidenceFilter("all");
 
       setAnalysisMode({
         isDemo: payload.is_demo,
@@ -874,6 +991,7 @@ export default function Home() {
       setRecommendedChainId(null);
       setEvidencePool([]);
       setPipelineEval(null);
+      setUncertaintyReport(null);
       setAnalysisMode({ isDemo: true, demoTopic: null, loading: false });
       setSelectedNodeId(null);
       setPanOffset({ x: 0, y: 0 });
@@ -1247,6 +1365,35 @@ export default function Home() {
           </div>
         )}
 
+        {chainCompareItems.length > 1 && (
+          <div className="compact-item">
+            <div className="compact-label">{locale === "en" ? "Chain compare" : "链路比较"}</div>
+            {chainCompareItems.map((chain) => (
+              <div
+                key={`${chain.chain_id}-compare`}
+                style={{
+                  marginTop: "6px",
+                  paddingTop: "6px",
+                  borderTop: "1px dashed rgba(160,140,110,0.18)",
+                  fontSize: "0.58rem",
+                  color: "#6b5a42",
+                  lineHeight: 1.5,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
+                  <strong style={{ color: chain.chain_id === mockPrimaryChain.metadata.id ? "#3b6ea5" : "#5c4a32" }}>{chain.label}</strong>
+                  <span>{chain.probability}%</span>
+                </div>
+                <div>
+                  {locale === "en"
+                    ? `${chain.supportCount} support · ${chain.refuteCount} refute · ${chain.nodeCount} nodes`
+                    : `${chain.supportCount} 支撑 · ${chain.refuteCount} 反驳 · ${chain.nodeCount} 节点`}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="compact-item">
           <div className="compact-label">{t("home.summary.structure")}</div>
           <div>
@@ -1403,6 +1550,11 @@ export default function Home() {
               {t("home.stats.primaryEvidence")}: {selectedNodeSupportingCount}
               <br />{t("home.stats.uncertainty")}: {selectedNodeUncertainty}%
             </div>
+            {(selectedApiNode?.uncertainty?.explanation || uncertaintyReport?.per_node?.[selectedNote.id]?.explanation) && (
+              <div style={{ color: "#6b5a42", fontSize: "0.58rem", marginTop: "8px", lineHeight: 1.5 }}>
+                {selectedApiNode?.uncertainty?.explanation ?? uncertaintyReport?.per_node?.[selectedNote.id]?.explanation}
+              </div>
+            )}
           </div>
         ) : (
           <div
@@ -1430,8 +1582,75 @@ export default function Home() {
           <div style={{ fontSize: "0.65rem", lineHeight: 1.5 }}>{statusNote || (analysisMode.isDemo ? t("demo.banner") : t("status.liveAnalysis"))}</div>
         </div>
 
+        {uncertaintyReport && !analysisMode.isDemo && (
+          <div className="compact-item" style={{ background: "rgba(255,255,255,0.72)" }}>
+            <div className="compact-label">{locale === "en" ? "Uncertainty report" : "不确定性报告"}</div>
+            <div style={{ fontSize: "0.65rem", color: "#5c4a32", lineHeight: 1.5 }}>
+              {Math.round(uncertaintyReport.overall_uncertainty * 100)}% · {uncertaintyReport.summary}
+            </div>
+            {uncertaintyReport.dominant_uncertainty_type && (
+              <div style={{ fontSize: "0.56rem", color: "#8b7355", marginTop: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {locale === "en" ? "Dominant" : "主导类型"}: {uncertaintyReport.dominant_uncertainty_type}
+              </div>
+            )}
+          </div>
+        )}
+
+        {selectedApiEdges.length > 0 && (
+          <div className="compact-item" style={{ background: "rgba(255,255,255,0.72)" }}>
+            <div className="compact-label">{locale === "en" ? "Connected edges" : "关联边"}</div>
+            {selectedApiEdges.slice(0, 3).map((edge) => (
+              <div key={`${edge.id}-edge`} style={{ marginBottom: "10px", paddingBottom: "10px", borderBottom: "1px dashed rgba(160,140,110,0.18)" }}>
+                <div style={{ fontSize: "0.62rem", color: "#5c4a32", lineHeight: 1.4 }}>
+                  <strong>{edge.source}</strong> → <strong>{edge.target}</strong>
+                </div>
+                <div style={{ fontSize: "0.56rem", color: edge.evidence_conflict && edge.evidence_conflict !== "none" ? "#a0503c" : "#8b7355", marginTop: "3px" }}>
+                  {locale === "en" ? "Conflict" : "冲突"}: {edge.evidence_conflict ?? "none"}
+                </div>
+                {(edge.citation_spans?.[0]?.quoted_text) && (
+                  <div style={{ fontSize: "0.58rem", color: "#6b5a42", marginTop: "6px", lineHeight: 1.5, fontStyle: "italic" }}>
+                    “{edge.citation_spans[0].quoted_text}”
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="compact-item" style={{ background: "rgba(255,255,255,0.72)" }}>
           <div className="compact-label">{t("home.evidence.related")}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginBottom: "10px" }}>
+            <select
+              value={evidenceSourceFilter}
+              onChange={(event) => setEvidenceSourceFilter(event.target.value)}
+              style={{ fontSize: "0.56rem", padding: "4px 6px", borderRadius: "4px", border: "1px solid rgba(160,140,110,0.18)", background: "rgba(255,255,255,0.92)", color: "#5c4a32" }}
+            >
+              {sourceFilterOptions.map((source) => (
+                <option key={source} value={source}>
+                  {source === "all" ? (locale === "en" ? "All sources" : "全部来源") : source}
+                </option>
+              ))}
+            </select>
+            <select
+              value={evidenceStanceFilter}
+              onChange={(event) => setEvidenceStanceFilter(event.target.value as "all" | "supporting" | "refuting")}
+              style={{ fontSize: "0.56rem", padding: "4px 6px", borderRadius: "4px", border: "1px solid rgba(160,140,110,0.18)", background: "rgba(255,255,255,0.92)", color: "#5c4a32" }}
+            >
+              <option value="all">{locale === "en" ? "All stance" : "全部立场"}</option>
+              <option value="supporting">{locale === "en" ? "Supporting" : "支撑"}</option>
+              <option value="refuting">{locale === "en" ? "Refuting" : "反驳"}</option>
+            </select>
+            <select
+              value={evidenceConfidenceFilter}
+              onChange={(event) => setEvidenceConfidenceFilter(event.target.value as "all" | "strong" | "medium" | "weak")}
+              style={{ gridColumn: "1 / -1", fontSize: "0.56rem", padding: "4px 6px", borderRadius: "4px", border: "1px solid rgba(160,140,110,0.18)", background: "rgba(255,255,255,0.92)", color: "#5c4a32" }}
+            >
+              <option value="all">{locale === "en" ? "All confidence" : "全部可信度"}</option>
+              <option value="strong">{t("home.evidence.strong")}</option>
+              <option value="medium">{t("home.evidence.medium")}</option>
+              <option value="weak">{t("home.evidence.weak")}</option>
+            </select>
+          </div>
           {visibleEvidence.length > 0 ? (
             visibleEvidence.map((item) => (
               <div key={item.id} style={{ marginBottom: "8px" }}>
@@ -1442,6 +1661,11 @@ export default function Home() {
                   <span style={{ color: "#8b7355" }}>{getReliabilityLabel(item.reliability)}</span>
                 </div>
                 <div style={{ fontSize: "0.65rem", color: "#5c4a32", lineHeight: 1.45 }}>{item.content}</div>
+                {selectedNodeCitationByEvidenceId.get(item.id)?.quoted_text && (
+                  <div style={{ fontSize: "0.58rem", color: "#6b5a42", lineHeight: 1.45, marginTop: "4px", fontStyle: "italic" }}>
+                    “{selectedNodeCitationByEvidenceId.get(item.id)?.quoted_text}”
+                  </div>
+                )}
                 <div style={{ fontSize: "0.56rem", color: "#8b7355", marginTop: "2px" }}>{item.source}</div>
               </div>
             ))

@@ -45,19 +45,22 @@ RetroCause is currently a **research-grade alpha**:
 - factor impact analysis MVP is available
 - homepage now supports a minimal live `/api/analyze/v2` query flow
 - demo fallback vs real analysis is explicitly labeled in the UI
-- tests and frontend build are passing
+- homepage now supports evidence filtering, chain comparison snapshots, citation snippets, and uncertainty/conflict surfacing for live API results
+- 148 backend tests and frontend build are passing
 
 Already implemented:
 
 1. evidence collection orchestration
 2. causal graph construction
 3. hypothesis chain generation
-4. evidence anchoring
+4. evidence anchoring with span-level citation grounding
 5. counterfactual verification
 6. factor impact analysis
 7. interactive visualization
 8. multi-hop causal tracing (API v2)
-9. evidence-board web UI (Next.js frontend)
+9. graph-guided retrieval (CausalRAG)
+10. structured uncertainty assessment
+11. evidence-board web UI (Next.js frontend)
 
 Still evolving:
 
@@ -430,7 +433,7 @@ Rule of thumb:
 
 Current local validation includes:
 
-- `pytest tests/` passing (127 tests: unit, integration, comprehensive boundary)
+- `pytest tests/` passing (148 tests: unit, integration, comprehensive boundary, CausalRAG, uncertainty, citation)
 - `ruff check` on all source and test files
 - diagnostics clean on source files (39 Python files + frontend)
 - frontend build (`npm run build`) passing in `frontend/`

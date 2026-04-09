@@ -865,6 +865,7 @@ RetroCause 之前的三项核心前沿能力（CausalRAG、不确定性通信、
 - `retrocause/anchoring.py` — 新增 ground_citation_spans, _extract_relevant_span, _compute_span_relevance；升级 EvidenceAnchoringStep
 - `retrocause/engine.py` — 新增 CausalRAGStep，pipeline 中插入 CausalRAGStep + UncertaintyAssessmentStep
 - `retrocause/api/main.py` — V2 schema 扩展（CitationSpanV2, UncertaintyAssessmentV2, UncertaintyReportV2, edge.evidence_conflict）
+- `frontend/src/app/page.tsx` — homepage 现已消费 uncertainty / citation / conflict 数据，并补齐 evidence filtering、chain compare snapshot、edge insight 面板
 - `tests/test_causal_rag.py` — 6 个新测试
 - `tests/test_uncertainty.py` — 10 个新测试
 - `tests/test_citation.py` — 5 个新测试

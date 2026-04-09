@@ -1,4 +1,6 @@
 ## Done recently (更新 2026-04-09)
+- OSS 收尾：homepage 现已完整消费 live API 的 uncertainty / citation / conflict 数据，并补齐 evidence filtering（来源/立场/可信度）、链路比较摘要、右侧 edge insight / citation snippet 展示；README / roadmap 已同步更新当前 OSS 能力与测试数量（148） - 完成于 15:20
+- Frontier 落地：CausalRAG / structured uncertainty / span-level citation grounding 已接入主 pipeline、API V2 与测试体系；新增 21 个测试，总测试数提升到 148，全量 pytest 通过 - 完成于 14:45
 - 架构/文档同步：README、roadmap、OSS/Pro positioning、DECISIONS、私有 Rust 方案文档已统一补充 OSS 当前架构、frontier 技术落点、Pro-first 能力范围，以及 Rust 重写 / Python bridge 的改造边界 - 完成于 00:52
 - 文档同步：README / `docs/oss-pro-positioning.md` / `docs-private/retrocause-pro-rust-architecture.md` 已统一写明 OSS/Pro 分层原则：OSS 继续沿用 Python + FastAPI + Next.js，Pro 规划为独立全栈 Rust 产品线 - 完成于 00:35
 - 真实分析修复：修复 DuckDuckGo 适配器请求方式与 HTML 解析 bug，ArXiv 切换到 HTTPS，并降低在线模式默认调用规模；有效 OpenRouter key 下 `/api/analyze/v2` 已返回 `is_demo=False` 的真实结果 - 完成于 00:34
