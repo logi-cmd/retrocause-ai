@@ -651,7 +651,7 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("http://127.0.0.1:8000/api/providers")
+    fetch("http://localhost:8000/api/providers")
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
@@ -998,7 +998,7 @@ export default function Home() {
 
     try {
       // Try SSE streaming endpoint first
-      const response = await fetch("http://127.0.0.1:8000/api/analyze/v2/stream", {
+      const response = await fetch("http://localhost:8000/api/analyze/v2/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

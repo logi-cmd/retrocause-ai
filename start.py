@@ -16,10 +16,10 @@ def main():
         backend_process = subprocess.Popen(
             [
                 sys.executable,
+                "-B",
                 "-m",
                 "uvicorn",
                 "retrocause.api.main:app",
-                "--reload",
                 "--host",
                 "127.0.0.1",
                 "--port",
