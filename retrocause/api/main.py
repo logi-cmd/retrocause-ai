@@ -734,7 +734,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                 try:
                     result = _run_with_timeout(
                         run_real_analysis_with_progress,
-                        300,
+                        400,
                         request.query,
                         request.api_key,
                         model_name,
@@ -742,8 +742,8 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                         on_progress,
                     )
                 except _TimeoutError:
-                    error_msg = "Analysis timed out (300s). Try a simpler query or try again later."
-                    logger.warning("SSE stream analysis timed out after 300s")
+                    error_msg = "Analysis timed out. Try a simpler query or try again later."
+                    logger.warning("SSE stream analysis timed out after 400s")
                 except Exception as exc:
                     logger.error(f"SSE stream analysis error: {type(exc).__name__}: {exc}")
                     error_msg = f"{type(exc).__name__}: {exc}"
@@ -782,7 +782,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
 
         while True:
             try:
-                item = eq.get(timeout=310)
+                item = eq.get(timeout=420)
             except queue.Empty:
                 break
             if item is None:

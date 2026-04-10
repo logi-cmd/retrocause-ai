@@ -5,7 +5,7 @@ import json
 import sys
 
 API_KEY = "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"
-QUERY = "MH370为什么失踪"
+QUERY = "Why is the sky blue?"
 MODEL = "deepseek/deepseek-chat-v3-0324"
 BASE_URL = "https://openrouter.ai/api/v1"
 ENDPOINT = "http://localhost:8000/api/analyze/v2/stream"
