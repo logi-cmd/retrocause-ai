@@ -173,6 +173,21 @@
   --mockup-accent-red: #a0503c;
   --mockup-accent-red-bg: rgba(180, 80, 60, 0.1);
   --mockup-accent-red-border: rgba(180, 80, 60, 0.25);
+
+  /* === Analyst Desk Upgrade === */
+  --analyst-ink: #2f251a;
+  --analyst-ink-soft: #6f604d;
+  --analyst-muted: #9b886d;
+  --analyst-paper: rgba(255, 252, 246, 0.86);
+  --analyst-paper-strong: rgba(255, 250, 239, 0.94);
+  --analyst-border: rgba(101, 75, 42, 0.16);
+  --analyst-border-strong: rgba(101, 75, 42, 0.28);
+  --analyst-blue: #315f83;
+  --analyst-red: #a23d2d;
+  --analyst-green: #527b56;
+  --analyst-amber: #a7772e;
+  --analyst-shadow: 0 18px 48px rgba(64, 43, 22, 0.12), 0 4px 16px rgba(64, 43, 22, 0.08);
+  --analyst-radius: 18px;
 }
 
 @theme inline {
@@ -201,7 +216,7 @@
   --color-info:            var(--info);
   --color-info-bg:         var(--info-bg);
 
-  --font-sans: "Inter", system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", sans-serif;
 }
 
 body {

@@ -55,6 +55,9 @@ RetroCause is currently a **research-grade alpha**:
 - geopolitical/news collection now keeps a small bounded expansion path when the first source is thin, requiring broader source-adapter coverage before calling coverage good enough
 - live SSE progress is now rendered as a visible retrieval trace so users can see evidence collection, graph building, anchoring, CausalRAG, uncertainty, and evaluation steps while the run is in flight
 - chain comparison, connected edges, and evidence rows are now clickable in the evidence board, with graph highlighting synced across chains, edges, nodes, and evidence items
+- homepage UI now uses an Analyst Desk interaction model: the query brief is the primary action, provider/API-key settings are collapsed behind an advanced control, retrieval health chips are visible in the command bar, and the right-side inspector has more deliberate evidence-review affordances
+- homepage provider controls are simplified to OpenRouter-first in the OSS UI, with subtle embedded left/right panel hide controls, collapsed edge tabs for recovery, and dedicated canvas zoom controls so evidence notes can be rearranged without being covered by instructional text
+- evidence-board drag bounds now reserve a compact rendered-height-aware bottom safety area, preventing clipped notes while keeping the lower canvas usable
 - live authentication failures and empty live runs now stay visible as explicit `partial_live` errors instead of silently collapsing to demo fallback
 - geopolitical/news queries now use scenario-aware routing (`ap_news`, `federal_register`, `gdelt`, `web`) instead of wasting the first budget on low-fit academic sources
 - policy/regulatory queries can use Federal Register official documents as trusted full-text evidence, so public-news throttling does not have to collapse the run

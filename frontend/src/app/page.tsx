@@ -647,6 +647,14 @@ const NOTE_DIMS: Record<StickyColor, [number, number]> = {
   "sticky-lavender": [155, 118],
 };
 
+const CANVAS_HEADER_HEIGHT = 64;
+const NOTE_TOP_SAFE_PX = 24;
+const NOTE_BOTTOM_SAFE_PX = 42;
+const NOTE_VISUAL_HEIGHT_BUFFER = 14;
+const PANEL_SAFE_LEFT_OPEN = 296;
+const PANEL_SAFE_RIGHT_OPEN = 356;
+const PANEL_SAFE_CLOSED = 24;
+
 // Derived sticky note from ChainNode
 interface StickyNote {
   id: string;
@@ -720,20 +728,22 @@ function computeLayout(
   boardWidth: number,
   boardHeight: number,
   headerHeight: number,
-  getLabel: (type: ChainNode["type"]) => string
+  getLabel: (type: ChainNode["type"]) => string,
+  leftPanelOpen = true,
+  rightPanelOpen = true
 ): StickyNote[] {
   if (nodes.length === 0) return [];
 
-  const leftMargin = 220;
-  const rightMargin = 220;
-  const topMargin = headerHeight + 50;
-  const bottomMargin = 60;
+  const leftMargin = leftPanelOpen ? Math.min(340, Math.max(230, boardWidth * 0.22)) : 88;
+  const rightMargin = rightPanelOpen ? Math.min(400, Math.max(260, boardWidth * 0.26)) : 88;
+  const canvasHeight = Math.max(0, boardHeight - headerHeight);
+  const topMargin = NOTE_TOP_SAFE_PX;
+  const bottomMargin = NOTE_BOTTOM_SAFE_PX + NOTE_VISUAL_HEIGHT_BUFFER;
   const usableWidth = boardWidth - leftMargin - rightMargin;
-  const usableHeight = boardHeight - topMargin - bottomMargin;
+  const usableHeight = canvasHeight - topMargin - bottomMargin;
 
   const rotations = [-3, -1.5, 0.5, 2, -2, 1.5, -0.5, 3, -2.5, 1];
 
-  const maxDepth = Math.max(...nodes.map(n => n.depth));
   const n = nodes.length;
 
   const sortedNodes = [...nodes].sort((a, b) => a.depth - b.depth);
@@ -797,7 +807,17 @@ function computeLayout(
     const color = getStickyColor(i, pos.node.depth);
     const [width, height] = NOTE_DIMS[color];
     const left = Math.max(leftMargin, Math.min(pos.x, boardWidth - rightMargin - width));
-    const top = Math.max(topMargin, Math.min(pos.y, boardHeight - bottomMargin - height));
+    const visualHeight = height + NOTE_VISUAL_HEIGHT_BUFFER;
+    const maxTop = canvasHeight - bottomMargin - visualHeight;
+    const row = Math.floor(i / cols);
+    const rowOffset = ((i * 23) % 13 - 6) * 2;
+    const layoutTopMargin = Math.min(96, Math.max(NOTE_TOP_SAFE_PX + 48, canvasHeight * 0.12));
+    const rowRatio = rows > 1 ? row / (rows - 1) : 0.5;
+    const intendedTop =
+      rows > 1
+        ? layoutTopMargin + rowRatio * Math.max(0, maxTop - layoutTopMargin) + rowOffset
+        : topMargin + Math.max(0, (canvasHeight - topMargin - bottomMargin - visualHeight) / 2);
+    const top = Math.max(topMargin, Math.min(intendedTop, maxTop));
 
     return {
       id: pos.node.id,
@@ -1026,8 +1046,11 @@ export default function Home() {
   const [currentQuery, setCurrentQuery] = useState("");
   const [lastQuery, setLastQuery] = useState("");
   const [apiKey, setApiKey] = useState("");
-  const [selectedModel, setSelectedModel] = useState("openrouter");
+  const selectedModel = "openrouter";
   const [selectedExplicitModel, setSelectedExplicitModel] = useState("");
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [availableModels, setAvailableModels] = useState<Record<string, string>>({});
   const [statusNote, setStatusNote] = useState("");
   const [availableChains, setAvailableChains] = useState<AnalyzeResponseV2["chains"]>([]);
@@ -1067,6 +1090,7 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [zoomLevel, setZoomLevel] = useState(1);
   const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const noteDragRef = useRef<DragState | null>(null);
@@ -1131,19 +1155,21 @@ export default function Home() {
     setBoardReady(false);
     const width = window.innerWidth;
     const height = window.innerHeight;
-    const headerHeight = 52;
+    const headerHeight = CANVAS_HEADER_HEIGHT;
 
     const computedNotes = computeLayout(
       mockPrimaryChain.nodes,
       width,
       height,
       headerHeight,
-      (type) => getTagLabel(type, t)
+      (type) => getTagLabel(type, t),
+      leftPanelOpen,
+      rightPanelOpen
     );
 
     setNotes(computedNotes);
     setBoardReady(true);
-  }, [mockPrimaryChain, locale, t]);
+  }, [mockPrimaryChain, locale, t, leftPanelOpen, rightPanelOpen]);
 
   const causalStrings = computeCausalStrings(notes, mockPrimaryChain.edges);
   const primaryChainTitle = mockPrimaryChain.metadata.title;
@@ -1381,6 +1407,22 @@ export default function Home() {
   const activeProgressIndex = pipelineProgress
     ? Math.max(progressStageOrder.indexOf(pipelineProgress.step), Math.max(0, pipelineProgress.stepIndex - 1))
     : -1;
+  const sourceHitCount = retrievalTrace.reduce((sum, item) => sum + Math.max(0, item.result_count), 0);
+  const traceFailureCount = retrievalTrace.filter((item) => Boolean(item.error)).length;
+  const evidenceCoverageScore = Math.min(
+    100,
+    Math.round(
+      (mockPrimaryChain.metadata.primaryEvidenceCount /
+        Math.max(1, mockPrimaryChain.metadata.totalEdges)) *
+        100
+    )
+  );
+  const qualityGateTone =
+    analysisMode.mode === "live" && evidenceCoverageScore >= 75
+      ? "strong"
+      : analysisMode.mode === "partial_live" || hasLowEvidenceCoverage || traceFailureCount > 0
+        ? "caution"
+        : "steady";
 
   // Background drag handlers
   const handleBoardMouseDown = useCallback((e: React.MouseEvent) => {
@@ -1402,6 +1444,15 @@ export default function Home() {
 
   const handleBoardMouseUp = useCallback(() => {
     setIsDragging(false);
+  }, []);
+
+  const changeZoom = useCallback((delta: number) => {
+    setZoomLevel((current) => Math.min(1.5, Math.max(0.7, Number((current + delta).toFixed(2)))));
+  }, []);
+
+  const resetViewport = useCallback(() => {
+    setPanOffset({ x: 0, y: 0 });
+    setZoomLevel(1);
   }, []);
 
   const handleNoteMouseDown = useCallback((note: StickyNote, event: React.MouseEvent<HTMLDivElement>) => {
@@ -1438,19 +1489,36 @@ export default function Home() {
         return;
       }
 
-      const nextLeft = drag.left + (event.clientX - drag.pointerX);
-      const nextTop = drag.top + (event.clientY - drag.pointerY);
+      const nextLeft = drag.left + (event.clientX - drag.pointerX) / zoomLevel;
+      const nextTop = drag.top + (event.clientY - drag.pointerY) / zoomLevel;
 
       setNotes((currentNotes) =>
         currentNotes.map((note) => {
           if (note.id !== drag.id) {
             return note;
           }
+          const leftBound = leftPanelOpen ? PANEL_SAFE_LEFT_OPEN : PANEL_SAFE_CLOSED;
+          const rightBound = rightPanelOpen ? PANEL_SAFE_RIGHT_OPEN : PANEL_SAFE_CLOSED;
+          const topBound = NOTE_TOP_SAFE_PX;
+          const bottomBound = NOTE_BOTTOM_SAFE_PX;
+          const noteElement = document.querySelector(
+            `[data-testid="sticky-card-${drag.id}"]`
+          ) as HTMLElement | null;
+          const visualHeight = noteElement
+            ? noteElement.getBoundingClientRect().height / zoomLevel
+            : note.height + NOTE_VISUAL_HEIGHT_BUFFER;
+          const minLeft = (leftBound - panOffset.x) / zoomLevel;
+          const maxLeft = (window.innerWidth - rightBound - panOffset.x) / zoomLevel - note.width;
+          const minTop = (topBound - panOffset.y) / zoomLevel;
+          const maxTop =
+            (window.innerHeight - CANVAS_HEADER_HEIGHT - bottomBound - panOffset.y) /
+              zoomLevel -
+            visualHeight;
 
           return {
             ...note,
-            left: Math.max(196, Math.min(nextLeft, window.innerWidth - 196 - note.width)),
-            top: Math.max(70, Math.min(nextTop, window.innerHeight - 60 - note.height)),
+            left: Math.max(minLeft, Math.min(nextLeft, Math.max(minLeft, maxLeft))),
+            top: Math.max(minTop, Math.min(nextTop, Math.max(minTop, maxTop))),
           };
         })
       );
@@ -1468,7 +1536,7 @@ export default function Home() {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [draggingNoteId]);
+  }, [draggingNoteId, leftPanelOpen, panOffset.x, panOffset.y, rightPanelOpen, zoomLevel]);
 
   const handleNodeClick = useCallback((nodeId: string) => {
     setSelectedNodeId((prev) => (prev === nodeId ? null : nodeId));
@@ -1756,27 +1824,27 @@ export default function Home() {
         height: "100vh",
         overflow: "hidden",
         background: `
-          /* Cork board texture - warm grain */
+          /* Analyst desk: warm vellum, archival grid, subtle case-room vignette */
           repeating-linear-gradient(
             90deg,
             transparent 0px,
-            rgba(180, 155, 110, 0.04) 1px,
+            rgba(96, 70, 38, 0.045) 1px,
             transparent 2px,
-            transparent 6px
+            transparent 18px
           ),
           repeating-linear-gradient(
             0deg,
             transparent 0px,
-            rgba(160, 130, 90, 0.03) 1px,
+            rgba(96, 70, 38, 0.032) 1px,
             transparent 2px,
-            transparent 8px
+            transparent 18px
           ),
-          radial-gradient(ellipse at 20% 30%, rgba(180, 160, 130, 0.18) 0%, transparent 40%),
-          radial-gradient(ellipse at 80% 70%, rgba(200, 180, 150, 0.15) 0%, transparent 40%),
-          radial-gradient(ellipse at 50% 50%, rgba(220, 200, 170, 0.08) 0%, transparent 60%),
-          linear-gradient(180deg, #f8f4eb 0%, #f0e8d8 50%, #e8dfc8 100%)
+          radial-gradient(ellipse at 18% 18%, rgba(255, 249, 235, 0.75) 0%, transparent 36%),
+          radial-gradient(ellipse at 86% 78%, rgba(72, 93, 88, 0.16) 0%, transparent 42%),
+          radial-gradient(ellipse at 52% 52%, rgba(164, 61, 45, 0.08) 0%, transparent 58%),
+          linear-gradient(135deg, #f7f0e3 0%, #efe2ce 46%, #dcc8a7 100%)
         `,
-        fontFamily: "var(--font-mono), 'IBM Plex Mono', monospace",
+        fontFamily: "var(--font-sans), 'IBM Plex Sans', sans-serif",
         cursor: isDragging ? "grabbing" : "default",
         userSelect: "none",
       }}
@@ -1811,25 +1879,27 @@ export default function Home() {
           top: 0,
           left: 0,
           right: 0,
-          height: "52px",
-          background: "rgba(250, 246, 238, 0.92)",
-          backdropFilter: "blur(8px)",
-          borderBottom: "1px solid rgba(160, 140, 110, 0.2)",
+          height: "64px",
+          background: "rgba(41, 31, 21, 0.86)",
+          backdropFilter: "blur(18px)",
+          borderBottom: "1px solid rgba(255, 238, 206, 0.18)",
+          boxShadow: "0 14px 38px rgba(42, 28, 14, 0.18)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "0 20px",
+          padding: "0 24px",
           zIndex: 100,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <div
             style={{
-              width: "28px",
-              height: "28px",
-              background: "rgba(180, 80, 60, 0.1)",
-              border: "1px solid rgba(180, 80, 60, 0.2)",
-              borderRadius: "5px",
+              width: "36px",
+              height: "36px",
+              background: "linear-gradient(135deg, rgba(255,248,235,0.95), rgba(210,179,122,0.82))",
+              border: "1px solid rgba(255, 238, 206, 0.26)",
+              borderRadius: "12px",
+              boxShadow: "0 8px 22px rgba(0,0,0,0.22)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -1840,7 +1910,7 @@ export default function Home() {
               height="14"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#a0503c"
+              stroke="#8f2e21"
               strokeWidth="2"
             >
               <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1849,10 +1919,10 @@ export default function Home() {
           <h1
             className="font-caveat"
             style={{
-              fontFamily: "var(--font-caveat), Caveat, cursive",
-              color: "#5c4a32",
-              fontSize: "1.5rem",
-              fontWeight: 500,
+              fontFamily: "var(--font-display), Fraunces, serif",
+              color: "#fff2dc",
+              fontSize: "1.35rem",
+              fontWeight: 700,
               letterSpacing: "0.02em",
               margin: 0,
             }}
@@ -1864,9 +1934,9 @@ export default function Home() {
           <span
             className="case-badge"
             style={{
-              background: "rgba(180, 80, 60, 0.1)",
-              border: "1px solid rgba(180, 80, 60, 0.25)",
-              color: "#a0503c",
+              background: "rgba(255, 248, 235, 0.08)",
+              border: "1px solid rgba(255, 238, 206, 0.16)",
+              color: "#f0d5aa",
               padding: "4px 12px",
               borderRadius: "4px",
               fontSize: "0.65rem",
@@ -1882,7 +1952,7 @@ export default function Home() {
               display: "flex",
               alignItems: "center",
               gap: "6px",
-              color: "#8b7355",
+              color: "#e5cda8",
               fontSize: "0.65rem",
             }}
           >
@@ -1890,7 +1960,7 @@ export default function Home() {
               style={{
                 width: "6px",
                 height: "6px",
-                background: "#7cb87c",
+                background: qualityGateTone === "strong" ? "#74b276" : qualityGateTone === "caution" ? "#d39b46" : "#78a7bd",
                 borderRadius: "50%",
                 animation: "pulse 2s infinite",
               }}
@@ -1899,7 +1969,20 @@ export default function Home() {
               {analysisMode.loading
                 ? t("header.status.processing")
                 : analysisBadgeLabel}
+              </span>
+            </div>
+          <div className="command-chip-row">
+            <span className={`command-chip command-chip-${qualityGateTone}`}>
+              {locale === "en" ? "Coverage" : "覆盖"} {evidenceCoverageScore}%
             </span>
+            <span className="command-chip">
+              {locale === "en" ? "Sources" : "来源"} {sourceHitCount}
+            </span>
+            {traceFailureCount > 0 && (
+              <span className="command-chip command-chip-caution">
+                {locale === "en" ? "Source issues" : "来源异常"} {traceFailureCount}
+              </span>
+            )}
           </div>
           {pipelineProgress && analysisMode.loading && (
             <div style={{ display: "flex", alignItems: "center", gap: "4px", flex: 1, minWidth: 0 }}>
@@ -1907,7 +1990,7 @@ export default function Home() {
                 style={{
                   flex: 1,
                   height: "3px",
-                  background: "rgba(139, 115, 85, 0.15)",
+                  background: "rgba(255, 238, 206, 0.14)",
                   borderRadius: "2px",
                   overflow: "hidden",
                   minWidth: 0,
@@ -1917,13 +2000,13 @@ export default function Home() {
                   style={{
                     height: "100%",
                     width: `${pipelineProgress.totalSteps > 0 ? (pipelineProgress.stepIndex / pipelineProgress.totalSteps) * 100 : 0}%`,
-                    background: "linear-gradient(90deg, #7cb87c, #5a9e5a)",
+                    background: "linear-gradient(90deg, #d39b46, #74b276)",
                     borderRadius: "2px",
                     transition: "width 0.4s ease",
                   }}
                 />
               </div>
-              <span style={{ fontSize: "0.55rem", color: "#8b7355", whiteSpace: "nowrap" }}>
+                <span style={{ fontSize: "0.55rem", color: "#e5cda8", whiteSpace: "nowrap" }}>
                 {pipelineProgress.stepIndex}/{pipelineProgress.totalSteps}
               </span>
             </div>
@@ -1931,12 +2014,12 @@ export default function Home() {
           <button
             onClick={() => setLocale(locale === "en" ? "zh" : "en")}
             style={{
-              background: "transparent",
-              border: "1px solid rgba(160, 140, 110, 0.2)",
-              borderRadius: "4px",
-              padding: "4px 8px",
-              fontSize: "0.6rem",
-              color: "#8b7355",
+              background: "rgba(255,248,235,0.08)",
+              border: "1px solid rgba(255,238,206,0.2)",
+              borderRadius: "999px",
+              padding: "5px 10px",
+              fontSize: "0.62rem",
+              color: "#f0d5aa",
               cursor: "pointer",
             }}
           >
@@ -1945,80 +2028,112 @@ export default function Home() {
         </div>
       </header>
 
+      <div className="canvas-hint">
+        {locale === "en"
+          ? "Pan from empty space. Drag notes to rearrange evidence."
+          : "\u7a7a\u767d\u5904\u53ef\u5e73\u79fb\u89c6\u56fe\uff0c\u4fbf\u7b7e\u53ef\u62d6\u62fd\u91cd\u6392\u3002"}
+      </div>
+
+      <div className="zoom-controls" aria-label={locale === "en" ? "Canvas zoom controls" : "\u89c6\u56fe\u7f29\u653e\u63a7\u4ef6"}>
+        <button type="button" onClick={() => changeZoom(-0.1)} disabled={zoomLevel <= 0.7}>-</button>
+        <button type="button" onClick={resetViewport}>{Math.round(zoomLevel * 100)}%</button>
+        <button type="button" onClick={() => changeZoom(0.1)} disabled={zoomLevel >= 1.5}>+</button>
+      </div>
+
+      {!leftPanelOpen && (
+        <button
+          type="button"
+          onClick={() => setLeftPanelOpen(true)}
+          className="panel-toggle-button panel-toggle-left panel-toggle-collapsed"
+          aria-pressed="true"
+          aria-label={locale === "en" ? "Show left panel" : "\u663e\u793a\u5de6\u4fa7\u9762\u677f"}
+        >
+          {locale === "en" ? "Brief" : "\u7b80\u62a5"}
+        </button>
+      )}
+
+      {!rightPanelOpen && (
+        <button
+          type="button"
+          onClick={() => setRightPanelOpen(true)}
+          className="panel-toggle-button panel-toggle-right panel-toggle-collapsed"
+          aria-pressed="true"
+          aria-label={locale === "en" ? "Show right panel" : "\u663e\u793a\u53f3\u4fa7\u9762\u677f"}
+        >
+          {locale === "en" ? "Evidence" : "\u8bc1\u636e"}
+        </button>
+      )}
+
       <aside
         className="left-panel"
         style={{
           position: "absolute",
-          top: "52px",
+          display: leftPanelOpen ? "block" : "none",
+          top: "64px",
           left: 0,
-          width: "180px",
+          width: "280px",
           bottom: 0,
-          padding: "16px 12px",
-          background: "rgba(250, 246, 238, 0.7)",
-          backdropFilter: "blur(4px)",
-          borderRight: "1px solid rgba(160, 140, 110, 0.15)",
+          padding: "40px 16px 18px",
+          background: "linear-gradient(180deg, rgba(255,252,246,0.88), rgba(239,226,204,0.72))",
+          backdropFilter: "blur(18px)",
+          borderRight: "1px solid var(--analyst-border)",
+          boxShadow: "18px 0 44px rgba(72, 48, 22, 0.10)",
           zIndex: 50,
           overflowY: "auto",
         }}
       >
-        <div className="compact-item" style={{ marginBottom: "12px", background: "rgba(255,255,255,0.72)" }}>
-          <div className="compact-label">{t("query.label")}</div>
+        <button
+          type="button"
+          onClick={() => setLeftPanelOpen(false)}
+          className="panel-embedded-toggle"
+          aria-label={locale === "en" ? "Hide left panel" : "\u9690\u85cf\u5de6\u4fa7\u9762\u677f"}
+        >
+          {locale === "en" ? "Hide" : "\u6536\u8d77"}
+        </button>
+        <div className="compact-item query-brief" style={{ marginBottom: "14px" }}>
+          <div className="compact-label">{locale === "en" ? "Investigation brief" : "\u8c03\u67e5\u7b80\u62a5"}</div>
+          <div className="query-brief-title">{t("query.label")}</div>
           <textarea
             value={currentQuery}
             onChange={(event) => setCurrentQuery(event.target.value)}
             placeholder={t("query.placeholderExample")}
+            className="analyst-textarea"
             style={{
               width: "100%",
-              minHeight: "72px",
+              minHeight: "116px",
               resize: "none",
-              border: "1px solid rgba(160, 140, 110, 0.18)",
-              borderRadius: "6px",
-              padding: "8px 10px",
-              background: "rgba(255,255,255,0.82)",
-              color: "#5c4a32",
-              fontSize: "0.68rem",
-              lineHeight: 1.5,
+              border: "1px solid var(--analyst-border)",
+              borderRadius: "14px",
+              padding: "12px 13px",
+              background: "rgba(255,255,255,0.74)",
+              color: "var(--analyst-ink)",
+              fontSize: "0.82rem",
+              lineHeight: 1.55,
               outline: "none",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.78)",
             }}
           />
-          <div className="compact-label" style={{ marginTop: "8px" }}>{t("query.model")}</div>
-          <select
-            value={selectedModel}
-            onChange={(event) => setSelectedModel(event.target.value)}
-            style={{
-              width: "100%",
-              padding: "6px 8px",
-              border: "1px solid rgba(160, 140, 110, 0.18)",
-              borderRadius: "6px",
-              background: "rgba(255,255,255,0.82)",
-              color: "#5c4a32",
-              fontSize: "0.65rem",
-              outline: "none",
-              marginTop: "4px",
-            }}
+          <button
+            type="button"
+            className="advanced-toggle"
+            aria-expanded={showAdvancedSettings}
+            onClick={() => setShowAdvancedSettings((current) => !current)}
           >
-            <option value="openrouter">OpenRouter</option>
-            <option value="openai">OpenAI</option>
-            <option value="dashscope">DashScope / 阿里百炼</option>
-            <option value="zhipu">Zhipu / 智谱</option>
-            <option value="moonshot">Moonshot / Kimi</option>
-            <option value="deepseek">DeepSeek</option>
-          </select>
+            <span>{locale === "en" ? "Provider settings" : "\u6a21\u578b\u4e0e\u5bc6\u94a5\u8bbe\u7f6e"}</span>
+            <span>{showAdvancedSettings ? "-" : "+"}</span>
+          </button>
+          {showAdvancedSettings && (
+            <div className="advanced-settings">
+          <div className="compact-label" style={{ marginTop: "2px" }}>{t("query.model")}</div>
+          <div className="provider-lock">
+            <span>OpenRouter</span>
+            <span>{locale === "en" ? "fixed provider" : "\u56fa\u5b9a\u63d0\u4f9b\u5546"}</span>
+          </div>
           {Object.keys(availableModels).length > 0 && (
             <select
               value={selectedExplicitModel}
               onChange={(event) => setSelectedExplicitModel(event.target.value)}
-              style={{
-                width: "100%",
-                padding: "6px 8px",
-                border: "1px solid rgba(160, 140, 110, 0.18)",
-                borderRadius: "6px",
-                background: "rgba(255,255,255,0.82)",
-                color: "#5c4a32",
-                fontSize: "0.65rem",
-                outline: "none",
-                marginTop: "4px",
-              }}
+              className="analyst-input"
             >
               {Object.entries(availableModels).map(([id, label]) => (
                 <option key={id} value={id}>{label}</option>
@@ -2031,38 +2146,34 @@ export default function Home() {
             value={apiKey}
             onChange={(event) => setApiKey(event.target.value)}
             placeholder={t("query.apiKeyPlaceholder")}
-            style={{
-              width: "100%",
-              padding: "6px 8px",
-              border: "1px solid rgba(160, 140, 110, 0.18)",
-              borderRadius: "6px",
-              background: "rgba(255,255,255,0.82)",
-              color: "#5c4a32",
-              fontSize: "0.65rem",
-              outline: "none",
-              marginTop: "4px",
-              boxSizing: "border-box",
-            }}
+            className="analyst-input"
           />
-          <div style={{ fontSize: "0.55rem", color: "#8b7355", marginTop: "4px", lineHeight: 1.4 }}>
+          <div style={{ fontSize: "0.58rem", color: "var(--analyst-muted)", marginTop: "6px", lineHeight: 1.45 }}>
             {locale === "en"
-              ? "Key stored only in your browser — not sent to any third-party server beyond your chosen model provider."
-              : "密钥仅存储在本地浏览器中，不会发送至您所选模型提供商以外的任何第三方服务器。"}
+              ? "Stored in this browser session and sent only to the selected model provider."
+              : "\u4ec5\u4fdd\u5b58\u5728\u5f53\u524d\u6d4f\u89c8\u5668\u4f1a\u8bdd\u4e2d\uff0c\u5e76\u53ea\u53d1\u9001\u7ed9\u4f60\u9009\u62e9\u7684\u6a21\u578b\u63d0\u4f9b\u5546\u3002"}
           </div>
+            </div>
+          )}
           <button
             onClick={runAnalysis}
             disabled={analysisMode.loading || !currentQuery.trim()}
             style={{
-              marginTop: "8px",
+              marginTop: "10px",
               width: "100%",
-              padding: "8px 10px",
-              borderRadius: "6px",
-              border: "1px solid rgba(59, 110, 165, 0.2)",
-              background: analysisMode.loading ? "rgba(59,110,165,0.08)" : "rgba(59,110,165,0.12)",
-              color: "#4a7a9e",
-              fontSize: "0.68rem",
-              fontWeight: 600,
+              padding: "11px 12px",
+              borderRadius: "14px",
+              border: "1px solid rgba(49, 95, 131, 0.28)",
+              background: analysisMode.loading
+                ? "rgba(49,95,131,0.10)"
+                : "linear-gradient(135deg, rgba(49,95,131,0.94), rgba(35,68,94,0.96))",
+              color: analysisMode.loading ? "var(--analyst-blue)" : "#fff8eb",
+              fontSize: "0.78rem",
+              fontWeight: 700,
               cursor: analysisMode.loading ? "wait" : "pointer",
+              boxShadow: analysisMode.loading
+                ? "none"
+                : "0 14px 30px rgba(30, 62, 88, 0.22)",
             }}
           >
             {analysisMode.loading ? t("header.status.processing") : t("query.submit")}
@@ -2158,29 +2269,24 @@ export default function Home() {
                 style={{
                   width: "100%",
                   marginTop: "6px",
-                  padding: "6px 4px",
-                  borderTopWidth: "1px",
-                  borderRightWidth: chain.chain_id === activeChainId ? "1px" : "0",
-                  borderBottomWidth: chain.chain_id === activeChainId ? "1px" : "0",
-                  borderLeftWidth: chain.chain_id === activeChainId ? "1px" : "0",
-                  borderTopStyle: "dashed",
-                  borderRightStyle: chain.chain_id === activeChainId ? "solid" : "none",
-                  borderBottomStyle: chain.chain_id === activeChainId ? "solid" : "none",
-                  borderLeftStyle: chain.chain_id === activeChainId ? "solid" : "none",
-                  borderTopColor: "rgba(160,140,110,0.18)",
-                  borderRightColor: chain.chain_id === activeChainId ? "rgba(59,110,165,0.22)" : "transparent",
-                  borderBottomColor: chain.chain_id === activeChainId ? "rgba(59,110,165,0.22)" : "transparent",
-                  borderLeftColor: chain.chain_id === activeChainId ? "rgba(59,110,165,0.22)" : "transparent",
-                  borderRadius: "4px",
+                  padding: "8px 9px",
+                  borderWidth: "1px",
+                  borderStyle: "solid",
+                  borderColor: chain.chain_id === activeChainId
+                    ? "rgba(49,95,131,0.34)"
+                    : "rgba(160,140,110,0.14)",
+                  borderRadius: "12px",
                   background: chain.chain_id === activeChainId
-                    ? "rgba(59,110,165,0.08)"
-                    : "transparent",
+                    ? "linear-gradient(135deg, rgba(49,95,131,0.12), rgba(255,255,255,0.78))"
+                    : "rgba(255,255,255,0.45)",
                   cursor: "pointer",
                   textAlign: "left",
-                  paddingTop: "6px",
-                  fontSize: "0.58rem",
-                  color: "#6b5a42",
+                  fontSize: "0.62rem",
+                  color: "var(--analyst-ink-soft)",
                   lineHeight: 1.5,
+                  boxShadow: chain.chain_id === activeChainId
+                    ? "0 10px 24px rgba(49,95,131,0.12)"
+                    : "none",
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
@@ -2189,8 +2295,8 @@ export default function Home() {
                 </div>
                 <div>
                   {locale === "en"
-                    ? `${chain.supportCount} support · ${chain.refuteCount} refute · ${chain.nodeCount} nodes`
-                    : `${chain.supportCount} 支撑 · ${chain.refuteCount} 反驳 · ${chain.nodeCount} 节点`}
+                    ? `${chain.supportCount} support / ${chain.refuteCount} refute / ${chain.nodeCount} nodes`
+                    : `${chain.supportCount} \u652f\u6301 / ${chain.refuteCount} \u53cd\u9a73 / ${chain.nodeCount} \u8282\u70b9`}
                 </div>
               </button>
             ))}
@@ -2211,9 +2317,6 @@ export default function Home() {
           <div className="compact-label">{t("home.summary.nodeMix")}</div>
           <div>
             {nodeTypeCounts.factor} {t("graph.type.factor")} · {nodeTypeCounts.intermediate} {t("graph.type.intermediate")} · {nodeTypeCounts.outcome} {t("graph.type.outcome")}
-          </div>
-          <div style={{ marginTop: "4px", fontSize: "0.6rem", color: "#7a6b55" }}>
-            {t("home.summary.dragHint")}
           </div>
         </div>
 
@@ -2317,18 +2420,28 @@ export default function Home() {
         className="right-panel"
         style={{
           position: "absolute",
-          top: "52px",
+          display: rightPanelOpen ? "block" : "none",
+          top: "64px",
           right: 0,
-          width: "180px",
+          width: "340px",
           bottom: 0,
-          padding: "16px 12px",
-          background: "rgba(250, 246, 238, 0.7)",
-          backdropFilter: "blur(4px)",
-          borderLeft: "1px solid rgba(160, 140, 110, 0.15)",
+          padding: "40px 16px 18px",
+          background: "linear-gradient(180deg, rgba(255,252,246,0.90), rgba(238,226,207,0.76))",
+          backdropFilter: "blur(18px)",
+          borderLeft: "1px solid var(--analyst-border)",
+          boxShadow: "-18px 0 44px rgba(72, 48, 22, 0.10)",
           zIndex: 50,
           overflowY: "auto",
         }}
       >
+        <button
+          type="button"
+          onClick={() => setRightPanelOpen(false)}
+          className="panel-embedded-toggle panel-embedded-toggle-right"
+          aria-label={locale === "en" ? "Hide right panel" : "\u9690\u85cf\u53f3\u4fa7\u9762\u677f"}
+        >
+          {locale === "en" ? "Hide" : "\u6536\u8d77"}
+        </button>
         <h2 className="panel-title">{t("home.selected.title")}</h2>
 
         {selectedNote ? (
@@ -2743,6 +2856,7 @@ export default function Home() {
           </div>
         </div>
 
+        {false && (
         <div
           className="compact-item"
           style={{ marginTop: "16px", background: "rgba(255, 248, 240, 0.8)" }}
@@ -2771,18 +2885,20 @@ export default function Home() {
             <br />• {t("home.actions.dragNotes")}
           </div>
         </div>
+        )}
       </aside>
 
       <div
         className="main-canvas"
         style={{
           position: "absolute",
-          top: "52px",
+          top: "64px",
           left: 0,
           right: 0,
           bottom: 0,
           overflow: "hidden",
-          transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
+          transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
+          transformOrigin: "0 0",
           transition: isDragging ? "none" : "transform 0.1s ease-out",
         }}
       >
@@ -2839,26 +2955,6 @@ export default function Home() {
             </g>
           ))}
         </svg>
-
-        <div
-          style={{
-            position: "absolute",
-            left: "50%",
-            bottom: 18,
-            transform: "translateX(-50%)",
-            padding: "6px 12px",
-            borderRadius: 999,
-            background: "rgba(250, 246, 238, 0.78)",
-            border: "1px solid rgba(160, 140, 110, 0.18)",
-            color: "#7a6b55",
-            fontSize: "0.62rem",
-            letterSpacing: "0.04em",
-            zIndex: 14,
-            backdropFilter: "blur(6px)",
-          }}
-        >
-          {t("home.canvasHint")}
-        </div>
 
         {notes.map((note) => (
           <StickyCard
@@ -3051,38 +3147,312 @@ export default function Home() {
         .tag-factor { background: rgba(140, 100, 160, 0.15); color: #6a5080; }
 
         .compact-item {
-          padding: 8px 10px;
-          background: rgba(255, 255, 255, 0.5);
-          border: 1px solid rgba(160, 140, 110, 0.1);
-          border-radius: 4px;
-          margin-bottom: 8px;
-          font-size: 0.65rem;
-          color: #5c4a32;
-          line-height: 1.4;
+          padding: 10px 11px;
+          background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(248, 241, 229, 0.56));
+          border: 1px solid var(--analyst-border);
+          border-radius: 14px;
+          margin-bottom: 10px;
+          font-size: 0.68rem;
+          color: var(--analyst-ink);
+          line-height: 1.48;
+          box-shadow: 0 8px 22px rgba(72, 48, 22, 0.06);
+          transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
         }
 
         .compact-item:hover {
-          background: rgba(255, 255, 255, 0.8);
-          border-color: rgba(180, 80, 60, 0.2);
+          background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(249, 243, 232, 0.70));
+          border-color: var(--analyst-border-strong);
+          transform: translateY(-1px);
         }
 
         .compact-label {
-          font-size: 0.55rem;
-          color: #8b7355;
+          font-size: 0.58rem;
+          color: var(--analyst-muted);
           text-transform: uppercase;
-          letter-spacing: 0.05em;
-          margin-bottom: 3px;
+          letter-spacing: 0.12em;
+          margin-bottom: 6px;
+          font-weight: 700;
         }
 
         .panel-title {
-          font-family: var(--font-caveat), Caveat, cursive;
-          color: #6b5a42;
-          font-size: 1rem;
-          font-weight: 500;
+          font-family: var(--font-display), Fraunces, serif;
+          color: var(--analyst-ink);
+          font-size: 1.06rem;
+          font-weight: 650;
+          letter-spacing: -0.015em;
+          margin: 16px 0 12px;
+          padding-bottom: 9px;
+          border-bottom: 1px solid var(--analyst-border);
+        }
+
+        .query-brief {
+          position: relative;
+          overflow: hidden;
+          background:
+            radial-gradient(circle at 14% 0%, rgba(205, 83, 55, 0.13), transparent 30%),
+            linear-gradient(180deg, rgba(255,255,255,0.86), rgba(247,239,225,0.70));
+        }
+
+        .query-brief::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background-image:
+            linear-gradient(rgba(90, 68, 42, 0.035) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(90, 68, 42, 0.028) 1px, transparent 1px);
+          background-size: 18px 18px;
+          mask-image: linear-gradient(180deg, rgba(0,0,0,0.45), transparent 85%);
+        }
+
+        .query-brief-title {
+          position: relative;
+          margin-bottom: 9px;
+          color: var(--analyst-ink);
+          font-family: var(--font-display), Fraunces, serif;
+          font-size: 1.05rem;
+          font-weight: 650;
+          letter-spacing: -0.02em;
+        }
+
+        .analyst-textarea,
+        .analyst-input {
+          position: relative;
+          font-family: var(--font-sans), sans-serif;
+          transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+        }
+
+        .analyst-textarea:focus,
+        .analyst-input:focus {
+          border-color: rgba(49, 95, 131, 0.42) !important;
+          box-shadow: 0 0 0 3px rgba(49, 95, 131, 0.10), inset 0 1px 0 rgba(255,255,255,0.78);
+        }
+
+        .analyst-input {
+          width: 100%;
+          box-sizing: border-box;
+          margin-top: 5px;
+          padding: 8px 10px;
+          border: 1px solid var(--analyst-border);
+          border-radius: 11px;
+          outline: none;
+          background: rgba(255,255,255,0.76);
+          color: var(--analyst-ink);
+          font-size: 0.68rem;
+        }
+
+        .advanced-toggle {
+          position: relative;
+          width: 100%;
+          margin-top: 9px;
+          padding: 8px 10px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          border: 1px solid rgba(111, 85, 52, 0.14);
+          border-radius: 12px;
+          background: rgba(255, 251, 244, 0.70);
+          color: var(--analyst-muted);
+          font-size: 0.64rem;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          cursor: pointer;
+        }
+
+        .advanced-toggle:hover {
+          color: var(--analyst-blue);
+          border-color: rgba(49, 95, 131, 0.24);
+          background: rgba(255, 255, 255, 0.82);
+        }
+
+        .advanced-settings {
+          position: relative;
+          margin-top: 9px;
+          padding: 9px;
+          border: 1px dashed rgba(111, 85, 52, 0.18);
+          border-radius: 13px;
+          background: rgba(255, 248, 237, 0.54);
+        }
+
+        .provider-lock {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          margin-top: 5px;
+          padding: 8px 10px;
+          border: 1px solid var(--analyst-border);
+          border-radius: 11px;
+          background: rgba(255, 255, 255, 0.68);
+          color: var(--analyst-ink);
+          font-size: 0.68rem;
+          font-weight: 700;
+        }
+
+        .provider-lock span:last-child {
+          color: var(--analyst-muted);
+          font-size: 0.56rem;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .panel-toggle-button {
+          position: absolute;
+          top: 118px;
+          z-index: 72;
+          border: 1px solid rgba(101, 75, 42, 0.14);
+          border-radius: 999px;
+          padding: 5px 8px;
+          background: rgba(255, 250, 239, 0.64);
+          color: rgba(92, 74, 50, 0.68);
+          cursor: pointer;
+          font-size: 0.58rem;
+          font-weight: 700;
+          box-shadow: 0 8px 20px rgba(72, 48, 22, 0.08);
+          backdrop-filter: blur(12px);
+          transition:
+            transform 0.16s ease,
+            background 0.16s ease,
+            color 0.16s ease,
+            opacity 0.16s ease;
+          opacity: 0.62;
+        }
+
+        .panel-toggle-left {
+          left: 8px;
+        }
+
+        .panel-toggle-right {
+          right: 8px;
+        }
+
+        .panel-toggle-button:hover {
+          transform: translateY(-1px);
+          background: rgba(255, 250, 239, 0.92);
+          border-color: rgba(49, 95, 131, 0.28);
+          color: var(--analyst-blue);
+          opacity: 1;
+        }
+
+        .panel-embedded-toggle {
+          position: absolute;
+          top: 12px;
+          right: 12px;
+          z-index: 2;
+          border: 1px solid rgba(101, 75, 42, 0.12);
+          border-radius: 999px;
+          padding: 4px 8px;
+          background: rgba(255, 255, 255, 0.52);
+          color: rgba(92, 74, 50, 0.58);
+          cursor: pointer;
+          font-size: 0.54rem;
+          font-weight: 800;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          backdrop-filter: blur(10px);
+        }
+
+        .panel-embedded-toggle-right {
+          right: auto;
+          left: 12px;
+        }
+
+        .panel-embedded-toggle:hover {
+          background: rgba(255, 255, 255, 0.86);
+          border-color: rgba(49, 95, 131, 0.24);
+          color: var(--analyst-blue);
+        }
+
+        .zoom-controls {
+          position: absolute;
+          top: 112px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 74;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding: 4px;
+          border: 1px solid rgba(101, 75, 42, 0.14);
+          border-radius: 999px;
+          background: rgba(255, 250, 239, 0.72);
+          box-shadow: 0 10px 24px rgba(72, 48, 22, 0.08);
+          backdrop-filter: blur(12px);
+        }
+
+        .zoom-controls button {
+          min-width: 30px;
+          height: 26px;
+          border: 0;
+          border-radius: 999px;
+          background: transparent;
+          color: rgba(92, 74, 50, 0.72);
+          cursor: pointer;
+          font-size: 0.62rem;
+          font-weight: 800;
+        }
+
+        .zoom-controls button:hover:not(:disabled) {
+          background: rgba(49, 95, 131, 0.10);
+          color: var(--analyst-blue);
+        }
+
+        .zoom-controls button:disabled {
+          opacity: 0.38;
+          cursor: not-allowed;
+        }
+
+        .canvas-hint {
+          position: absolute;
+          top: 78px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 20;
+          pointer-events: none;
+          max-width: min(620px, calc(100vw - 48px));
+          padding: 7px 12px;
+          border: 1px solid rgba(101, 75, 42, 0.16);
+          border-radius: 999px;
+          background: rgba(255, 250, 239, 0.74);
+          box-shadow: 0 10px 24px rgba(72, 48, 22, 0.08);
+          color: var(--analyst-muted);
+          font-size: 0.62rem;
+          font-weight: 700;
+          letter-spacing: 0.03em;
+          text-align: center;
+          backdrop-filter: blur(10px);
+        }
+
+        .command-chip-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 10px;
+        }
+
+        .command-chip {
+          border: 1px solid rgba(255, 248, 235, 0.18);
+          border-radius: 999px;
+          padding: 4px 8px;
+          background: rgba(255, 248, 235, 0.08);
+          color: rgba(255, 248, 235, 0.78);
+          font-size: 0.58rem;
+          font-weight: 700;
           letter-spacing: 0.05em;
-          margin-bottom: 12px;
-          padding-bottom: 8px;
-          border-bottom: 1px solid rgba(160, 140, 110, 0.15);
+          text-transform: uppercase;
+        }
+
+        .command-chip-strong {
+          border-color: rgba(118, 166, 119, 0.36);
+          background: rgba(118, 166, 119, 0.16);
+          color: #dff1d6;
+        }
+
+        .command-chip-caution {
+          border-color: rgba(209, 159, 75, 0.38);
+          background: rgba(209, 159, 75, 0.15);
+          color: #f4ddb4;
         }
 
         ::-webkit-scrollbar {

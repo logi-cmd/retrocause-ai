@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 3,
+  "task": "修复前端因果画布低高度视口下便签上下拖拽边界与底部遮挡问题，并同步文档与端到端测试",
+  "preset": "generic",
+  "createdAt": "2026-04-12T15:54:11.432Z",
+  "allowedPaths": [],
+  "requiredCommands": [
+    "npm test"
+  ],
+  "evidencePaths": [
+    ".agent-guardrails/evidence/current-task.md"
+  ],
+  "intendedFiles": [],
+  "protectedPaths": [],
+  "allowedChangeTypes": [],
+  "riskLevel": "high",
+  "requiresReviewNotes": true,
+  "validationProfile": "standard",
+  "securityRequirements": [],
+  "dependencyRequirements": [],
+  "performanceRequirements": [],
+  "understandingRequirements": [],
+  "continuityRequirements": [],
+  "acknowledgedSkips": [],
+  "patternSummary": "",
+  "smallestViableChange": "",
+  "assumptions": [],
+  "acceptanceCriteria": [],
+  "nonGoals": [],
+  "expectedBehaviorChanges": [],
+  "userVisibleEffects": [],
+  "intendedSymbols": [],
+  "expectedPublicSurfaceChanges": [],
+  "expectedBoundaryExceptions": [],
+  "expectedTestTargets": [],
+  "productionProfile": "",
+  "nfrRequirements": [],
+  "expectedLoadSensitivePaths": [],
+  "expectedConcurrencyImpact": "",
+  "observabilityRequirements": [],
+  "rollbackNotes": "",
+  "riskJustification": "",
+  "guardRules": [
+    "保留原有行为",
+    "添加回归测试",
+    "记录修复原因"
+  ],
+  "roughIntent": {
+    "detected": true,
+    "taskType": "bugfix",
+    "confidence": 0.68,
+    "sources": {
+      "taskType": "关键词匹配 (68% 置信度)",
+      "paths": "任务类型默认",
+      "testCommand": "default",
+      "riskLevel": "基于任务类型: bugfix"
+    }
+  },
+  "autoFilledFields": [
+    "allowedPaths",
+    "requiredCommands",
+    "riskLevel",
+    "guardRules"
+  ]
+}

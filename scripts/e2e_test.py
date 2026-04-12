@@ -451,8 +451,70 @@ else:
                     "cards disappeared after query",
                 )
 
-                # 11d: Chain comparison switching regression
-                print("\n  --- 11d: Chain Compare Switching ---")
+                # 11d: Panel visibility controls
+                print("\n  --- 11d: Panel Visibility Controls ---")
+                embedded_toggles = page.locator(".panel-embedded-toggle")
+                check(
+                    "UI embedded panel controls visible",
+                    embedded_toggles.count() >= 2,
+                    f"found {embedded_toggles.count()} embedded controls",
+                )
+                if embedded_toggles.count() >= 2:
+                    embedded_toggles.nth(0).click()
+                    time.sleep(0.3)
+                    check("UI left panel hides", not page.locator(".left-panel").is_visible())
+                    page.locator(".panel-toggle-left").click()
+                    time.sleep(0.3)
+                    check("UI left panel shows again", page.locator(".left-panel").is_visible())
+                    page.locator(".panel-embedded-toggle-right").click()
+                    time.sleep(0.3)
+                    check("UI right panel hides", not page.locator(".right-panel").is_visible())
+                    page.locator(".panel-toggle-right").click()
+                    time.sleep(0.3)
+                    check("UI right panel shows again", page.locator(".right-panel").is_visible())
+
+                # 11e: Canvas zoom controls
+                print("\n  --- 11e: Canvas Zoom Controls ---")
+                zoom_controls = page.locator(".zoom-controls")
+                check("UI zoom controls visible", zoom_controls.count() == 1)
+                if zoom_controls.count() == 1:
+                    zoom_buttons = zoom_controls.locator("button")
+                    check(
+                        "UI zoom control has three buttons",
+                        zoom_buttons.count() == 3,
+                        f"found {zoom_buttons.count()} zoom buttons",
+                    )
+                    if zoom_buttons.count() == 3:
+                        zoom_buttons.nth(2).click()
+                        time.sleep(0.2)
+                        check("UI zoom increases", "110%" in zoom_controls.text_content())
+                        zoom_buttons.nth(1).click()
+                        time.sleep(0.2)
+                        check("UI zoom reset works", "100%" in zoom_controls.text_content())
+
+                # 11f: Bottom drag safety
+                print("\n  --- 11f: Bottom Drag Safety ---")
+                drag_card = page.locator(".sticky-card").first
+                if drag_card.count() > 0:
+                    box = drag_card.bounding_box()
+                    viewport_height = page.evaluate("window.innerHeight")
+                    if box:
+                        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                        page.mouse.down()
+                        page.mouse.move(box["x"] + box["width"] / 2, viewport_height - 5, steps=12)
+                        page.mouse.up()
+                        time.sleep(0.2)
+                        dragged_bottom = drag_card.evaluate(
+                            "el => el.getBoundingClientRect().bottom"
+                        )
+                        check(
+                            "UI dragged note keeps compact bottom safe area",
+                            40 <= viewport_height - dragged_bottom <= 90,
+                            f"bottom gap={viewport_height - dragged_bottom:.1f}px",
+                        )
+
+                # 11g: Chain comparison switching regression
+                print("\n  --- 11g: Chain Compare Switching ---")
                 compare_buttons = page.locator("[data-testid^='chain-compare-']")
                 compare_count = compare_buttons.count()
                 check(
@@ -478,8 +540,8 @@ else:
                         f"aria-pressed={first_chain.get_attribute('aria-pressed')}",
                     )
 
-                # 11e: Node selection
-                print("\n  --- 11e: Node Click + Selection ---")
+                # 11h: Node selection
+                print("\n  --- 11h: Node Click + Selection ---")
                 first_card = cards_after.first
                 first_card.click()
                 time.sleep(0.5)
@@ -502,7 +564,7 @@ else:
                     f"right panel: {(right_after_click or '')[:150]}",
                 )
 
-                # 11f: Deselect
+                # 11i: Deselect
                 if selected.count() > 0:
                     first_card.click()
                     time.sleep(0.3)
@@ -512,8 +574,8 @@ else:
                         "sticky card still selected after second click",
                     )
 
-        # 11g: Language toggle
-        print("\n  --- 11g: Language Toggle ---")
+        # 11j: Language toggle
+        print("\n  --- 11j: Language Toggle ---")
         lang_btn = page.locator("button:has-text('EN')").first
         if lang_btn.count() == 0:
             lang_btn = page.locator("button:has-text('中')").first
@@ -533,8 +595,8 @@ else:
         else:
             skip("UI language toggle", "button not found")
 
-        # 11h: Post-toggle node click
-        print("\n  --- 11h: Post-toggle Node Interaction ---")
+        # 11k: Post-toggle node click
+        print("\n  --- 11k: Post-toggle Node Interaction ---")
         all_cards = page.locator(".sticky-card")
         if all_cards.count() > 0:
             all_cards.first.click()
@@ -542,8 +604,8 @@ else:
             selected2 = page.locator("[data-testid^='sticky-card-'][aria-pressed='true']")
             check("UI node selectable after language toggle", selected2.count() > 0)
 
-        # 11i: No console errors
-        print("\n  --- 11i: Console Health ---")
+        # 11l: No console errors
+        print("\n  --- 11l: Console Health ---")
         page.reload(wait_until="networkidle")
         time.sleep(2)
         critical_errors = [

@@ -42,6 +42,13 @@ Expected:
 - hypothesis list visible
 - chain / graph area visible
 - right-side detail area visible
+- query area reads as an investigation brief, with provider/API-key controls collapsed under advanced settings
+- provider settings show OpenRouter as the fixed OSS provider rather than a multi-provider dropdown
+- command bar shows coverage/source health chips when live or partial-live evidence is available
+- left and right panels can be hidden from subtle embedded controls and restored from low-emphasis edge tabs
+- the center view hint avoids the old "drag canvas" wording, stays away from the bottom drag area, and does not block dragging evidence notes
+- canvas zoom controls are visible near the top of the board, can zoom in/out, and can reset to 100%
+- dragging a single sticky note downward leaves only a compact bottom safety area, so the lower canvas remains usable without clipping the note
 
 ---
 
@@ -72,6 +79,8 @@ Expected:
 - hypothesis list updates or remains usable
 - chain view remains interactive
 - right panel remains coherent
+- expanding and collapsing provider settings does not clear the query
+- submit button remains visually disabled while the query is empty or a run is loading
 
 ---
 
@@ -134,6 +143,7 @@ Expected:
 - selected path is visually highlighted
 - right panel updates for the clicked node
 - upstream causes can be traversed step-by-step
+- switching chain B and then chain A updates the active chain state without console border shorthand warnings
 
 ---
 
