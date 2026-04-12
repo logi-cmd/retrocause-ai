@@ -6,6 +6,9 @@ build/
 .venv/
 .pytest_cache/
 .ruff_cache/
+.pip-tmp/
+.tmp-tests/
+.retrocause/
 
 # Node / frontend dependencies
 node_modules/

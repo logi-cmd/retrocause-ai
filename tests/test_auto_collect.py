@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from retrocause.collector import EvidenceCollector
+from retrocause.collector import EvidenceCollector, reset_source_limit_state
 from retrocause.engine import RetroCauseEngine, analyze
 from retrocause.llm import ExtractedEvidence
 from retrocause.models import EvidenceType
@@ -23,6 +23,21 @@ class _FakeSourceAdapter(BaseSourceAdapter):
 
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         return self._results[:max_results]
+
+
+class _NamedFakeSourceAdapter(_FakeSourceAdapter):
+    def __init__(self, name: str, results: list[SearchResult]):
+        super().__init__(results)
+        self._name = name
+        self.calls: list[str] = []
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
+        self.calls.append(query)
+        return super().search(query, max_results=max_results)
 
 
 class _FakeLLMClient:
@@ -67,7 +82,12 @@ def _make_search_results() -> list[SearchResult]:
     ]
 
 
+def _reset_source_state() -> None:
+    reset_source_limit_state()
+
+
 def test_auto_collect_basic():
+    _reset_source_state()
     collector = EvidenceCollector()
     fake_llm = _FakeLLMClient()
     fake_source = _FakeSourceAdapter(_make_search_results())
@@ -86,6 +106,7 @@ def test_auto_collect_basic():
 
 
 def test_auto_collect_dedup():
+    _reset_source_state()
     collector = EvidenceCollector()
     extracted = [
         ExtractedEvidence(content="Same claim", relevance=0.8, variables=["x"], confidence=0.7),
@@ -109,7 +130,230 @@ def test_auto_collect_dedup():
     assert new_evidence[1].content == "Different claim"
 
 
+def test_auto_collect_fallback_summary_preserves_source_metadata():
+    _reset_source_state()
+    collector = EvidenceCollector()
+    fake_source = _FakeSourceAdapter(_make_search_results())
+
+    class _EmptyExtractLLM(_FakeLLMClient):
+        def extract_evidence(
+            self, query: str, raw_text: str, source_type: str
+        ) -> list[ExtractedEvidence]:
+            return []
+
+    fake_llm = _EmptyExtractLLM()
+
+    new_evidence = collector.auto_collect(
+        query="test query",
+        domain="general",
+        llm_client=fake_llm,
+        source_adapters=[fake_source],
+    )
+
+    assert len(new_evidence) >= 1
+    assert new_evidence[0].extraction_method == "fallback_summary"
+    assert new_evidence[0].source_tier == "base"
+    assert new_evidence[0].freshness in {"stable", "recent", "unknown"}
+
+
+def test_auto_collect_prefers_page_content_for_web_quality():
+    _reset_source_state()
+    collector = EvidenceCollector()
+
+    class _CapturingLLM(_FakeLLMClient):
+        def __init__(self):
+            super().__init__(
+                extracted=[
+                    ExtractedEvidence(
+                        content="Satellite handshake evidence supports route deviation.",
+                        relevance=0.92,
+                        variables=["satellite_handshake", "route_deviation"],
+                        confidence=0.74,
+                    )
+                ]
+            )
+            self.last_raw_text = ""
+
+        def extract_evidence(
+            self, query: str, raw_text: str, source_type: str
+        ) -> list[ExtractedEvidence]:
+            self.last_raw_text = raw_text
+            return self._extracted
+
+    fake_llm = _CapturingLLM()
+    fake_source = _FakeSourceAdapter(
+        [
+            SearchResult(
+                title="MH370 analysis",
+                content="Short snippet that should not dominate.",
+                url="https://example.com/report",
+                source_type=EvidenceType.NEWS,
+                metadata={
+                    "page_content": (
+                        "Detailed report with satellite handshake analysis, radar gaps, "
+                        "and route deviation evidence."
+                    ),
+                    "content_quality": "fulltext",
+                },
+            )
+        ]
+    )
+
+    new_evidence = collector.auto_collect(
+        query="MH370为什么失踪",
+        domain="aviation",
+        llm_client=fake_llm,
+        source_adapters=[fake_source],
+    )
+
+    assert "Detailed report with satellite handshake analysis" in fake_llm.last_raw_text
+    assert "Short snippet that should not dominate." not in fake_llm.last_raw_text
+    assert len(new_evidence) == 1
+    assert new_evidence[0].extraction_method == "llm_fulltext"
+    assert new_evidence[0].posterior_reliability > 0.74
+
+
+def test_geopolitics_collects_more_than_one_source_when_coverage_is_thin():
+    _reset_source_state()
+    collector = EvidenceCollector()
+
+    class _CoverageLLM(_FakeLLMClient):
+        def __init__(self):
+            super().__init__(
+                sub_queries=["United States Iran talks", "US Iran negotiation reasons"]
+            )
+            self.extract_calls = 0
+
+        def build_search_queries(self, query: str, domain: str) -> list[str]:
+            return self._sub_queries
+
+        def extract_evidence(
+            self, query: str, raw_text: str, source_type: str
+        ) -> list[ExtractedEvidence]:
+            self.extract_calls += 1
+            return [
+                ExtractedEvidence(
+                    content=f"Claim {self.extract_calls}A from {source_type}",
+                    relevance=0.9,
+                    variables=["diplomacy"],
+                    confidence=0.8,
+                ),
+                ExtractedEvidence(
+                    content=f"Claim {self.extract_calls}B from {source_type}",
+                    relevance=0.8,
+                    variables=["negotiations"],
+                    confidence=0.75,
+                ),
+            ]
+
+    first_source = _NamedFakeSourceAdapter(
+        "ap_news",
+        [
+            SearchResult(
+                title="AP talks",
+                content="AP evidence about US Iran talks",
+                url="https://apnews.com/article/one",
+                source_type=EvidenceType.NEWS,
+                metadata={"content_quality": "trusted_fulltext", "page_content": "AP full text"},
+            )
+        ],
+    )
+    second_source = _NamedFakeSourceAdapter(
+        "web",
+        [
+            SearchResult(
+                title="Official statement",
+                content="Official evidence about US Iran negotiations",
+                url="https://state.gov/example",
+                source_type=EvidenceType.NEWS,
+                metadata={"content_quality": "trusted_fulltext", "page_content": "Official text"},
+            )
+        ],
+    )
+    fake_llm = _CoverageLLM()
+
+    new_evidence = collector.auto_collect(
+        query="为什么美国会同意与伊朗进行首轮谈判？",
+        domain="geopolitics",
+        llm_client=fake_llm,
+        source_adapters=[first_source, second_source],
+        max_results_per_source=1,
+    )
+
+    assert len(new_evidence) >= 4
+    assert len(first_source.calls) >= 1
+    assert len(second_source.calls) >= 1
+
+
+def test_auto_collect_attributes_extracted_evidence_to_best_matching_source():
+    _reset_source_state()
+    collector = EvidenceCollector()
+
+    ap_source = _NamedFakeSourceAdapter(
+        "ap_news",
+        [
+            SearchResult(
+                title="Semiconductor market update",
+                content="AP report about chip supply chains.",
+                url="https://apnews.com/article/chips",
+                source_type=EvidenceType.NEWS,
+                metadata={
+                    "content_quality": "trusted_fulltext",
+                    "page_content": "Chip supply chain market update.",
+                },
+            )
+        ],
+    )
+    official_source = _NamedFakeSourceAdapter(
+        "federal_register",
+        [
+            SearchResult(
+                title="Export Controls on Semiconductor Manufacturing Items",
+                content="BIS revised the Export Administration Regulations.",
+                url="https://www.federalregister.gov/documents/export-controls",
+                source_type=EvidenceType.ARCHIVE,
+                metadata={
+                    "published": "2024-12-05",
+                    "content_quality": "trusted_fulltext",
+                    "page_content": (
+                        "The Bureau of Industry and Security revised the Export "
+                        "Administration Regulations for semiconductor manufacturing items."
+                    ),
+                },
+            )
+        ],
+    )
+    fake_llm = _FakeLLMClient(
+        sub_queries=["export controls semiconductor"],
+        extracted=[
+            ExtractedEvidence(
+                content=(
+                    "The Bureau of Industry and Security revised the Export "
+                    "Administration Regulations for semiconductor manufacturing items."
+                ),
+                relevance=0.9,
+                variables=["export_controls"],
+                confidence=0.86,
+            )
+        ],
+    )
+
+    new_evidence = collector.auto_collect(
+        query="美国为什么会推出新的半导体出口管制？",
+        domain="geopolitics",
+        llm_client=fake_llm,
+        source_adapters=[ap_source, official_source],
+        max_results_per_source=1,
+    )
+
+    assert len(new_evidence) == 1
+    assert new_evidence[0].source_type == EvidenceType.ARCHIVE
+    assert new_evidence[0].source_url == "https://www.federalregister.gov/documents/export-controls"
+    assert new_evidence[0].timestamp == "2024-12-05"
+
+
 def test_auto_collect_no_llm():
+    _reset_source_state()
     collector = EvidenceCollector()
     result = collector.auto_collect(
         query="test", domain="general", llm_client=None, source_adapters=[]
@@ -118,6 +362,7 @@ def test_auto_collect_no_llm():
 
 
 def test_auto_collect_no_sources():
+    _reset_source_state()
     collector = EvidenceCollector()
     fake_llm = _FakeLLMClient()
     result = collector.auto_collect(
@@ -130,6 +375,7 @@ def test_auto_collect_no_sources():
 
 
 def test_auto_collect_source_error_graceful():
+    _reset_source_state()
     collector = EvidenceCollector()
     fake_llm = _FakeLLMClient()
 
@@ -155,6 +401,7 @@ def test_auto_collect_source_error_graceful():
 
 
 def test_engine_with_auto_collect():
+    _reset_source_state()
     fake_llm = _FakeLLMClient()
     fake_source = _FakeSourceAdapter(_make_search_results())
 
@@ -176,6 +423,7 @@ def test_engine_without_auto_collect():
 
 
 def test_collector_add_evidence_dedup():
+    _reset_source_state()
     collector = EvidenceCollector()
     ev1 = collector.add_evidence("test content", EvidenceType.DATA)
     ev2 = collector.add_evidence("test content", EvidenceType.DATA)

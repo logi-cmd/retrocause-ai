@@ -1064,21 +1064,56 @@ PROVIDERS: dict[str, dict] = {
 }
 
 
+def _select_source_names(configured_sources: str | None, domain: str) -> list[str]:
+    if configured_sources:
+        return [item.strip() for item in configured_sources.split(",") if item.strip()]
+
+    if domain == "geopolitics":
+        return ["ap_news", "federal_register", "gdelt", "web"]
+    if domain in {"finance", "business"}:
+        return ["ap_news", "web", "gdelt", "arxiv"]
+    return ["arxiv", "semantic_scholar", "web"]
+
+
 def run_real_analysis(
     query: str, api_key: str, model: str, base_url: str | None
 ) -> AnalysisResult | None:
+    import os
+
     from retrocause.config import RetroCauseConfig as _Config
     from retrocause.engine import analyze as _analyze
     from retrocause.llm import LLMClient as _LLMClient
+    from retrocause.sources.ap_news import APNewsAdapter as _AP
     from retrocause.sources.arxiv import ArxivSourceAdapter as _Arxiv
+    from retrocause.sources.federal_register import FederalRegisterAdapter as _FederalRegister
+    from retrocause.sources.gdelt import GdeltNewsAdapter as _Gdelt
     from retrocause.sources.semantic_scholar import SemanticScholarAdapter as _SS
     from retrocause.sources.web import WebSearchAdapter as _Web
+    from retrocause.parser import parse_input as _parse_input
+
+    available_sources = {
+        "ap_news": _AP,
+        "arxiv": _Arxiv,
+        "federal_register": _FederalRegister,
+        "semantic_scholar": _SS,
+        "web": _Web,
+        "gdelt": _Gdelt,
+    }
+    parsed = _parse_input(query)
+    requested_sources = _select_source_names(os.environ.get("RETROCAUSE_ENABLED_SOURCES"), parsed.domain)
 
     cfg = _Config.from_env()
     llm = _LLMClient(
         api_key=api_key, model=model, base_url=base_url, timeout=cfg.request_timeout_seconds
     )
-    sources = [_Arxiv(), _SS(), _Web()]
+    ok, preflight_error = llm.preflight_model_access()
+    if not ok:
+        raise RuntimeError(preflight_error or "Model preflight failed.")
+    sources = [
+        available_sources[name]()
+        for name in requested_sources
+        if name in available_sources
+    ] or [_Arxiv(), _SS(), _Web()]
     return _analyze(query, llm_client=llm, source_adapters=sources, config=cfg)
 
 
@@ -1089,18 +1124,42 @@ def run_real_analysis_with_progress(
     base_url: str | None,
     on_progress: object,
 ) -> AnalysisResult | None:
+    import os
+
     from retrocause.config import RetroCauseConfig as _Config
     from retrocause.engine import analyze as _analyze
     from retrocause.llm import LLMClient as _LLMClient
+    from retrocause.sources.ap_news import APNewsAdapter as _AP
     from retrocause.sources.arxiv import ArxivSourceAdapter as _Arxiv
+    from retrocause.sources.federal_register import FederalRegisterAdapter as _FederalRegister
+    from retrocause.sources.gdelt import GdeltNewsAdapter as _Gdelt
     from retrocause.sources.semantic_scholar import SemanticScholarAdapter as _SS
     from retrocause.sources.web import WebSearchAdapter as _Web
+    from retrocause.parser import parse_input as _parse_input
+
+    available_sources = {
+        "ap_news": _AP,
+        "arxiv": _Arxiv,
+        "federal_register": _FederalRegister,
+        "semantic_scholar": _SS,
+        "web": _Web,
+        "gdelt": _Gdelt,
+    }
+    parsed = _parse_input(query)
+    requested_sources = _select_source_names(os.environ.get("RETROCAUSE_ENABLED_SOURCES"), parsed.domain)
 
     cfg = _Config.from_env()
     llm = _LLMClient(
         api_key=api_key, model=model, base_url=base_url, timeout=cfg.request_timeout_seconds
     )
-    sources = [_Arxiv(), _SS(), _Web()]
+    ok, preflight_error = llm.preflight_model_access()
+    if not ok:
+        raise RuntimeError(preflight_error or "Model preflight failed.")
+    sources = [
+        available_sources[name]()
+        for name in requested_sources
+        if name in available_sources
+    ] or [_Arxiv(), _SS(), _Web()]
     return _analyze(
         query,
         llm_client=llm,

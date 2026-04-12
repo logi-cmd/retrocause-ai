@@ -81,10 +81,10 @@ class Pipeline:
 
             if self._hook_engine is not None:
                 violations = self._hook_engine.evaluate({"hypotheses": ctx.hypotheses})
-                for v in violations:
-                    ctx.violations.append(
-                        {"step": step.name, "rule": v.rule_name, "message": v.message}
-                    )
+                ctx.violations = [
+                    {"step": step.name, "rule": v.rule_name, "message": v.message}
+                    for v in violations
+                ]
 
         if ctx.on_progress is not None:
             try:

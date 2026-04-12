@@ -56,6 +56,10 @@ type ApiEvidence = {
   source: string;
   reliability: string;
   is_supporting: boolean;
+  source_tier?: string;
+  freshness?: string;
+  timestamp?: string | null;
+  extraction_method?: string;
 };
 
 type ApiChain = {
@@ -74,6 +78,10 @@ type AnalyzeResponseV2 = {
   query: string;
   is_demo: boolean;
   demo_topic: string | null;
+  analysis_mode: "live" | "partial_live" | "demo";
+  freshness_status: string;
+  time_range?: string | null;
+  partial_live_reasons?: string[];
   recommended_chain_id: string | null;
   evidences: ApiEvidence[];
   chains: ApiChain[];
@@ -114,6 +122,361 @@ type AnalyzeResponseV2 = {
   error?: string | null;
 };
 
+type AnalysisUiState = {
+  isDemo: boolean;
+  demoTopic: string | null;
+  loading: boolean;
+  mode: "live" | "partial_live" | "demo";
+  freshnessStatus: string;
+  timeRange: string | null;
+  partialLiveReasons: string[];
+};
+
+function formatEvidenceTierLabel(
+  item: ApiEvidence,
+  locale: "zh" | "en"
+): string {
+  if (item.source_tier === "fresh") {
+    return locale === "en" ? "Fresh source" : "实时来源";
+  }
+  if (item.extraction_method === "llm_fulltext_trusted") {
+    return locale === "en" ? "Trusted full text" : "可信正文";
+  }
+  if (item.extraction_method === "llm_fulltext") {
+    return locale === "en" ? "Full text" : "正文";
+  }
+  if (item.extraction_method === "store_cache") {
+    return locale === "en" ? "Store cache" : "证据缓存";
+  }
+  if (item.extraction_method === "fallback_summary") {
+    return locale === "en" ? "Fallback summary" : "降级摘要";
+  }
+  if (item.source_tier === "base") {
+    return locale === "en" ? "Base source" : "基础来源";
+  }
+  return locale === "en" ? "Derived evidence" : "衍生证据";
+}
+
+function evidenceQualityCategory(
+  item: ApiEvidence
+): "trusted_fulltext" | "fulltext" | "store_cache" | "fallback" | "base" | "other" {
+  if (item.extraction_method === "llm_fulltext_trusted") return "trusted_fulltext";
+  if (item.extraction_method === "llm_fulltext") return "fulltext";
+  if (item.extraction_method === "store_cache") return "store_cache";
+  if (item.extraction_method === "fallback_summary") return "fallback";
+  if (item.source_tier === "base" || item.source_tier === "fresh") return "base";
+  return "other";
+}
+
+function evidenceSortWeight(item: ApiEvidence): number {
+  switch (evidenceQualityCategory(item)) {
+    case "trusted_fulltext":
+      return 0;
+    case "fulltext":
+      return 1;
+    case "store_cache":
+      return 2;
+    case "base":
+      return 3;
+    case "fallback":
+      return 4;
+    default:
+      return 5;
+  }
+}
+
+function evidenceCategorySummaryLabel(
+  category: "fallback" | "base",
+  count: number,
+  locale: "zh" | "en"
+): string {
+  if (locale === "en") {
+    return category === "fallback"
+      ? `${count} fallback summary`
+      : `${count} base or fresh source`;
+  }
+  return category === "fallback"
+    ? `${count} 条降级摘要`
+    : `${count} 条基础或实时来源`;
+}
+
+function formatTimeRangeLabel(
+  timeRange: string | null | undefined,
+  locale: "zh" | "en"
+): string | null {
+  if (!timeRange) return null;
+
+  const labels: Record<string, { en: string; zh: string }> = {
+    today: { en: "Today", zh: "今天" },
+    yesterday: { en: "Yesterday", zh: "昨天" },
+    last_24h: { en: "Last 24h", zh: "最近 24 小时" },
+    last_7d: { en: "Last 7 days", zh: "最近 7 天" },
+    trading_day: { en: "Current trading day", zh: "当前交易日" },
+    evergreen: { en: "Evergreen background", zh: "长期背景" },
+  };
+
+  const normalized = labels[timeRange];
+  if (normalized) {
+    return locale === "en" ? normalized.en : normalized.zh;
+  }
+
+  return timeRange.replaceAll("_", " ");
+}
+
+function formatFreshnessLabel(
+  freshnessStatus: string | null | undefined,
+  locale: "zh" | "en"
+): string {
+  switch (freshnessStatus) {
+    case "fresh":
+      return locale === "en" ? "Fresh evidence" : "新鲜证据";
+    case "mixed":
+      return locale === "en" ? "Mixed freshness" : "新鲜度混合";
+    case "stable":
+      return locale === "en" ? "Mostly stable evidence" : "以稳定证据为主";
+    case "stale":
+      return locale === "en" ? "Stale evidence" : "证据偏旧";
+    default:
+      return locale === "en" ? "Freshness unknown" : "新鲜度未知";
+  }
+}
+
+function formatAnalysisBadge(mode: AnalysisUiState["mode"], locale: "zh" | "en"): string {
+  if (mode === "demo") {
+    return locale === "en" ? "Demo" : "Demo";
+  }
+  if (mode === "partial_live") {
+    return locale === "en" ? "Partial Live" : "部分 Live";
+  }
+  return locale === "en" ? "Live" : "Live";
+}
+
+const progressStageOrder = [
+  "EvidenceCollectionStep",
+  "GraphBuildingStep",
+  "HypothesisGenerationStep",
+  "EvidenceAnchoringStep",
+  "CausalRAGStep",
+  "CounterfactualVerificationStep",
+  "UncertaintyAssessmentStep",
+  "EvaluationStep",
+];
+
+function progressStageLabel(step: string, locale: "zh" | "en"): string {
+  const labels: Record<string, { en: string; zh: string }> = {
+    EvidenceCollectionStep: { en: "Finding and reading evidence", zh: "检索并读取证据" },
+    GraphBuildingStep: { en: "Building the causal map", zh: "构建因果图" },
+    HypothesisGenerationStep: { en: "Comparing explanation chains", zh: "生成解释链" },
+    EvidenceAnchoringStep: { en: "Linking evidence to edges", zh: "绑定证据链" },
+    CausalRAGStep: { en: "Filling weak coverage", zh: "补充薄弱证据" },
+    CounterfactualVerificationStep: { en: "Checking what-if signals", zh: "校验反事实信号" },
+    DebateRefinementStep: { en: "Refining claims", zh: "精炼结论" },
+    UncertaintyAssessmentStep: { en: "Estimating uncertainty", zh: "评估不确定性" },
+    EvaluationStep: { en: "Scoring result quality", zh: "评估结果质量" },
+  };
+  const label = labels[step];
+  if (label) return locale === "en" ? label.en : label.zh;
+  return step.replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+function buildAnalysisStatusNote(
+  payload: AnalyzeResponseV2,
+  locale: "zh" | "en"
+): string {
+  const timeLabel = formatTimeRangeLabel(payload.time_range, locale);
+  const freshnessLabel = formatFreshnessLabel(payload.freshness_status, locale);
+  const firstAction = payload.evaluation?.recommended_actions?.[0];
+
+  if (payload.is_demo) {
+    if (payload.error) {
+      return locale === "en"
+        ? `Analysis failed (${payload.error}). Showing demo fallback.`
+        : `分析失败（${payload.error}），当前显示 demo 回退结果。`;
+    }
+    return locale === "en"
+      ? "Backend returned demo fallback data. Treat this as a structured example, not validated analysis."
+      : "后端返回了 demo fallback 数据。请将其视为结构化示例，而非已验证分析。";
+  }
+
+  if (payload.analysis_mode === "partial_live") {
+    const detail = firstAction
+      ? locale === "en"
+        ? ` Next best action: ${firstAction}`
+        : ` 建议优先动作：${firstAction}`
+      : "";
+    const errorDetail = payload.error
+      ? locale === "en"
+        ? ` Error: ${payload.error}`
+        : ` 错误：${payload.error}`
+      : "";
+    if (timeLabel) {
+      return locale === "en"
+        ? `Partial live analysis for ${timeLabel}. ${freshnessLabel}.${detail}${errorDetail}`
+        : `这是针对${timeLabel}的部分 live 分析。${freshnessLabel}。${detail}${errorDetail}`;
+    }
+    return locale === "en"
+      ? `Partial live analysis returned. ${freshnessLabel}.${detail}${errorDetail}`
+      : `当前返回的是部分 live 分析。${freshnessLabel}。${detail}${errorDetail}`;
+  }
+
+  if (timeLabel) {
+    return locale === "en"
+      ? `Live analysis returned for ${timeLabel}. ${freshnessLabel}. Review evidence coverage before trusting it.`
+      : `已返回针对${timeLabel}的 live 分析。${freshnessLabel}。请先检查证据覆盖，再决定是否信任结果。`;
+  }
+
+  return locale === "en"
+    ? `Live analysis returned. ${freshnessLabel}. Review evidence coverage before trusting it.`
+    : `已返回 live 分析。${freshnessLabel}。请先检查证据覆盖，再决定是否信任结果。`;
+}
+
+const ZH_CAUSAL_LABELS: Array<[RegExp, string]> = [
+  [/evidence-wide causal map/gi, "证据全图"],
+  [/supported dag context/gi, "证据支撑的 DAG 上下文"],
+  [/single root-to-outcome path/gi, "单条根因到结果路径"],
+  [/bitcoin|btc/gi, "比特币"],
+  [/cryptocurrenc(?:y|ies)|crypto assets?|crypto/gi, "加密货币"],
+  [/price drop|price decline|sell-?off|market drop|crash/gi, "价格跳水"],
+  [/bitcoin price/gi, "比特币价格"],
+  [/spot etfs?|etf flows?|exchange-traded funds?/gi, "现货 ETF 资金流"],
+  [/liquidations?|leveraged liquidations?/gi, "杠杆清算"],
+  [/leverage|leveraged positions?/gi, "杠杆仓位"],
+  [/risk sentiment|risk appetite|market sentiment/gi, "风险情绪"],
+  [/political uncertainty/gi, "政治不确定性"],
+  [/sentiment/gi, "情绪"],
+  [/overall/gi, "整体"],
+  [/among/gi, "中的"],
+  [/speculative assets?/gi, "投机资产"],
+  [/investors? pulling out of/gi, "投资者撤出"],
+  [/investors?/gi, "投资者"],
+  [/pulling out of/gi, "撤出"],
+  [/digital currencies/gi, "数字货币"],
+  [/gold/gi, "黄金"],
+  [/silver/gi, "白银"],
+  [/macro(?:economic)? pressure|macro factors?|interest rates?|rate expectations/gi, "宏观压力"],
+  [/dollar strength|u\.s\. dollar/gi, "美元走强"],
+  [/profit taking/gi, "获利了结"],
+  [/regulatory concerns?|regulatory pressure/gi, "监管压力"],
+  [/heightened concerns about potential/gi, "市场对潜在"],
+  [/concerns about potential/gi, "对潜在"],
+  [/potential/gi, "潜在"],
+  [/concerns?/gi, "担忧"],
+  [/washington/gi, "华盛顿"],
+  [/stablecoin regulation stalled/gi, "稳定币监管停滞"],
+  [/stablecoins?/gi, "稳定币"],
+  [/regulation/gi, "监管"],
+  [/regulating/gi, "监管"],
+  [/government discussions?|policy discussions?|talks?/gi, "政策讨论"],
+  [/government/gi, "政府"],
+  [/trump administration/gi, "特朗普政府"],
+  [/trump/gi, "特朗普"],
+  [/administration/gi, "政府"],
+  [/expectations?/gi, "预期"],
+  [/favorable/gi, "利好"],
+  [/friendly/gi, "友好"],
+  [/of a more/gi, "更加"],
+  [/investors'/gi, "投资者的"],
+  [/policies/gi, "政策"],
+  [/lack of progress/gi, "进展不足"],
+  [/bill in congress|congress(?:ional)? bill/gi, "国会法案"],
+  [/congress/gi, "国会"],
+  [/bill/gi, "法案"],
+  [/stalled/gi, "停滞"],
+  [/institutional flows?|fund flows?|capital flows?/gi, "资金流向"],
+  [/institutional selling/gi, "机构卖出"],
+  [/large financial institutions?/gi, "大型金融机构"],
+  [/financial institutions?/gi, "金融机构"],
+  [/holdings?/gi, "持仓"],
+  [/reducing their/gi, "减少其"],
+  [/selling/gi, "卖出"],
+  [/market volatility|volatility/gi, "市场波动"],
+  [/trading volume|volume/gi, "成交量"],
+  [/velocity/gi, "流通速度"],
+  [/speed of/gi, "速度"],
+  [/circulation/gi, "流通"],
+  [/economy/gi, "经济"],
+  [/economic activity/gi, "经济活动"],
+  [/mining difficulty|hashrate|hash rate/gi, "挖矿难度与算力"],
+  [/on-chain activity|onchain activity/gi, "链上活动"],
+  [/exchange inflows?|exchange outflows?/gi, "交易所资金流"],
+  [/whale activity|large holders?/gi, "大户活动"],
+  [/futures open interest|open interest/gi, "期货未平仓合约"],
+  [/funding rates?/gi, "资金费率"],
+  [/bureau of industry and security|bis/gi, "美国工业与安全局"],
+  [/export administration regulations|ear/gi, "出口管理条例"],
+  [/export controls?/gi, "出口管制"],
+  [/export restrictions?/gi, "出口限制"],
+  [/semiconductor manufacturing items?/gi, "半导体制造项目"],
+  [/semiconductor chips?|semiconductors?/gi, "半导体芯片"],
+  [/advanced computing integrated circuits?|advanced computing items?/gi, "先进计算芯片"],
+  [/national security concerns?/gi, "国家安全担忧"],
+  [/military modernization/gi, "军事现代化"],
+  [/china'?s access/gi, "中国获取能力"],
+  [/critical technolog(?:y|ies)/gi, "关键技术"],
+  [/supply chains?/gi, "供应链"],
+  [/policy rationale/gi, "政策理由"],
+  [/commerce department/gi, "美国商务部"],
+  [/official statements?/gi, "官方声明"],
+  [/taiwan/gi, "台湾"],
+  [/huawei/gi, "华为"],
+  [/smic/gi, "中芯国际"],
+  [/nexperia/gi, "安世半导体"],
+  [/united states|u\.s\.|us\b/gi, "美国"],
+  [/china/gi, "中国"],
+];
+
+function localizeCausalText(text: string, locale: "zh" | "en"): string {
+  if (locale === "en") return text;
+
+  let localized = text.replaceAll("_", " ");
+  for (const [pattern, replacement] of ZH_CAUSAL_LABELS) {
+    localized = localized.replace(pattern, replacement);
+  }
+
+  return localized
+    .replace(/\bcontrols\b/gi, "管制")
+    .replace(/\brestrictions\b/gi, "限制")
+    .replace(/\brules\b/gi, "规则")
+    .replace(/\bpolicy\b/gi, "政策")
+    .replace(/\breasons\b/gi, "原因")
+    .replace(/\bmarket\b/gi, "市场")
+    .replace(/\bprice\b/gi, "价格")
+    .replace(/\bdrop\b/gi, "下跌")
+    .replace(/\btoday\b/gi, "今日")
+    .replace(/\bspeed\b/gi, "速度")
+    .replace(/\bfactors?\b/gi, "因素")
+    .replace(/\bcauses?\b/gi, "原因")
+    .replace(/\bin\b/gi, "在")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasUnlocalizedEnglish(text: string): boolean {
+  const tokens = text.match(/[A-Za-z]{4,}/g) ?? [];
+  return tokens.length > 2;
+}
+
+function hasUnlocalizedEnglishLabel(text: string): boolean {
+  const tokens = text.match(/[A-Za-z]{4,}/g) ?? [];
+  return tokens.length > 1;
+}
+
+function localizeCausalLabel(text: string, locale: "zh" | "en"): string {
+  const localized = localizeCausalText(text, locale);
+  if (locale === "zh" && hasUnlocalizedEnglishLabel(localized)) {
+    return "市场影响因素";
+  }
+  return localized;
+}
+
+function localizeCausalDescription(text: string, label: string, locale: "zh" | "en"): string {
+  const localized = localizeCausalText(text, locale);
+  if (locale === "zh" && hasUnlocalizedEnglish(localized)) {
+    return `与${label}相关的证据支撑因素`;
+  }
+  return localized;
+}
+
 function toLocalChain(
   chain: ApiChain,
   locale: "zh" | "en",
@@ -145,8 +508,11 @@ function toLocalChain(
   return {
     metadata: {
       id: chain.chain_id,
-      title: chain.label,
-      outcomeLabel: chain.nodes[chain.nodes.length - 1]?.label ?? chain.label,
+      title: localizeCausalText(chain.label, locale),
+      outcomeLabel: localizeCausalText(
+        chain.nodes[chain.nodes.length - 1]?.label ?? chain.label,
+        locale
+      ),
       totalNodes: chain.nodes.length,
       totalEdges: chain.edges.length,
       maxDepth: chain.depth,
@@ -161,13 +527,21 @@ function toLocalChain(
     },
     nodes: chain.nodes.map((node) => ({
       id: node.id,
-      label: node.label,
+      label: localizeCausalLabel(node.label, locale),
       type: mapNodeType(node.type),
       probability: Math.round(node.probability * 100),
       depth: node.depth,
       description: {
-        brief: node.description,
-        detail: node.description,
+        brief: localizeCausalDescription(
+          node.description,
+          localizeCausalLabel(node.label, locale),
+          locale
+        ),
+        detail: localizeCausalDescription(
+          node.description,
+          localizeCausalLabel(node.label, locale),
+          locale
+        ),
       },
       upstreamIds: node.upstream_ids,
       evidenceIds: [...node.supporting_evidence_ids, ...node.refuting_evidence_ids],
@@ -194,13 +568,42 @@ function toLocalChain(
           .filter((candidate) => node.upstream_ids.includes(candidate.id))
           .map((candidate) => ({
             id: candidate.id,
-            label: candidate.label,
+            label: localizeCausalText(candidate.label, locale),
             probability: Math.round(candidate.probability * 100),
             depth: candidate.depth,
             type: mapNodeType(candidate.type),
           })),
       ])
     ),
+  };
+}
+
+function makePlaceholderChain(query: string, locale: "zh" | "en"): CausalChain {
+  return {
+    metadata: {
+      id: "EMPTY-CHAIN",
+      title: locale === "en" ? "No causal chain available" : "暂无可展示的因果链",
+      outcomeLabel: query,
+      totalNodes: 0,
+      totalEdges: 0,
+      maxDepth: 0,
+      confidence: 0,
+      primaryEvidenceCount: 0,
+      counterfactualSummary: {
+        intervention:
+          locale === "en" ? "No counterfactual summary available" : "暂无反事实摘要",
+        outcomeChange:
+          locale === "en" ? "Live analysis did not produce a usable chain" : "本次 live 分析未产出可用链路",
+        probabilityShift: 0,
+        description:
+          locale === "en"
+            ? "Inspect the status note and error details before retrying."
+            : "请先查看状态说明和错误信息，再决定是否重试。",
+      },
+    },
+    nodes: [],
+    edges: [],
+    upstreamMap: {},
   };
 }
 
@@ -594,6 +997,8 @@ function StickyCard({
 
 export default function Home() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedFocusEdgeId, setSelectedFocusEdgeId] = useState<string | null>(null);
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState<string | null>(null);
   const { locale, setLocale, t } = useI18n();
   const localizedDemo = useMemo(() => getLocalizedMockData(locale), [locale]);
   const [activeChain, setActiveChain] = useState(localizedDemo.primaryChain);
@@ -612,10 +1017,18 @@ export default function Home() {
   const [evidenceSourceFilter, setEvidenceSourceFilter] = useState<string>("all");
   const [evidenceStanceFilter, setEvidenceStanceFilter] = useState<"all" | "supporting" | "refuting">("all");
   const [evidenceConfidenceFilter, setEvidenceConfidenceFilter] = useState<"all" | "strong" | "medium" | "weak">("all");
-  const [analysisMode, setAnalysisMode] = useState<{ isDemo: boolean; demoTopic: string | null; loading: boolean }>({
+  const [evidenceQualityFilter, setEvidenceQualityFilter] = useState<
+    "all" | "trusted_fulltext" | "fulltext" | "store_cache" | "fallback" | "base"
+  >("all");
+  const [showAllEvidence, setShowAllEvidence] = useState(false);
+  const [analysisMode, setAnalysisMode] = useState<AnalysisUiState>({
     isDemo: true,
     demoTopic: null,
     loading: false,
+    mode: "demo",
+    freshnessStatus: "unknown",
+    timeRange: null,
+    partialLiveReasons: [],
   });
   const [pipelineProgress, setPipelineProgress] = useState<{
     step: string;
@@ -623,6 +1036,7 @@ export default function Home() {
     totalSteps: number;
     message: string;
   } | null>(null);
+  const activeRequestIdRef = useRef(0);
 
   const mockPrimaryChain = activeChain;
   
@@ -639,15 +1053,35 @@ export default function Home() {
   const [boardReady, setBoardReady] = useState(false);
 
   useEffect(() => {
-    setActiveChain(localizedDemo.primaryChain);
-    setAvailableChains([]);
-    setRecommendedChainId(null);
-    setEvidencePool([]);
-    setPipelineEval(null);
-    setUncertaintyReport(null);
-    setSelectedNodeId(null);
-    setPanOffset({ x: 0, y: 0 });
-  }, [localizedDemo]);
+    if (availableChains.length > 0) {
+      const currentApiChain =
+        availableChains.find((chain) => chain.chain_id === activeChain.metadata.id) ??
+        availableChains.find((chain) => chain.chain_id === recommendedChainId) ??
+        availableChains[0];
+      setActiveChain(toLocalChain(currentApiChain, locale, evidencePool));
+      return;
+    }
+
+    if (analysisMode.loading) {
+      setActiveChain(makePlaceholderChain(currentQuery || lastQuery, locale));
+      return;
+    }
+
+    if (analysisMode.isDemo) {
+      setActiveChain(localizedDemo.primaryChain);
+    }
+  }, [
+    activeChain.metadata.id,
+    analysisMode.isDemo,
+    analysisMode.loading,
+    availableChains,
+    currentQuery,
+    evidencePool,
+    lastQuery,
+    locale,
+    localizedDemo.primaryChain,
+    recommendedChainId,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -688,30 +1122,50 @@ export default function Home() {
   }, [mockPrimaryChain, locale, t]);
 
   const causalStrings = computeCausalStrings(notes, mockPrimaryChain.edges);
-  const connectedNodeIds = selectedNodeId
-    ? new Set(
-        mockPrimaryChain.edges.flatMap((edge) =>
-          edge.source === selectedNodeId || edge.target === selectedNodeId
-            ? [edge.source, edge.target]
-            : []
-        )
-      )
-    : new Set<string>();
-  if (selectedNodeId) {
-    connectedNodeIds.add(selectedNodeId);
-  }
   const primaryChainTitle = mockPrimaryChain.metadata.title;
   const activeApiChain = useMemo(
     () => availableChains.find((chain) => chain.chain_id === mockPrimaryChain.metadata.id) ?? null,
     [availableChains, mockPrimaryChain.metadata.id]
   );
+  const selectedEvidenceEdgeIds = useMemo(
+    () =>
+      selectedEvidenceId
+        ? new Set(
+            mockPrimaryChain.edges
+              .filter((edge) => edge.evidence.some((item) => item.evidenceId === selectedEvidenceId))
+              .map((edge) => edge.id)
+          )
+        : new Set<string>(),
+    [mockPrimaryChain.edges, selectedEvidenceId]
+  );
+  const connectedNodeIds = useMemo(() => {
+    const next = new Set<string>();
+    if (selectedNodeId) {
+      next.add(selectedNodeId);
+    }
+    for (const edge of mockPrimaryChain.edges) {
+      const linkedToSelectedNode = selectedNodeId && (edge.source === selectedNodeId || edge.target === selectedNodeId);
+      const linkedToFocusEdge = selectedFocusEdgeId === edge.id;
+      const linkedToEvidence = selectedEvidenceEdgeIds.has(edge.id);
+      if (linkedToSelectedNode || linkedToFocusEdge || linkedToEvidence) {
+        next.add(edge.source);
+        next.add(edge.target);
+      }
+    }
+    return next;
+  }, [mockPrimaryChain.edges, selectedEvidenceEdgeIds, selectedFocusEdgeId, selectedNodeId]);
   const selectedApiNode = activeApiChain?.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedApiEdges = useMemo(
     () =>
       activeApiChain?.edges.filter(
-        (edge) => edge.source === selectedNodeId || edge.target === selectedNodeId
+        (edge) =>
+          edge.source === selectedNodeId ||
+          edge.target === selectedNodeId ||
+          edge.id === selectedFocusEdgeId ||
+          (!!selectedEvidenceId &&
+            [...edge.supporting_evidence_ids, ...edge.refuting_evidence_ids].includes(selectedEvidenceId))
       ) ?? [],
-    [activeApiChain, selectedNodeId]
+    [activeApiChain, selectedEvidenceId, selectedFocusEdgeId, selectedNodeId]
   );
   const nodeTypeCounts = mockPrimaryChain.nodes.reduce(
     (acc, node) => {
@@ -739,13 +1193,20 @@ export default function Home() {
           Math.max(0, 1 - selectedNodeData.probability / 100)) * 100)
       )
     : Math.max(0, 100 - Math.round(mockPrimaryChain.metadata.confidence * 100));
-  const selectedEdgeIds = selectedNodeId
-    ? new Set(
-        mockPrimaryChain.edges
-          .filter((edge) => edge.source === selectedNodeId || edge.target === selectedNodeId)
-          .map((edge) => edge.id)
-      )
-    : new Set<string>();
+  const selectedEdgeIds = useMemo(() => {
+    const next = new Set<string>(selectedEvidenceEdgeIds);
+    if (selectedFocusEdgeId) {
+      next.add(selectedFocusEdgeId);
+    }
+    if (selectedNodeId) {
+      for (const edge of mockPrimaryChain.edges) {
+        if (edge.source === selectedNodeId || edge.target === selectedNodeId) {
+          next.add(edge.id);
+        }
+      }
+    }
+    return next;
+  }, [mockPrimaryChain.edges, selectedEvidenceEdgeIds, selectedFocusEdgeId, selectedNodeId]);
   const chainProbabilityItems = availableChains.slice(0, 3);
   const activeChainIsRecommended = !recommendedChainId || mockPrimaryChain.metadata.id === recommendedChainId;
   const activeChainConfidence = Math.round(mockPrimaryChain.metadata.confidence * 100);
@@ -767,6 +1228,10 @@ export default function Home() {
     [evidencePool]
   );
   const relatedEvidence = evidencePool.filter((item) => {
+    if (selectedEvidenceId) {
+      return item.id === selectedEvidenceId;
+    }
+
     if (selectedNodeEvidenceIds.length > 0) {
       return selectedNodeEvidenceIds.includes(item.id);
     }
@@ -778,7 +1243,7 @@ export default function Home() {
     return false;
   });
   const evidenceBase = relatedEvidence.length > 0 ? relatedEvidence : evidencePool;
-  const getReliabilityLabel = (reliability: string) => {
+  const getReliabilityLabel = useCallback((reliability: string) => {
     const score = Number(reliability);
     if (Number.isNaN(score)) {
       return t("home.evidence.medium");
@@ -790,44 +1255,107 @@ export default function Home() {
       return t("home.evidence.medium");
     }
     return t("home.evidence.weak");
-  };
-  const visibleEvidence = evidenceBase.filter((item) => {
-    if (evidenceSourceFilter !== "all" && item.source !== evidenceSourceFilter) {
-      return false;
-    }
-    if (evidenceStanceFilter === "supporting" && !item.is_supporting) {
-      return false;
-    }
-    if (evidenceStanceFilter === "refuting" && item.is_supporting) {
-      return false;
+  }, [t]);
+  const visibleEvidence = useMemo(() => {
+    return [...evidenceBase]
+      .filter((item) => {
+        if (evidenceSourceFilter !== "all" && item.source !== evidenceSourceFilter) {
+          return false;
+        }
+        if (evidenceStanceFilter === "supporting" && !item.is_supporting) {
+          return false;
+        }
+        if (evidenceStanceFilter === "refuting" && item.is_supporting) {
+          return false;
+        }
+
+        const label = getReliabilityLabel(item.reliability);
+        if (evidenceConfidenceFilter === "strong" && label !== t("home.evidence.strong")) {
+          return false;
+        }
+        if (evidenceConfidenceFilter === "medium" && label !== t("home.evidence.medium")) {
+          return false;
+        }
+        if (evidenceConfidenceFilter === "weak" && label !== t("home.evidence.weak")) {
+          return false;
+        }
+        if (evidenceQualityFilter !== "all") {
+          const category = evidenceQualityCategory(item);
+          if (category !== evidenceQualityFilter) {
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .sort((left, right) => {
+        const weightDelta = evidenceSortWeight(left) - evidenceSortWeight(right);
+        if (weightDelta !== 0) {
+          return weightDelta;
+        }
+
+        const leftReliability = Number(left.reliability);
+        const rightReliability = Number(right.reliability);
+        const normalizedLeft = Number.isNaN(leftReliability) ? 0.0 : leftReliability;
+        const normalizedRight = Number.isNaN(rightReliability) ? 0.0 : rightReliability;
+        if (normalizedLeft !== normalizedRight) {
+          return normalizedRight - normalizedLeft;
+        }
+
+        return left.id.localeCompare(right.id);
+      });
+  }, [
+    evidenceBase,
+    evidenceSourceFilter,
+    evidenceStanceFilter,
+    evidenceConfidenceFilter,
+    evidenceQualityFilter,
+    getReliabilityLabel,
+    t,
+  ]);
+  const prioritizedEvidence = useMemo(() => {
+    if (evidenceQualityFilter !== "all") {
+      return visibleEvidence;
     }
 
-    const label = getReliabilityLabel(item.reliability);
-    if (evidenceConfidenceFilter === "strong" && label !== t("home.evidence.strong")) {
-      return false;
-    }
-    if (evidenceConfidenceFilter === "medium" && label !== t("home.evidence.medium")) {
-      return false;
-    }
-    if (evidenceConfidenceFilter === "weak" && label !== t("home.evidence.weak")) {
-      return false;
+    if (showAllEvidence) {
+      return visibleEvidence;
     }
 
-    return true;
-  });
+    const prioritized = visibleEvidence.filter(
+      (item) => !["fallback", "base"].includes(evidenceQualityCategory(item))
+    );
+    return prioritized.length > 0 ? prioritized : visibleEvidence;
+  }, [visibleEvidence, evidenceQualityFilter, showAllEvidence]);
+  const hiddenEvidenceCount = Math.max(0, visibleEvidence.length - prioritizedEvidence.length);
+  const hiddenEvidenceBreakdown = useMemo(() => {
+    const hidden = visibleEvidence.filter(
+      (item) => !prioritizedEvidence.some((candidate) => candidate.id === item.id)
+    );
+    return {
+      fallback: hidden.filter((item) => evidenceQualityCategory(item) === "fallback").length,
+      base: hidden.filter((item) => evidenceQualityCategory(item) === "base").length,
+    };
+  }, [prioritizedEvidence, visibleEvidence]);
   const chainCompareItems = useMemo(
     () =>
       availableChains.slice(0, 4).map((chain) => ({
         chain_id: chain.chain_id,
-        label: chain.label,
+        label: localizeCausalText(chain.label, locale),
         probability: Math.round(chain.probability * 100),
         supportCount: chain.supporting_evidence_ids.length,
         refuteCount: chain.refuting_evidence_ids.length,
         edgeCount: chain.edges.length,
         nodeCount: chain.nodes.length,
       })),
-    [availableChains]
+    [availableChains, locale]
   );
+  const analysisBadgeLabel = formatAnalysisBadge(analysisMode.mode, locale);
+  const freshnessLabel = formatFreshnessLabel(analysisMode.freshnessStatus, locale);
+  const timeRangeLabel = formatTimeRangeLabel(analysisMode.timeRange, locale);
+  const activeProgressIndex = pipelineProgress
+    ? Math.max(progressStageOrder.indexOf(pipelineProgress.step), Math.max(0, pipelineProgress.stepIndex - 1))
+    : -1;
 
   // Background drag handlers
   const handleBoardMouseDown = useCallback((e: React.MouseEvent) => {
@@ -919,7 +1447,27 @@ export default function Home() {
 
   const handleNodeClick = useCallback((nodeId: string) => {
     setSelectedNodeId((prev) => (prev === nodeId ? null : nodeId));
+    setSelectedFocusEdgeId(null);
+    setSelectedEvidenceId(null);
   }, []);
+
+  const focusEdge = useCallback((edge: Pick<ApiEdge, "id" | "source" | "target" | "supporting_evidence_ids" | "refuting_evidence_ids">) => {
+    setSelectedFocusEdgeId(edge.id);
+    setSelectedNodeId(edge.target);
+    setSelectedEvidenceId(edge.supporting_evidence_ids[0] ?? edge.refuting_evidence_ids[0] ?? null);
+  }, []);
+
+  const focusEvidence = useCallback((item: ApiEvidence) => {
+    const matchingEdge =
+      activeApiChain?.edges.find((edge) =>
+        [...edge.supporting_evidence_ids, ...edge.refuting_evidence_ids].includes(item.id)
+      ) ??
+      mockPrimaryChain.edges.find((edge) => edge.evidence.some((candidate) => candidate.evidenceId === item.id));
+
+    setSelectedEvidenceId(item.id);
+    setSelectedFocusEdgeId(matchingEdge?.id ?? null);
+    setSelectedNodeId(matchingEdge?.target ?? null);
+  }, [activeApiChain, mockPrimaryChain.edges]);
 
   const selectedNote = notes.find((n) => n.id === selectedNodeId);
 
@@ -927,7 +1475,27 @@ export default function Home() {
     const query = currentQuery.trim();
     if (!query) return;
 
-    setAnalysisMode((current) => ({ ...current, loading: true }));
+    const requestId = activeRequestIdRef.current + 1;
+    activeRequestIdRef.current = requestId;
+    setActiveChain(makePlaceholderChain(query, locale));
+    setAvailableChains([]);
+    setRecommendedChainId(null);
+    setEvidencePool([]);
+    setPipelineEval(null);
+    setUncertaintyReport(null);
+    setSelectedNodeId(null);
+    setSelectedFocusEdgeId(null);
+    setSelectedEvidenceId(null);
+    setShowAllEvidence(false);
+    setAnalysisMode({
+      isDemo: false,
+      demoTopic: null,
+      loading: true,
+      mode: "partial_live",
+      freshnessStatus: "unknown",
+      timeRange: null,
+      partialLiveReasons: [],
+    });
     setPipelineProgress(null);
     setStatusNote(locale === "en" ? "Running live analysis…" : "正在执行真实分析…");
     setLastQuery(query);
@@ -937,6 +1505,36 @@ export default function Home() {
 
     // Helper to process a successful payload (shared between SSE done and fallback)
     const processPayload = (payload: AnalyzeResponseV2) => {
+      if (activeRequestIdRef.current !== requestId) return;
+      if (payload.chains.length === 0) {
+        setAvailableChains([]);
+        setRecommendedChainId(null);
+        setEvidencePool(payload.evidences);
+        setPipelineEval(payload.evaluation ?? null);
+        setUncertaintyReport(payload.uncertainty_report ?? null);
+        setActiveChain(makePlaceholderChain(payload.query, locale));
+        setEvidenceSourceFilter("all");
+        setEvidenceStanceFilter("all");
+        setEvidenceConfidenceFilter("all");
+        setEvidenceQualityFilter("all");
+        setShowAllEvidence(false);
+        setAnalysisMode({
+          isDemo: payload.is_demo,
+          demoTopic: payload.demo_topic,
+          loading: false,
+          mode: payload.analysis_mode,
+          freshnessStatus: payload.freshness_status,
+          timeRange: payload.time_range ?? null,
+          partialLiveReasons: payload.partial_live_reasons ?? [],
+        });
+        setSelectedNodeId(null);
+        setSelectedFocusEdgeId(null);
+        setSelectedEvidenceId(null);
+        setPanOffset({ x: 0, y: 0 });
+        setStatusNote(buildAnalysisStatusNote(payload, locale));
+        return;
+      }
+
       const recommended = payload.chains.find((chain) => chain.chain_id === payload.recommended_chain_id) ?? payload.chains[0];
       if (!recommended) throw new Error("No chains returned");
 
@@ -949,15 +1547,24 @@ export default function Home() {
       setEvidenceSourceFilter("all");
       setEvidenceStanceFilter("all");
       setEvidenceConfidenceFilter("all");
+      setEvidenceQualityFilter("all");
+      setShowAllEvidence(false);
 
       setAnalysisMode({
         isDemo: payload.is_demo,
         demoTopic: payload.demo_topic,
         loading: false,
+        mode: payload.analysis_mode,
+        freshnessStatus: payload.freshness_status,
+        timeRange: payload.time_range ?? null,
+        partialLiveReasons: payload.partial_live_reasons ?? [],
       });
       setSelectedNodeId(null);
+      setSelectedFocusEdgeId(null);
+      setSelectedEvidenceId(null);
       setPanOffset({ x: 0, y: 0 });
-      if (payload.is_demo && payload.error) {
+      setStatusNote(buildAnalysisStatusNote(payload, locale));
+      if (false && payload.is_demo && payload.error) {
         setStatusNote(
           locale === "en"
             ? `Analysis failed (${payload.error}). Showing demo fallback.`
@@ -980,14 +1587,27 @@ export default function Home() {
 
     // Helper for fallback on error
     const fallbackToDemo = () => {
+      if (activeRequestIdRef.current !== requestId) return;
       setActiveChain(localizedDemo.primaryChain);
       setAvailableChains([]);
       setRecommendedChainId(null);
       setEvidencePool([]);
       setPipelineEval(null);
       setUncertaintyReport(null);
-      setAnalysisMode({ isDemo: true, demoTopic: null, loading: false });
+      setEvidenceQualityFilter("all");
+      setShowAllEvidence(false);
+      setAnalysisMode({
+        isDemo: true,
+        demoTopic: null,
+        loading: false,
+        mode: "demo",
+        freshnessStatus: "unknown",
+        timeRange: null,
+        partialLiveReasons: [],
+      });
       setSelectedNodeId(null);
+      setSelectedFocusEdgeId(null);
+      setSelectedEvidenceId(null);
       setPanOffset({ x: 0, y: 0 });
       setStatusNote(
         locale === "en"
@@ -1015,6 +1635,7 @@ export default function Home() {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
+        let streamCompleted = false;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -1034,6 +1655,7 @@ export default function Home() {
               const event = JSON.parse(dataLine.slice(6));
 
               if (event.type === "progress") {
+                if (activeRequestIdRef.current !== requestId) continue;
                 setPipelineProgress({
                   step: event.step ?? "",
                   stepIndex: event.step_index ?? 0,
@@ -1042,12 +1664,24 @@ export default function Home() {
                 });
                 setStatusNote(event.message ?? "");
               } else if (event.type === "done") {
+                if (activeRequestIdRef.current !== requestId) continue;
                 setPipelineProgress(null);
                 const payload = (event.data ?? event) as AnalyzeResponseV2;
                 processPayload(payload);
+                streamCompleted = true;
               } else if (event.type === "error") {
+                if (activeRequestIdRef.current !== requestId) continue;
                 setPipelineProgress(null);
-                setAnalysisMode({ isDemo: true, demoTopic: null, loading: false });
+                setAnalysisMode({
+                  isDemo: true,
+                  demoTopic: null,
+                  loading: false,
+                  mode: "demo",
+                  freshnessStatus: "unknown",
+                  timeRange: null,
+                  partialLiveReasons: [],
+                });
+                setShowAllEvidence(false);
                 setStatusNote(
                   locale === "en"
                     ? `Analysis error: ${event.error}. Showing demo fallback.`
@@ -1055,6 +1689,7 @@ export default function Home() {
                 );
                 // Load demo data as fallback
                 fallbackToDemo();
+                streamCompleted = true;
               }
             } catch {
               // Skip malformed JSON lines
@@ -1064,7 +1699,7 @@ export default function Home() {
 
         // If we exhausted the stream without a "done" event, fall back
         setPipelineProgress(null);
-        if (analysisMode.loading) {
+        if (!streamCompleted && activeRequestIdRef.current === requestId) {
           fallbackToDemo();
         }
       } else {
@@ -1076,7 +1711,7 @@ export default function Home() {
       setPipelineProgress(null);
       fallbackToDemo();
     }
-  }, [currentQuery, selectedModel, selectedExplicitModel, apiKey, locale, localizedDemo.primaryChain, analysisMode.loading]);
+  }, [currentQuery, selectedModel, selectedExplicitModel, apiKey, locale, localizedDemo.primaryChain]);
 
   return (
     <div
@@ -1230,9 +1865,7 @@ export default function Home() {
             <span>
               {analysisMode.loading
                 ? t("header.status.processing")
-                : analysisMode.isDemo
-                  ? t("status.demoMode")
-                  : t("header.status.live")}
+                : analysisBadgeLabel}
             </span>
           </div>
           {pipelineProgress && analysisMode.loading && (
@@ -1436,6 +2069,8 @@ export default function Home() {
                 key={chain.chain_id}
                 onClick={() => {
                   setSelectedNodeId(null);
+                  setSelectedFocusEdgeId(null);
+                  setSelectedEvidenceId(null);
                   setPanOffset({ x: 0, y: 0 });
                   setActiveChain(toLocalChain(chain, locale, evidencePool));
                 }}
@@ -1454,7 +2089,7 @@ export default function Home() {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
-                  <span>{chain.label}</span>
+                  <span>{localizeCausalText(chain.label, locale)}</span>
                   {chain.chain_id === recommendedChainId && (
                     <span style={{ fontSize: "0.5rem", color: "#4a7a9e", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                       {locale === "en" ? "Rec" : "推荐"}
@@ -1471,12 +2106,35 @@ export default function Home() {
           <div className="compact-item">
             <div className="compact-label">{locale === "en" ? "Chain compare" : "链路比较"}</div>
             {chainCompareItems.map((chain) => (
-              <div
+              <button
+                type="button"
                 key={`${chain.chain_id}-compare`}
+                onClick={() => {
+                  const nextChain = availableChains.find((candidate) => candidate.chain_id === chain.chain_id);
+                  if (!nextChain) return;
+                  setSelectedNodeId(null);
+                  setSelectedFocusEdgeId(null);
+                  setSelectedEvidenceId(null);
+                  setPanOffset({ x: 0, y: 0 });
+                  setActiveChain(toLocalChain(nextChain, locale, evidencePool));
+                }}
                 style={{
+                  width: "100%",
                   marginTop: "6px",
+                  padding: "6px 4px",
+                  borderWidth: chain.chain_id === mockPrimaryChain.metadata.id ? "1px" : "0",
+                  borderStyle: chain.chain_id === mockPrimaryChain.metadata.id ? "solid" : "none",
+                  borderColor: chain.chain_id === mockPrimaryChain.metadata.id ? "rgba(59,110,165,0.22)" : "transparent",
+                  borderTopWidth: "1px",
+                  borderTopStyle: "dashed",
+                  borderTopColor: "rgba(160,140,110,0.18)",
+                  borderRadius: "4px",
+                  background: chain.chain_id === mockPrimaryChain.metadata.id
+                    ? "rgba(59,110,165,0.08)"
+                    : "transparent",
+                  cursor: "pointer",
+                  textAlign: "left",
                   paddingTop: "6px",
-                  borderTop: "1px dashed rgba(160,140,110,0.18)",
                   fontSize: "0.58rem",
                   color: "#6b5a42",
                   lineHeight: 1.5,
@@ -1491,7 +2149,7 @@ export default function Home() {
                     ? `${chain.supportCount} support · ${chain.refuteCount} refute · ${chain.nodeCount} nodes`
                     : `${chain.supportCount} 支撑 · ${chain.refuteCount} 反驳 · ${chain.nodeCount} 节点`}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -1679,8 +2337,18 @@ export default function Home() {
           </div>
         )}
 
-        <div className="compact-item" style={{ background: analysisMode.isDemo ? "rgba(255,248,240,0.9)" : "rgba(240,248,244,0.9)" }}>
-          <div className="compact-label">{analysisMode.isDemo ? t("status.demoMode") : t("header.status.live")}</div>
+        <div className="compact-item" style={{ background: analysisMode.isDemo ? "rgba(255,248,240,0.9)" : analysisMode.mode === "partial_live" ? "rgba(255,248,235,0.92)" : "rgba(240,248,244,0.9)" }}>
+          <div className="compact-label">{analysisBadgeLabel}</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "8px" }}>
+            <span style={{ fontSize: "0.52rem", letterSpacing: "0.05em", textTransform: "uppercase", color: "#8b7355", background: "rgba(255,255,255,0.72)", border: "1px solid rgba(160,140,110,0.18)", borderRadius: "999px", padding: "2px 6px" }}>
+              {freshnessLabel}
+            </span>
+            {timeRangeLabel && (
+              <span style={{ fontSize: "0.52rem", letterSpacing: "0.05em", textTransform: "uppercase", color: "#8b7355", background: "rgba(255,255,255,0.72)", border: "1px solid rgba(160,140,110,0.18)", borderRadius: "999px", padding: "2px 6px" }}>
+                {timeRangeLabel}
+              </span>
+            )}
+          </div>
           <div
             style={{
               fontSize: "0.65rem",
@@ -1693,6 +2361,61 @@ export default function Home() {
           >
             {statusNote || (analysisMode.isDemo ? t("demo.banner") : t("status.liveAnalysis"))}
           </div>
+          {analysisMode.loading && pipelineProgress && (
+            <div className="retrieval-progress" style={{ marginTop: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "8px" }}>
+                <span style={{ fontSize: "0.52rem", color: "#4a7a9e", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                  {locale === "en" ? "Retrieval trace" : "检索轨迹"}
+                </span>
+                <span style={{ fontSize: "0.52rem", color: "#8b7355" }}>
+                  {pipelineProgress.stepIndex}/{pipelineProgress.totalSteps}
+                </span>
+              </div>
+              <div style={{ display: "grid", gap: "4px" }}>
+                {progressStageOrder.map((step, index) => {
+                  const isActive = index === activeProgressIndex;
+                  const isDone = index < activeProgressIndex;
+                  return (
+                    <div
+                      key={step}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        fontSize: "0.55rem",
+                        color: isActive ? "#3b6ea5" : isDone ? "#5a7a52" : "#8b7355",
+                        opacity: isActive || isDone ? 1 : 0.58,
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: "7px",
+                          height: "7px",
+                          borderRadius: "999px",
+                          background: isActive ? "#3b6ea5" : isDone ? "#5a7a52" : "rgba(160,140,110,0.28)",
+                          boxShadow: isActive ? "0 0 0 4px rgba(59,110,165,0.12)" : undefined,
+                          flex: "0 0 auto",
+                        }}
+                      />
+                      <span>{progressStageLabel(step, locale)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {analysisMode.mode === "partial_live" && analysisMode.partialLiveReasons.length > 0 && (
+            <div style={{ marginTop: "8px", paddingTop: "8px", borderTop: "1px dashed rgba(160,140,110,0.18)" }}>
+              <div style={{ fontSize: "0.52rem", color: "#8b7355", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
+                {locale === "en" ? "Why partial live" : "部分 live 原因"}
+              </div>
+              {analysisMode.partialLiveReasons.slice(0, 3).map((reason, index) => (
+                <div key={`${reason}-${index}`} style={{ fontSize: "0.58rem", color: "#6b5a42", lineHeight: 1.45, marginBottom: "3px" }}>
+                  {locale === "en" ? "- " : "· "}{reason}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {uncertaintyReport && !analysisMode.isDemo && (
@@ -1713,9 +2436,24 @@ export default function Home() {
           <div className="compact-item" style={{ background: "rgba(255,255,255,0.72)" }}>
             <div className="compact-label">{locale === "en" ? "Connected edges" : "关联边"}</div>
             {selectedApiEdges.slice(0, 3).map((edge) => (
-              <div key={`${edge.id}-edge`} style={{ marginBottom: "10px", paddingBottom: "10px", borderBottom: "1px dashed rgba(160,140,110,0.18)" }}>
+              <button
+                type="button"
+                key={`${edge.id}-edge`}
+                onClick={() => focusEdge(edge)}
+                style={{
+                  width: "100%",
+                  marginBottom: "10px",
+                  padding: "0 0 10px",
+                  border: "0",
+                  borderBottom: "1px dashed rgba(160,140,110,0.18)",
+                  background: selectedFocusEdgeId === edge.id ? "rgba(59,110,165,0.08)" : "transparent",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  textAlign: "left",
+                }}
+              >
                 <div style={{ fontSize: "0.62rem", color: "#5c4a32", lineHeight: 1.4 }}>
-                  <strong>{edge.source}</strong> → <strong>{edge.target}</strong>
+                  <strong>{localizeCausalText(edge.source, locale)}</strong> → <strong>{localizeCausalText(edge.target, locale)}</strong>
                 </div>
                 <div style={{ fontSize: "0.56rem", color: edge.evidence_conflict && edge.evidence_conflict !== "none" ? "#a0503c" : "#8b7355", marginTop: "3px" }}>
                   {locale === "en" ? "Conflict" : "冲突"}: {edge.evidence_conflict ?? "none"}
@@ -1725,7 +2463,7 @@ export default function Home() {
                     “{edge.citation_spans[0].quoted_text}”
                   </div>
                 )}
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -1763,15 +2501,101 @@ export default function Home() {
               <option value="medium">{t("home.evidence.medium")}</option>
               <option value="weak">{t("home.evidence.weak")}</option>
             </select>
+            <select
+              value={evidenceQualityFilter}
+              onChange={(event) =>
+                setEvidenceQualityFilter(
+                  event.target.value as
+                    | "all"
+                    | "trusted_fulltext"
+                    | "fulltext"
+                    | "store_cache"
+                    | "fallback"
+                    | "base"
+                )
+              }
+              style={{ gridColumn: "1 / -1", fontSize: "0.56rem", padding: "4px 6px", borderRadius: "4px", border: "1px solid rgba(160,140,110,0.18)", background: "rgba(255,255,255,0.92)", color: "#5c4a32" }}
+            >
+              <option value="all">{locale === "en" ? "All evidence types" : "全部证据类型"}</option>
+              <option value="trusted_fulltext">{locale === "en" ? "Trusted full text" : "可信正文"}</option>
+              <option value="fulltext">{locale === "en" ? "Full text" : "正文"}</option>
+              <option value="store_cache">{locale === "en" ? "Store cache" : "证据缓存"}</option>
+              <option value="fallback">{locale === "en" ? "Fallback summary" : "降级摘要"}</option>
+              <option value="base">{locale === "en" ? "Base / fresh sources" : "基础 / 实时来源"}</option>
+            </select>
           </div>
-          {visibleEvidence.length > 0 ? (
-            visibleEvidence.map((item) => (
-              <div key={item.id} style={{ marginBottom: "8px" }}>
+          {hiddenEvidenceCount > 0 && evidenceQualityFilter === "all" && (
+            <div style={{ marginBottom: "10px", padding: "8px", background: "rgba(255,248,240,0.72)", border: "1px dashed rgba(160,140,110,0.2)", borderRadius: "6px" }}>
+              <div style={{ fontSize: "0.58rem", color: "#6b5a42", lineHeight: 1.45, marginBottom: "6px" }}>
+                {locale === "en"
+                  ? `${hiddenEvidenceCount} lower-priority evidence item(s) are hidden by default so stronger evidence appears first.`
+                  : `默认已收起 ${hiddenEvidenceCount} 条低优先级证据，让更强的证据先展示。`}
+              </div>
+              <div style={{ fontSize: "0.54rem", color: "#8b7355", lineHeight: 1.45, marginBottom: "6px" }}>
+                {[
+                  hiddenEvidenceBreakdown.fallback > 0
+                    ? evidenceCategorySummaryLabel("fallback", hiddenEvidenceBreakdown.fallback, locale)
+                    : null,
+                  hiddenEvidenceBreakdown.base > 0
+                    ? evidenceCategorySummaryLabel("base", hiddenEvidenceBreakdown.base, locale)
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(locale === "en" ? " · " : "，")}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAllEvidence((current) => !current)}
+                style={{
+                  fontSize: "0.56rem",
+                  color: "#5c4a32",
+                  background: "rgba(255,255,255,0.92)",
+                  border: "1px solid rgba(160,140,110,0.18)",
+                  borderRadius: "999px",
+                  padding: "3px 8px",
+                  cursor: "pointer",
+                }}
+              >
+                {showAllEvidence
+                  ? (locale === "en" ? "Show prioritized only" : "只看高优先级证据")
+                  : (locale === "en" ? "Show all evidence" : "显示全部证据")}
+              </button>
+            </div>
+          )}
+          {prioritizedEvidence.length > 0 ? (
+            prioritizedEvidence.map((item) => (
+              <button
+                type="button"
+                key={item.id}
+                onClick={() => focusEvidence(item)}
+                style={{
+                  width: "100%",
+                  marginBottom: "8px",
+                  padding: "6px",
+                  border: selectedEvidenceId === item.id
+                    ? "1px solid rgba(59,110,165,0.28)"
+                    : "1px solid transparent",
+                  borderRadius: "6px",
+                  background: selectedEvidenceId === item.id ? "rgba(59,110,165,0.08)" : "transparent",
+                  cursor: "pointer",
+                  textAlign: "left",
+                }}
+              >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", fontSize: "0.56rem", letterSpacing: "0.05em", textTransform: "uppercase" }}>
                   <span style={{ color: item.is_supporting ? "#5a7a52" : "#a0503c" }}>
                     {item.is_supporting ? t("home.evidence.supporting") : t("home.evidence.refuting")}
                   </span>
                   <span style={{ color: "#8b7355" }}>{getReliabilityLabel(item.reliability)}</span>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "4px", marginBottom: "4px" }}>
+                  <span style={{ fontSize: "0.5rem", color: "#8b7355", background: "rgba(255,255,255,0.72)", border: "1px solid rgba(160,140,110,0.18)", borderRadius: "999px", padding: "1px 6px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    {formatEvidenceTierLabel(item, locale)}
+                  </span>
+                  {item.freshness && item.freshness !== "unknown" && (
+                    <span style={{ fontSize: "0.5rem", color: "#8b7355", background: "rgba(255,255,255,0.72)", border: "1px solid rgba(160,140,110,0.18)", borderRadius: "999px", padding: "1px 6px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      {formatFreshnessLabel(item.freshness, locale)}
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: "0.65rem", color: "#5c4a32", lineHeight: 1.45 }}>{item.content}</div>
                 {selectedNodeCitationByEvidenceId.get(item.id)?.quoted_text && (
@@ -1779,8 +2603,11 @@ export default function Home() {
                     “{selectedNodeCitationByEvidenceId.get(item.id)?.quoted_text}”
                   </div>
                 )}
-                <div style={{ fontSize: "0.56rem", color: "#8b7355", marginTop: "2px" }}>{item.source}</div>
-              </div>
+                <div style={{ fontSize: "0.56rem", color: "#8b7355", marginTop: "2px" }}>
+                  {item.source}
+                  {item.timestamp ? ` · ${item.timestamp}` : ""}
+                </div>
+              </button>
             ))
           ) : (
             <div style={{ fontSize: "0.65rem", color: "#8b7355", lineHeight: 1.5 }}>{t("home.evidence.empty")}</div>

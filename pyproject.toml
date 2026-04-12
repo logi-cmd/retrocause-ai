@@ -44,5 +44,7 @@ target-version = "py310"
 testpaths = ["tests"]
 addopts = "-v --tb=short"
 
+[tool.setuptools.packages.find]
+include = ["retrocause*"]
 
 

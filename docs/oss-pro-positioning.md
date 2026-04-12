@@ -114,6 +114,7 @@ The current planning direction is that this substrate may live in a separate **f
 - **OSS should continue to ship on the current Python stack** (`FastAPI + Python pipeline + Next.js evidence board`).
 - **Pro can diverge architecturally** if that materially improves reliability, streaming UX, shared typing, and cost structure.
 - The current direction is to treat Pro as a **separate full-stack Rust line**, not as a thin feature gate over the OSS codebase.
+- Operationally, OSS should stay budgeted, cache-heavy, and transparent about degradation, while Pro can add queue-based refresh, premium feeds, and higher-throughput workflows. The detailed policy lives in [`docs/operational-plan.md`](./operational-plan.md).
 
 This split exists because the two products have different jobs:
 
@@ -267,6 +268,20 @@ Its advantage is:
 - competing causal chains as first-class output
 - a visual reasoning artifact people can inspect and discuss
 
+### Hard truth
+
+If RetroCause cannot deliver stable-enough live evidence for a scenario, and does not add meaningful structural value on top, users should use ChatGPT or a search-first tool instead.
+
+That is not a messaging problem.
+It is the core product test.
+
+RetroCause only earns repeated use when it gives the user something harder to get from generic chat:
+
+- better separation between background and fresh evidence
+- time-window-aware explanations
+- competing explanations with explicit support and weakness
+- a reusable explanation artifact, not just a one-off answer
+
 ---
 
 ## 8. Is There a Real Moat?
@@ -376,11 +391,43 @@ These are more naturally productized around repeated work, operational depth, an
 - finish the OSS version until it is honestly usable
 - publish only when the demo path, docs, and trust signals are solid
 - use OSS to validate repeated why-question interest and workflow behavior
+- improve live reachability by fixing provider preflight, query rewrite, and source-routing gaps before adding broader surface area
 
 ### Medium term
 
 - identify one high-value repeated workflow where explanation quality matters
 - build Pro around that workflow instead of around generic feature gating
+
+### Scenario strategy
+
+Do not promise identical strength for every question shape.
+Make RetroCause clearly better in a few scenario families first:
+
+- market and company move explanations
+- policy / geopolitical explanations
+- postmortem and retrospective explanations
+- historically grounded multi-cause explanations
+
+The moat is not breadth alone.
+It is that the system behaves correctly, honestly, and repeatably inside these scenario families.
+
+### OSS and Pro optimization split
+
+OSS should focus on:
+
+- honest mode labeling
+- bounded live retrieval
+- scenario-aware routing
+- local evidence reuse
+- visible evidence quality and freshness
+
+Pro should focus on:
+
+- better source coverage and authentication
+- stronger background refresh and hot-topic handling
+- persistent workspaces and comparison history
+- team-facing explanation workflows
+- higher throughput with lower marginal cost per repeated analysis
 
 ### Product rule
 
@@ -404,3 +451,10 @@ But it only becomes a durable business if the Pro version improves:
 - workflow usefulness in settings where bad explanations are costly
 
 Without that, it remains an impressive demo.
+
+---
+
+## 11. Related Docs
+
+- [`docs/mature-product-plan.md`](./mature-product-plan.md) — unified quality-first, cost-aware, rate-limit-resilient product plan
+- [`docs/operational-plan.md`](./operational-plan.md) — concrete operating policy for budgets, caching, and source resilience

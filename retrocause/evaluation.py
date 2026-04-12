@@ -1,4 +1,4 @@
-"""独立评估步骤 — 在所有生成步骤完成后对 pipeline 输出进行质量评估"""
+"""Structured pipeline quality evaluation."""
 
 from __future__ import annotations
 
@@ -29,19 +29,19 @@ def _assess_evidence_sufficiency(ctx: PipelineContext) -> tuple[float, list[str]
     hypotheses = ctx.hypotheses
 
     if not hypotheses:
-        return 0.0, ["无假说链产出，无法评估证据充分性"]
+        return 0.0, ["No hypothesis chains were produced, so evidence sufficiency cannot be assessed."]
 
     low_coverage = [h for h in hypotheses if h.evidence_coverage < _EVIDENCE_COVERAGE_THRESHOLD]
     if low_coverage:
         weaknesses.append(
-            f"{len(low_coverage)}/{len(hypotheses)} 条链证据覆盖率低于 "
+            f"{len(low_coverage)}/{len(hypotheses)} chains have evidence coverage below "
             f"{_EVIDENCE_COVERAGE_THRESHOLD:.0%}"
         )
 
     unanchored_total = sum(len(h.unanchored_edges) for h in hypotheses)
     total_edges = sum(len(h.edges) for h in hypotheses)
     if total_edges > 0 and unanchored_total > total_edges * 0.5:
-        weaknesses.append(f"超过半数因果边无证据锚定 ({unanchored_total}/{total_edges})")
+        weaknesses.append(f"More than half of causal edges are unanchored ({unanchored_total}/{total_edges})")
 
     avg_coverage = sum(h.evidence_coverage for h in hypotheses) / len(hypotheses)
     evidence_bonus = min(ctx.total_evidence_count / 10.0, 0.2)
@@ -49,9 +49,36 @@ def _assess_evidence_sufficiency(ctx: PipelineContext) -> tuple[float, list[str]
     score = min(1.0, avg_coverage + evidence_bonus)
     if not ctx.total_evidence_count:
         score = 0.0
-        weaknesses.append("未收集到任何证据")
+        weaknesses.append("No evidence was collected.")
 
     return score, weaknesses
+
+
+def _assess_evidence_quality(ctx: PipelineContext) -> tuple[float, list[str]]:
+    evidences = ctx.extra.get("evidences", [])
+    if not evidences:
+        return 0.0, ["No evidence quality metadata is available."]
+
+    fallback_count = sum(
+        1 for ev in evidences if getattr(ev, "extraction_method", "") == "fallback_summary"
+    )
+    fallback_ratio = fallback_count / len(evidences)
+    weaknesses: list[str] = []
+
+    if fallback_ratio >= 0.5:
+        weaknesses.append(
+            f"Fallback-summary evidence dominates the run ({fallback_count}/{len(evidences)} items)."
+        )
+    elif fallback_ratio > 0:
+        weaknesses.append(
+            f"Fallback-summary evidence is present ({fallback_count}/{len(evidences)} items)."
+        )
+
+    score = 1.0 - fallback_ratio * 0.7
+    if any(getattr(ev, "freshness", "unknown") == "unknown" for ev in evidences):
+        score -= 0.05
+
+    return max(0.0, min(1.0, score)), weaknesses
 
 
 def _assess_probability_coherence(ctx: PipelineContext) -> tuple[float, list[str]]:
@@ -59,27 +86,34 @@ def _assess_probability_coherence(ctx: PipelineContext) -> tuple[float, list[str
     hypotheses = ctx.hypotheses
 
     if not hypotheses:
-        return 0.0, ["无假说链产出，无法评估概率自洽性"]
+        return 0.0, ["No hypothesis chains were produced, so probability coherence cannot be assessed."]
 
     incoherent = 0
-    for h in hypotheses:
-        if not (0.0 <= h.path_probability <= 1.0 + _PROBABILITY_EPSILON):
+    for hypothesis in hypotheses:
+        if not (0.0 <= hypothesis.path_probability <= 1.0 + _PROBABILITY_EPSILON):
             incoherent += 1
             continue
-        if not (0.0 <= h.posterior_probability <= 1.0 + _PROBABILITY_EPSILON):
+        if not (0.0 <= hypothesis.posterior_probability <= 1.0 + _PROBABILITY_EPSILON):
             incoherent += 1
             continue
-        lo, hi = h.confidence_interval
-        if lo > hi or lo < 0 or hi > 1:
+
+        lower, upper = hypothesis.confidence_interval
+        if lower > upper or lower < 0 or upper > 1:
             incoherent += 1
-            weaknesses.append(f"链 {h.id} 置信区间异常 [{lo:.2f}, {hi:.2f}]")
+            weaknesses.append(
+                f"Chain {hypothesis.id} has an invalid confidence interval [{lower:.2f}, {upper:.2f}] (异常)"
+            )
 
     if incoherent:
-        weaknesses.append(f"{incoherent}/{len(hypotheses)} 条链概率不自洽")
+        weaknesses.append(
+            f"{incoherent}/{len(hypotheses)} chains have incoherent probabilities. (不自洽)"
+        )
 
-    prob_sum = sum(h.posterior_probability for h in hypotheses)
-    if len(hypotheses) > 1 and abs(prob_sum - 1.0) > 0.5:
-        weaknesses.append(f"后验概率之和偏离 1.0 较远 (sum={prob_sum:.2f})，链间概率分配可能不合理")
+    posterior_sum = sum(h.posterior_probability for h in hypotheses)
+    if len(hypotheses) > 1 and abs(posterior_sum - 1.0) > 0.5:
+        weaknesses.append(
+            f"Posterior probabilities drift too far from 1.0 (sum={posterior_sum:.2f})."
+        )
 
     score = 1.0 - (incoherent / len(hypotheses))
     return score, weaknesses
@@ -90,7 +124,7 @@ def _assess_chain_diversity(ctx: PipelineContext) -> tuple[float, list[str]]:
     hypotheses = ctx.hypotheses
 
     if len(hypotheses) <= 1:
-        return 1.0 if len(hypotheses) == 1 else 0.0, []
+        return (1.0 if len(hypotheses) == 1 else 0.0), []
 
     var_sets = [set(v.name for v in h.variables) for h in hypotheses]
     max_jaccard = 0.0
@@ -105,61 +139,70 @@ def _assess_chain_diversity(ctx: PipelineContext) -> tuple[float, list[str]]:
             max_jaccard = max(max_jaccard, jaccard)
 
     if max_jaccard > _CHAIN_SIMILARITY_THRESHOLD:
-        weaknesses.append(f"最高链间相似度 {max_jaccard:.0%}，竞争链可能过于相似")
+        weaknesses.append(f"Highest chain similarity is {max_jaccard:.0%}, so alternatives are too similar.")
 
-    diversity = 1.0 - max_jaccard
-    return diversity, weaknesses
+    return 1.0 - max_jaccard, weaknesses
 
 
 class EvaluationStep(PipelineStep):
-    """独立评估步骤 — 读取 pipeline 产出，生成结构化质量评估"""
+    """Read pipeline outputs and compute structured quality signals."""
 
     def execute(self, ctx: PipelineContext) -> PipelineContext:
-        ev_sufficiency, ev_weaknesses = _assess_evidence_sufficiency(ctx)
-        prob_coherence, prob_weaknesses = _assess_probability_coherence(ctx)
-        chain_diversity, div_weaknesses = _assess_chain_diversity(ctx)
+        evidence_sufficiency, sufficiency_weaknesses = _assess_evidence_sufficiency(ctx)
+        evidence_quality, quality_weaknesses = _assess_evidence_quality(ctx)
+        probability_coherence, probability_weaknesses = _assess_probability_coherence(ctx)
+        chain_diversity, diversity_weaknesses = _assess_chain_diversity(ctx)
 
-        all_weaknesses = ev_weaknesses + prob_weaknesses + div_weaknesses
+        weaknesses = (
+            sufficiency_weaknesses
+            + quality_weaknesses
+            + probability_weaknesses
+            + diversity_weaknesses
+        )
 
-        # Add violation and step_error derived weaknesses
         if ctx.violations:
-            all_weaknesses.append(f"pipeline 规则检查产生 {len(ctx.violations)} 条告警")
+            weaknesses.append(f"Pipeline validation emitted {len(ctx.violations)} warnings.")
         if ctx.step_errors:
-            all_weaknesses.append(f"pipeline 执行中 {len(ctx.step_errors)} 个步骤报错")
+            weaknesses.append(f"Pipeline execution hit {len(ctx.step_errors)} step errors.")
 
-        # Weighted overall confidence
-        # evidence is most important (40%), then coherence (35%), then diversity (25%)
-        overall = ev_sufficiency * 0.4 + prob_coherence * 0.35 + chain_diversity * 0.25
+        overall = (
+            evidence_sufficiency * 0.3
+            + evidence_quality * 0.2
+            + probability_coherence * 0.3
+            + chain_diversity * 0.2
+        )
 
-        # Penalty for execution problems
         if ctx.step_errors:
             overall *= max(0.5, 1.0 - 0.1 * len(ctx.step_errors))
 
         recommended: list[str] = []
-        if ev_sufficiency < 0.5:
-            recommended.append("增加证据来源或细化搜索子查询以提高证据覆盖")
-        if prob_coherence < 0.8:
-            recommended.append("检查因果边概率估计的一致性")
+        if evidence_sufficiency < 0.5:
+            recommended.append("Add more evidence sources or refine the retrieval sub-queries.")
+        if evidence_quality < 0.65:
+            recommended.append("Reduce fallback-summary evidence and prioritize anchorable primary evidence.")
+        if probability_coherence < 0.8:
+            recommended.append("Inspect causal edge probabilities and confidence intervals for inconsistencies.")
         if chain_diversity < 0.3 and len(ctx.hypotheses) > 1:
-            recommended.append("竞争链过于相似，考虑生成更发散的假说")
+            recommended.append("Generate more diverse competing chains.")
         if not ctx.total_evidence_count:
-            recommended.append("配置 LLM 与搜索源以启用自动证据收集")
+            recommended.append("Enable or repair evidence collection before trusting the output.")
         if not ctx.hypotheses:
-            recommended.append("pipeline 未产出假说链，检查上游步骤是否正常")
+            recommended.append("Upstream steps produced no chains; inspect retrieval and graph building.")
 
         evaluation = PipelineEvaluation(
-            evidence_sufficiency=round(ev_sufficiency, 3),
-            probability_coherence=round(prob_coherence, 3),
+            evidence_sufficiency=round(evidence_sufficiency, 3),
+            probability_coherence=round(probability_coherence, 3),
             chain_diversity=round(chain_diversity, 3),
             overall_confidence=round(max(0.0, min(1.0, overall)), 3),
-            weaknesses=all_weaknesses,
+            weaknesses=weaknesses,
             recommended_actions=recommended,
         )
 
         logger.info(
-            "Pipeline evaluation: overall=%.2f evidence=%.2f coherence=%.2f diversity=%.2f weaknesses=%d",
+            "Pipeline evaluation: overall=%.2f sufficiency=%.2f quality=%.2f coherence=%.2f diversity=%.2f weaknesses=%d",
             evaluation.overall_confidence,
-            evaluation.evidence_sufficiency,
+            evidence_sufficiency,
+            evidence_quality,
             evaluation.probability_coherence,
             evaluation.chain_diversity,
             len(evaluation.weaknesses),

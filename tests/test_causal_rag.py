@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from retrocause.collector import EvidenceCollector
+from retrocause.collector import EvidenceCollector, reset_source_limit_state
 from retrocause.llm import ExtractedEvidence
 from retrocause.models import CausalEdge, CausalVariable, EvidenceType
 from retrocause.sources.base import BaseSourceAdapter, SearchResult
@@ -45,6 +45,7 @@ class _FakeLLM:
 
 
 def test_graph_guided_collect_basic():
+    reset_source_limit_state()
     collector = EvidenceCollector()
     llm = _FakeLLM()
     source = _FakeSource()
@@ -66,6 +67,7 @@ def test_graph_guided_collect_basic():
 
 
 def test_graph_guided_collect_no_llm():
+    reset_source_limit_state()
     collector = EvidenceCollector()
     result = collector.graph_guided_collect(
         query="test",
@@ -79,6 +81,7 @@ def test_graph_guided_collect_no_llm():
 
 
 def test_graph_guided_collect_fully_covered():
+    reset_source_limit_state()
     collector = EvidenceCollector()
     llm = _FakeLLM()
     source = _FakeSource()
@@ -102,6 +105,7 @@ def test_graph_guided_collect_fully_covered():
 
 
 def test_graph_guided_collect_max_subqueries():
+    reset_source_limit_state()
     collector = EvidenceCollector()
     llm = _FakeLLM()
     source = _FakeSource()
@@ -124,6 +128,7 @@ def test_graph_guided_collect_max_subqueries():
 
 
 def test_search_by_causal_path():
+    reset_source_limit_state()
     collector = EvidenceCollector()
     llm = _FakeLLM()
     source = _FakeSource()
@@ -139,6 +144,7 @@ def test_search_by_causal_path():
 
 
 def test_search_by_causal_path_too_short():
+    reset_source_limit_state()
     collector = EvidenceCollector()
     llm = _FakeLLM()
     source = _FakeSource()

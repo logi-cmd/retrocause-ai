@@ -5,10 +5,51 @@ from __future__ import annotations
 import logging
 
 from retrocause.collector import EvidenceCollector
-from retrocause.models import CausalEdge, CitationSpan, HypothesisChain
+from retrocause.models import CausalEdge, CitationSpan, Evidence, HypothesisChain
 from retrocause.pipeline import PipelineContext, PipelineStep
 
 logger = logging.getLogger(__name__)
+
+
+def _evidence_quality_score(evidence: Evidence) -> float:
+    method = getattr(evidence, "extraction_method", "manual")
+    base = 1.0
+    if method == "fallback_summary":
+        base = 0.45
+    elif method == "llm":
+        base = 0.9
+    freshness = getattr(evidence, "freshness", "unknown")
+    if freshness == "unknown":
+        base -= 0.05
+    return max(0.2, min(1.0, base))
+
+
+def _apply_chain_quality_penalty(chain: HypothesisChain, evidence_lookup: dict[str, Evidence]) -> None:
+    if not chain.edges:
+        return
+
+    edge_scores: list[float] = []
+    for edge in chain.edges:
+        if not edge.supporting_evidence_ids:
+            edge_scores.append(0.35)
+            continue
+        scores = [
+            _evidence_quality_score(evidence_lookup[eid])
+            for eid in edge.supporting_evidence_ids
+            if eid in evidence_lookup
+        ]
+        edge_scores.append(sum(scores) / len(scores) if scores else 0.35)
+
+    quality_factor = sum(edge_scores) / len(edge_scores)
+    quality_multiplier = 0.55 + 0.45 * quality_factor
+    adjusted_posterior = chain.path_probability * quality_multiplier
+    chain.posterior_probability = max(0.0, min(chain.posterior_probability, adjusted_posterior))
+
+    interval_half_width = 0.1 + (1.0 - quality_factor) * 0.2
+    chain.confidence_interval = (
+        max(0.0, chain.posterior_probability - interval_half_width),
+        min(1.0, chain.posterior_probability + interval_half_width),
+    )
 
 
 def anchor_edge_to_evidence(
@@ -38,7 +79,7 @@ def anchor_hypothesis(
     unanchored: list[str] = []
     for edge in chain.edges:
         supporting, _ = anchor_edge_to_evidence(edge, evidence_by_var)
-        if supporting > 0:
+        if supporting > 0 or edge.supporting_evidence_ids:
             anchored += 1
         else:
             unanchored.append(f"{edge.source}\u2192{edge.target}")
@@ -49,6 +90,8 @@ def anchor_hypothesis(
 def build_evidence_index(collector: EvidenceCollector) -> dict[str, list[str]]:
     index: dict[str, list[str]] = {}
     for ev in collector.get_evidence():
+        if getattr(ev, "extraction_method", "") == "fallback_summary":
+            continue
         for var in ev.linked_variables:
             index.setdefault(var, []).append(ev.id)
     return index
@@ -118,13 +161,16 @@ class EvidenceAnchoringStep(PipelineStep):
 
     def execute(self, ctx: PipelineContext) -> PipelineContext:
         evidence_by_var = build_evidence_index(self.collector)
+        quality_lookup: dict[str, Evidence] = {}
 
         evidence_lookup: dict[str, str] = {}
         for ev in self.collector.get_evidence():
             evidence_lookup[ev.id] = ev.content
+            quality_lookup[ev.id] = ev
 
         for chain in ctx.hypotheses:
             anchor_hypothesis(chain, evidence_by_var)
+            _apply_chain_quality_penalty(chain, quality_lookup)
 
             for edge in chain.edges:
                 if edge.supporting_evidence_ids:

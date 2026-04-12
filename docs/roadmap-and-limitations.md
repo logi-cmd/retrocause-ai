@@ -186,6 +186,10 @@ Pro should justify payment by improving workflow outcomes:
 - stronger scenario / intervention workflows
 - outputs that help users explain causality to teams, clients, or decision-makers
 
+The operational policy for rate-limit resilience, caching, concurrency budgets, and source tiers now lives in [`docs/operational-plan.md`](./operational-plan.md) so roadmap decisions can stay aligned with real operating constraints.
+
+The broader product and OSS/Pro strategy for quality-first operation now lives in [`docs/mature-product-plan.md`](./mature-product-plan.md).
+
 ## OSS vs Pro architecture heuristic
 
 - **OSS** keeps the current Python + FastAPI + Next.js stack and should prioritize visible quality, explicit limits, and contribution friendliness.

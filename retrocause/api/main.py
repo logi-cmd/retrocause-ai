@@ -41,18 +41,31 @@ class _TimeoutError(Exception):
 
 
 def _run_with_timeout(fn, timeout_seconds: float, *args, **kwargs):
+    import time as _time
+
     result_box: list = []
     exc_box: list = []
 
+    _t0 = _time.time()
+
     def target():
         try:
+            logger.info(f"[TIMEOUT-DEBUG] target thread starting fn={fn.__name__!r}")
             result_box.append(fn(*args, **kwargs))
+            logger.info(f"[TIMEOUT-DEBUG] target thread finished in {_time.time() - _t0:.1f}s")
         except Exception as exc:
+            logger.error(f"[TIMEOUT-DEBUG] target thread caught {type(exc).__name__}: {exc}")
             exc_box.append(exc)
 
     t = threading.Thread(target=target, daemon=True)
     t.start()
     t.join(timeout=timeout_seconds)
+
+    _elapsed = _time.time() - _t0
+    logger.info(
+        f"[TIMEOUT-DEBUG] thread join returned after {_elapsed:.1f}s, "
+        f"is_alive={t.is_alive()}, result_box={len(result_box)}, exc_box={len(exc_box)}"
+    )
 
     if t.is_alive():
         raise _TimeoutError(f"Operation timed out after {timeout_seconds}s")
@@ -96,6 +109,10 @@ class EvidenceBindingV2(BaseModel):
     source: str
     reliability: str
     is_supporting: bool  # True → supporting, False → refuting
+    source_tier: str = "base"
+    freshness: str = "unknown"
+    timestamp: Optional[str] = None
+    extraction_method: str = "manual"
 
 
 class NodeEvidenceV2(BaseModel):
@@ -241,6 +258,10 @@ class AnalyzeResponseV2(BaseModel):
     # True when the engine could not run real analysis and demo data was returned
     is_demo: bool = False
     demo_topic: Optional[str] = None
+    analysis_mode: str = "live"
+    freshness_status: str = "unknown"
+    time_range: Optional[str] = None
+    partial_live_reasons: List[str] = []
     # Recommended chain to display by default (None if no chains qualify)
     recommended_chain_id: Optional[str]
     # All competing hypothesis chains
@@ -264,6 +285,71 @@ class AnalyzeResponse(BaseModel):
     evidences: List[Evidence]
     is_demo: bool = False
     demo_topic: Optional[str] = None
+    analysis_mode: str = "live"
+    freshness_status: str = "unknown"
+    time_range: Optional[str] = None
+
+
+def _derive_partial_live_reasons(result: AnalysisResult) -> List[str]:
+    reasons: List[str] = []
+    if result.analysis_mode != "partial_live":
+        return reasons
+
+    if result.evaluation is not None:
+        reasons.extend(result.evaluation.weaknesses[:3])
+
+    if result.freshness_status in {"unknown", "stable"}:
+        reasons.append("Fresh evidence is limited for this run.")
+
+    # Preserve order while deduplicating.
+    deduped: List[str] = []
+    seen: set[str] = set()
+    for reason in reasons:
+        if reason in seen:
+            continue
+        seen.add(reason)
+        deduped.append(reason)
+    return deduped[:3]
+
+
+def _is_live_failure(error_msg: str | None) -> bool:
+    if not error_msg:
+        return False
+    lowered = error_msg.lower()
+    return any(
+        token in lowered
+        for token in [
+            "401",
+            "authentication",
+            "permission",
+            "user not found",
+            "timed out",
+            "empty result",
+            "rate limit",
+        ]
+    )
+
+
+def _empty_live_failure_response(query: str, error_msg: str) -> AnalyzeResponseV2:
+    from retrocause.parser import parse_input
+
+    parsed_query = parse_input(query)
+    return AnalyzeResponseV2(
+        query=query,
+        is_demo=False,
+        demo_topic=None,
+        analysis_mode="partial_live",
+        freshness_status="unknown",
+        time_range=parsed_query.time_range,
+        partial_live_reasons=[error_msg],
+        recommended_chain_id=None,
+        chains=[],
+        evidences=[],
+        upstream_map=UpstreamMapV2(entries=[]),
+        evaluation=None,
+        uncertainty_report=None,
+        error=error_msg,
+    )
 
 
 def _classify_node_type(name: str, upstream_ids: List[str], downstream_ids: List[str]) -> str:
@@ -289,12 +375,14 @@ def _build_upstream_map(nodes_v2: List[GraphNodeV2]) -> UpstreamMapV2:
 
 def _collect_evidence_bindings(
     chains: List[HypothesisChainV2],
+    evidence_pool: list | None = None,
 ) -> List[EvidenceBindingV2]:
     from retrocause.app.demo_data import DEMO_EVIDENCES
 
     seen_ids: set[str] = set()
     bindings: List[EvidenceBindingV2] = []
-    demo_by_id = {ev.id: ev for ev in DEMO_EVIDENCES}
+    effective_pool = evidence_pool or DEMO_EVIDENCES
+    demo_by_id = {ev.id: ev for ev in effective_pool}
 
     for chain in chains:
         for eid in chain.supporting_evidence_ids + chain.refuting_evidence_ids:
@@ -310,6 +398,10 @@ def _collect_evidence_bindings(
                         source=str(demo_ev.source_type),
                         reliability=f"{demo_ev.posterior_reliability:.2f}",
                         is_supporting=eid in chain.supporting_evidence_ids,
+                        source_tier=getattr(demo_ev, "source_tier", "base"),
+                        freshness=getattr(demo_ev, "freshness", "unknown"),
+                        timestamp=getattr(demo_ev, "timestamp", None),
+                        extraction_method=getattr(demo_ev, "extraction_method", "manual"),
                     )
                 )
             else:
@@ -320,6 +412,10 @@ def _collect_evidence_bindings(
                         source="unknown",
                         reliability="0.50",
                         is_supporting=eid in chain.supporting_evidence_ids,
+                        source_tier="base",
+                        freshness="unknown",
+                        timestamp=None,
+                        extraction_method="manual",
                     )
                 )
     return bindings
@@ -328,6 +424,9 @@ def _collect_evidence_bindings(
 def _result_to_v2(
     result: AnalysisResult, *, is_demo: bool = False, demo_topic: Optional[str] = None
 ) -> AnalyzeResponseV2:
+    from retrocause.parser import parse_input
+
+    parsed_query = parse_input(result.query)
     evaluation_v2: Optional[PipelineEvaluationV2] = None
     if result.evaluation is not None:
         evaluation_v2 = PipelineEvaluationV2(
@@ -519,9 +618,13 @@ def _result_to_v2(
         query=result.query,
         is_demo=is_demo,
         demo_topic=demo_topic,
+        analysis_mode="demo" if is_demo else result.analysis_mode,
+        freshness_status=result.freshness_status,
+        time_range=parsed_query.time_range,
+        partial_live_reasons=[] if is_demo else _derive_partial_live_reasons(result),
         recommended_chain_id=recommended_id,
         chains=chains_v2,
-        evidences=_collect_evidence_bindings(chains_v2),
+        evidences=_collect_evidence_bindings(chains_v2, result.evidences),
         upstream_map=_build_upstream_map(list(all_nodes_v2.values())),
         evaluation=evaluation_v2,
         uncertainty_report=uncertainty_v2,
@@ -549,9 +652,12 @@ async def list_providers():
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 async def analyze_query(request: AnalyzeRequest):
     try:
+        from retrocause.parser import parse_input
+
         is_demo = False
         demo_topic: Optional[str] = None
         result: AnalysisResult | None = None
+        parsed_query = parse_input(request.query)
 
         if request.api_key:
             from retrocause.app.demo_data import run_real_analysis
@@ -566,7 +672,7 @@ async def analyze_query(request: AnalyzeRequest):
                 )
             try:
                 result = _run_with_timeout(
-                    run_real_analysis, 120, request.query, request.api_key, model_name, base_url
+                    run_real_analysis, 400, request.query, request.api_key, model_name, base_url
                 )
             except Exception:
                 import traceback
@@ -627,6 +733,9 @@ async def analyze_query(request: AnalyzeRequest):
             evidences=evidences,
             is_demo=is_demo,
             demo_topic=demo_topic,
+            analysis_mode="demo" if is_demo else result.analysis_mode,
+            freshness_status=result.freshness_status,
+            time_range=parsed_query.time_range,
         )
 
     except Exception as e:
@@ -657,12 +766,10 @@ async def analyze_query_v2(request: AnalyzeRequest):
             error_msg: str | None = None
             try:
                 result = _run_with_timeout(
-                    run_real_analysis, 120, request.query, request.api_key, model_name, base_url
+                    run_real_analysis, 400, request.query, request.api_key, model_name, base_url
                 )
             except _TimeoutError:
-                error_msg = (
-                    "Analysis timed out (120s limit). Try a simpler query or try again later."
-                )
+                error_msg = "Analysis timed out. Try a simpler query or try again later."
                 result = None
             except Exception as exc:
                 import traceback
@@ -677,6 +784,9 @@ async def analyze_query_v2(request: AnalyzeRequest):
 
             if result is not None:
                 is_demo = False
+
+        if result is None and request.api_key and _is_live_failure(error_msg):
+            return _empty_live_failure_response(request.query, error_msg or "Live analysis failed.")
 
         if result is None:
             result = topic_aware_demo_result(request.query)
@@ -714,10 +824,19 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
             )
 
         def worker():
+            import time as _time
+
+            _t0 = _time.time()
             try:
                 if not request.api_key:
                     eq.put({"type": "error", "error": "No API key provided"})
                     return
+
+                logger.info(
+                    f"[SSE-DEBUG] worker started — query={request.query!r}, "
+                    f"model={request.model!r}, explicit_model={request.explicit_model!r}, "
+                    f"api_key={request.api_key[:8]}..."
+                )
 
                 from retrocause.app.demo_data import run_real_analysis_with_progress
 
@@ -727,6 +846,10 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                     request.explicit_model
                     if request.explicit_model
                     else (list(provider_cfg["models"].keys())[0] if provider_cfg else request.model)
+                )
+
+                logger.info(
+                    f"[SSE-DEBUG] resolved model_name={model_name!r}, base_url={base_url!r}"
                 )
 
                 result = None
@@ -741,6 +864,11 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                         base_url,
                         on_progress,
                     )
+                    _elapsed = _time.time() - _t0
+                    logger.info(
+                        f"[SSE-DEBUG] _run_with_timeout returned in {_elapsed:.1f}s — "
+                        f"result={'None' if result is None else type(result).__name__}"
+                    )
                 except _TimeoutError:
                     error_msg = "Analysis timed out. Try a simpler query or try again later."
                     logger.warning("SSE stream analysis timed out after 400s")
@@ -748,14 +876,33 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                     logger.error(f"SSE stream analysis error: {type(exc).__name__}: {exc}")
                     error_msg = f"{type(exc).__name__}: {exc}"
 
+                if result is not None:
+                    logger.info(
+                        f"[SSE-DEBUG] result has {len(result.hypotheses)} hypotheses, "
+                        f"{len(result.variables)} variables, {len(result.edges)} edges"
+                    )
+
                 if result is not None and len(result.hypotheses) == 0:
                     error_msg = f"LLM calls failed for {model_name} — empty result"
+                    logger.warning("[SSE-DEBUG] zero hypotheses — falling back to demo")
                     result = None
 
                 if result is not None:
                     result.is_demo = False
                     resp = _result_to_v2(result, is_demo=False)
                     eq.put({"type": "done", "is_demo": False, "data": resp.model_dump(mode="json")})
+                elif request.api_key and _is_live_failure(error_msg):
+                    resp = _empty_live_failure_response(
+                        request.query,
+                        error_msg or "Live analysis failed.",
+                    )
+                    eq.put(
+                        {
+                            "type": "done",
+                            "is_demo": False,
+                            "data": resp.model_dump(mode="json"),
+                        }
+                    )
                 else:
                     demo_result = topic_aware_demo_result(request.query)
                     demo_topic = detect_demo_topic(request.query) or "default"

@@ -45,8 +45,37 @@ RetroCause is currently a **research-grade alpha**:
 - factor impact analysis MVP is available
 - homepage now supports a minimal live `/api/analyze/v2` query flow
 - demo fallback vs real analysis is explicitly labeled in the UI
+- live API responses now expose `analysis_mode` (`live`, `partial_live`, `demo`) and `freshness_status`
+- homepage now surfaces `analysis_mode`, `freshness_status`, and inferred query `time_range` so users can see when a result is partial live or time-window scoped
+- homepage now shows structured `partial_live` reasons and evidence-level quality badges (`source_tier`, `extraction_method`, `freshness`) so degraded runs are visible instead of hidden
+- homepage evidence filters now support quality-type filtering, so users can isolate trusted full-text evidence, cache reuse, or fallback summaries
+- homepage evidence lists now sort high-quality evidence first by default: `trusted_fulltext > fulltext > store_cache > base > fallback`
+- homepage now collapses lower-priority evidence by default when no quality filter is selected, while still allowing users to expand and inspect everything
+- hidden lower-priority evidence is now explained in both English and Chinese with per-type counts, so users can see what was deprioritized and why
+- geopolitical/news collection now keeps a small bounded expansion path when the first source is thin, requiring broader source-adapter coverage before calling coverage good enough
+- live SSE progress is now rendered as a visible retrieval trace so users can see evidence collection, graph building, anchoring, CausalRAG, uncertainty, and evaluation steps while the run is in flight
+- chain comparison, connected edges, and evidence rows are now clickable in the evidence board, with graph highlighting synced across chains, edges, nodes, and evidence items
+- live authentication failures and empty live runs now stay visible as explicit `partial_live` errors instead of silently collapsing to demo fallback
+- geopolitical/news queries now use scenario-aware routing (`ap_news`, `federal_register`, `gdelt`, `web`) instead of wasting the first budget on low-fit academic sources
+- policy/regulatory queries can use Federal Register official documents as trusted full-text evidence, so public-news throttling does not have to collapse the run
+- Chinese time-sensitive queries now prefer English search-effective retrieval terms while retaining the original Chinese query as fallback
+- Chinese policy queries now reject over-generic rewrites like "United States why reasons" unless event-specific anchors such as export controls, sanctions, tariffs, or semiconductor terms are preserved
+- live extraction now bounds fulltext prompt size and LLM JSON output to reduce latency, cost, and provider timeout risk without promoting snippets to high-grade evidence
+- merged-source extraction now best-effort attributes each extracted evidence item back to the matching source result, avoiding misleading first-result attribution when AP/news and official sources are batched together
+- live/news/policy graph construction now retries once when the first causal DAG is too narrow, so quality-first runs can expand from a collapsed graph into a broader evidence-supported map without accepting unsupported filler nodes
+- finance/crypto time-sensitive questions such as Bitcoin intraday price drops now route through the finance/news path, keep search-effective anchors like `Bitcoin`, `BTC`, `price`, and `selloff`, and use the same low-coverage graph retry gate
+- hypothesis generation now adds an evidence-wide causal map when the supported DAG is broader than any single root-to-outcome path, so the default board does not hide relevant factors behind narrow path-only chains
+- the homepage preserves live results across language toggles and localizes common live causal labels in Chinese, including crypto/market/policy factors, without changing internal node ids used for graph/edge selection
+- graph evidence anchoring now handles snake_case vs natural-language variable names, reducing unnecessary follow-up retrieval and improving complete evidence-chain coverage
+- interactive environment-based runs keep expensive debate refinement off by default; set `RETROCAUSE_DEBATE_MAX_ROUNDS=1` for deeper/offline debate passes
+- repeated queries can reuse a local high-quality evidence store to widen coverage
+- web retrieval now prefers trusted domains, fetches a small number of page bodies, and reuses short-lived query caches during source throttling
+- time-sensitive queries now infer a time window and use time-aware cache keys plus in-process request coalescing
+- the operational policy for cost control, caching, rate-limit resilience, and OSS vs Pro source strategy now lives in `docs/operational-plan.md`
+- the mature product strategy for quality, cost, rate limits, and OSS/Pro scope now lives in `docs/mature-product-plan.md`
+- the architecture planning docs now also cover current live bottlenecks, scenario-aware routing, stop-loss budgets, and where RetroCause must be meaningfully better than generic chat
 - homepage now supports evidence filtering, chain comparison snapshots, citation snippets, and uncertainty/conflict surfacing for live API results
-- 148 backend tests and frontend build are passing
+- backend tests are passing locally
 
 Already implemented:
 
@@ -62,6 +91,10 @@ Already implemented:
 10. structured uncertainty assessment
 11. evidence-board web UI (Next.js frontend)
 12. SSE real-time pipeline progress streaming (with batch evidence extraction + parallel search + conditional CausalRAG)
+13. evidence quality gating for fallback summaries and graph construction
+14. local high-quality evidence reuse across repeated queries
+15. quality-first bounded source expansion for geopolitics/news queries
+16. clickable evidence-chain inspection in the homepage board
 
 Still evolving:
 
@@ -107,6 +140,8 @@ This opens:
 
 The homepage can now send your question to the v2 API and render the recommended chain as an interactive evidence board. When real analysis is unavailable, the UI explicitly falls back to demo mode instead of silently pretending the result is live.
 
+When real analysis is only partially available, the API can now return `partial_live` instead of collapsing directly to demo. This is used when the system has live evidence, but coverage, freshness, or source quality are not strong enough to call the run fully live.
+
 The current public OSS entry point is the homepage evidence board. Some older multi-panel console components still exist in the codebase as implementation leftovers, but they are not the current public workflow and should not be treated as a stable user-facing route.
 
 Without an API key, the UI may load demo data so you can explore the interface. This fallback is now explicitly labeled.
@@ -130,6 +165,34 @@ streamlit run retrocause/app/entry.py
 The demo mode works without an API key.
 
 To use real analysis in the browser/API workflow today, configure your provider key in the backend environment (see `.env.example`).
+
+If public sources are rate-limited in your environment, you can temporarily narrow the live retrieval path:
+
+```bash
+RETROCAUSE_ENABLED_SOURCES=arxiv
+```
+
+This usually improves availability, but it narrows evidence diversity. It should be treated as a controlled fallback, not the long-term default for best-quality runs.
+
+For web retrieval quality control, you can also extend the built-in trusted-domain list:
+
+```bash
+RETROCAUSE_TRUSTED_DOMAINS=ntsb.gov,faa.gov,who.int,reuters.com
+```
+
+Trusted domains are preferentially ranked for page-body fetches, which helps the pipeline favor higher-quality web evidence when live search is still available.
+
+Additional budget controls are available for hot-query caching and shared source pacing:
+
+```bash
+RETROCAUSE_HOT_QUERY_CACHE_SECONDS=90
+RETROCAUSE_EVERGREEN_QUERY_CACHE_SECONDS=600
+RETROCAUSE_SOURCE_MIN_INTERVAL_SECONDS=0.2
+RETROCAUSE_DEBATE_MAX_ROUNDS=0
+RETROCAUSE_COUNTERFACTUAL_MIN_SCORE=0.0
+```
+
+These settings help control burst cost and reduce avoidable rate-limit amplification.
 
 Supported provider modes:
 
@@ -178,8 +241,10 @@ These examples are useful for demo screenshots, GitHub sharing, and early user o
 
 ```text
 Question
+  → preload high-quality evidence from the local evidence store
   → query decomposition
   → evidence collection from multiple sources
+  → merge cached evidence with fresh retrieval
   → causal graph construction
   → competing hypothesis generation
   → evidence anchoring (span-level citation grounding)
@@ -232,6 +297,30 @@ RetroCause tries to give you a more structured explanation by combining:
 It is not claiming perfect causal truth, and it does not guarantee scientifically validated causal correctness.
 
 It is designed to provide a **clearer and more inspectable explanation interface** with more visible uncertainty and evidence structure than a typical chat answer.
+
+Quality is improved by design, not guaranteed by assertion. RetroCause now prefers higher-quality evidence for graph construction, prevents fallback summaries from dominating anchoring, and surfaces degraded runs explicitly instead of pretending they are fully trustworthy.
+
+Current quality boundaries:
+
+- `live` means the run completed with live evidence and without fallback-summary dominance.
+- `partial_live` means the run used live evidence, but coverage, freshness, or source quality were not strong enough to call the run fully live.
+- `demo` means a real analysis was not available and the system returned an explicit fallback.
+
+Each evidence item can now carry:
+
+- `source_tier`
+- `freshness`
+- `captured_at`
+- `extraction_method`
+
+This makes the system much more honest and more robust, but it still cannot guarantee complete, current, or fully correct coverage for every open-world question.
+
+To stay usable under source throttling, the current pipeline also uses:
+
+- a local high-quality evidence store for repeated or related queries
+- short-lived query caches for web search results
+- page-level caches and domain cooldowns for fetched web documents
+- explicit `partial_live` degradation instead of silent demo fallback
 
 ---
 
@@ -291,7 +380,10 @@ Some commercial and planning documents are intentionally kept local and are not 
 
 - `docs/market-analysis-overseas-c.md` — overseas consumer market analysis
 - `docs/open-source-growth-strategy.md` — GitHub open-source growth strategy
+- `docs/mature-product-plan.md` — quality-first product, cost, rate-limit, and OSS/Pro strategy
+- `docs/operational-plan.md` — cost, rate-limit, caching, and OSS vs Pro operational policy
 - `docs/oss-pro-positioning.md` — OSS boundary, Pro value, pain points, and moat analysis
+- these three docs now also document the current architecture bottlenecks and the next optimization priorities: provider preflight, decomposition validation, multilingual rewrite, scenario-aware source routing, and stop-loss budget control
 - `docs/engineering-audit.md` — engineering strengths, weak points, and optimization roadmap
 - `docs/DECISIONS.md` — technical and product decisions
 - `docs/manual-smoke-test.md` — manual smoke checklist for the OSS demo
@@ -395,7 +487,7 @@ Current OSS runtime architecture (high level):
 | launcher | `start.py` starts FastAPI (`:8000`) + Next.js (`:3005`) |
 | API contract | `retrocause/api/main.py` exposes `/api/analyze/v2`, `/api/analyze/v2/stream` (SSE), `/api/providers`, demo/real metadata |
 | inference runtime | `retrocause/engine.py` staged pipeline: evidence -> graph -> hypotheses -> anchoring -> counterfactual -> debate -> evaluation |
-| evidence sources | `retrocause/sources/*` adapters for DuckDuckGo, ArXiv, Semantic Scholar |
+| evidence sources | `retrocause/sources/*` adapters for DuckDuckGo, AP News, Federal Register, GDELT, ArXiv, Semantic Scholar |
 | model routing | `retrocause/llm.py` + provider config in `retrocause/app/demo_data.py` |
 | browser product surface | Next.js evidence-board homepage + interactive graph/canvas panels |
 | fallback UX | Streamlit path remains available as a demo-oriented backup interface |
@@ -434,14 +526,36 @@ Rule of thumb:
 
 Current local validation includes:
 
-- `pytest tests/` passing (148 tests: unit, integration, comprehensive boundary, CausalRAG, uncertainty, citation)
+- `pytest tests/` passing locally (179 tests: unit, integration, comprehensive boundary, CausalRAG, uncertainty, citation, evidence-store, query-routing, web-source, AP News source, Federal Register source)
 - `ruff check` on all source and test files
 - diagnostics clean on source files (39 Python files + frontend)
 - frontend build (`npm run build`) passing in `frontend/`
-- real data sources (ArXiv, Semantic Scholar, DuckDuckGo) confirmed live
+- real data sources (AP News, Federal Register, ArXiv, Semantic Scholar, DuckDuckGo where available) confirmed through source-level or end-to-end checks
+- OpenRouter DeepSeek live validation for `美国为什么会推出新的半导体出口管制？` returned `analysis_mode=live`, 16 evidence items, 2 chains, 7 nodes, 7 edges, mixed NEWS/ARCHIVE evidence, and no stale Iran-result contamination
+- clean Playwright live browser E2E for `美国为什么会推出新的半导体出口管制？` passed through `/api/analyze/v2/stream` with OpenRouter DeepSeek: non-demo live result, 8 causal graph cards, 7 chain buttons, language toggle preserved all 8 cards, and chain/card clicks produced no console or page errors
+- clean Playwright live browser E2E for `比特币今日价格为何跳水` passed through `/api/analyze/v2/stream` with OpenRouter DeepSeek: non-demo live result, 8 causal graph cards, 7 chain buttons, Chinese-mode cards passed localization checks, language toggle preserved all 8 cards, and chain/card clicks produced no console or page errors
 - API smoke test (`scripts/smoke_test.py`): 38/38 PASS — backend root, V2 API (5 demo topics), V1 compat, edge variable integrity, frontend HTML
 - UI smoke test (`scripts/ui_smoke_test.py`): 21/21 PASS — Playwright/Chromium headless tests covering initial load, demo transparency, query flow, node click/multi-hop, language toggle
 - end-to-end test (`scripts/e2e_test.py`): 589/589 PASS — full-stack E2E covering backend connectivity, V2 API (all 5 demos with field-level validation), V1 backward compat, evidence pool integrity, upstream map consistency, new capability schemas (uncertainty / citation / conflict), edge cases (empty query / single char / nonsense / bad key), frontend HTML delivery, and Playwright UI E2E (load / demo transparency / query flow / node interaction / language toggle / multi-node / console health)
+
+### Local testing
+
+To test the current browser product locally:
+
+1. install backend dependencies with `pip install -e ".[dev]"`
+2. install frontend dependencies with `cd frontend && npm install && cd ..`
+3. start the full app with `python start.py`
+4. open `http://localhost:3005`
+5. for live analysis, provide a provider API key in the UI or backend env as documented in `.env.example`
+
+Useful local verification commands:
+
+- backend tests: `pytest tests/ --basetemp=.pytest-tmp`
+- backend lint: `ruff check retrocause tests`
+- frontend lint: `cd frontend && npm run lint`
+- live browser E2E: set `RETROCAUSE_OPENROUTER_KEY`, start backend on `:8000` and frontend on `:3005`, then run `npx -y -p playwright node scripts/_qa_frontend_live.js`
+
+The changes discussed in this thread are still local workspace edits and have not been committed automatically.
 
 ---
 

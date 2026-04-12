@@ -1,8 +1,9 @@
-"""Semantic Scholar 论文搜索适配器"""
+"""Semantic Scholar paper search adapter."""
 
 from __future__ import annotations
 
 import logging
+import time
 
 import httpx
 
@@ -12,12 +13,14 @@ from retrocause.sources.base import BaseSourceAdapter, SearchResult
 logger = logging.getLogger(__name__)
 
 _API_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
-_TIMEOUT = 15.0
+_TIMEOUT = 5.0
 _FIELDS = "title,abstract,url,year,authors"
+_DISABLE_SECONDS = 120.0
+_disabled_until = 0.0
 
 
 class SemanticScholarAdapter(BaseSourceAdapter):
-    """Semantic Scholar API 适配器 — 免费无需密钥"""
+    """Semantic Scholar adapter with a short-lived 429 circuit breaker."""
 
     @property
     def name(self) -> str:
@@ -28,7 +31,12 @@ class SemanticScholarAdapter(BaseSourceAdapter):
         return EvidenceType.LITERATURE
 
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
-        """调用 Semantic Scholar API 搜索论文，返回 SearchResult 列表。"""
+        global _disabled_until
+
+        if time.time() < _disabled_until:
+            logger.info("Semantic Scholar search temporarily disabled after recent failures")
+            return []
+
         try:
             response = httpx.get(
                 _API_URL,
@@ -41,39 +49,37 @@ class SemanticScholarAdapter(BaseSourceAdapter):
                 headers={"User-Agent": "RetroCause/0.1 (research tool)"},
             )
             response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429:
+                _disabled_until = time.time() + _DISABLE_SECONDS
+            logger.warning("Semantic Scholar request failed: %s", exc)
+            return []
         except httpx.HTTPError as exc:
-            logger.warning("Semantic Scholar 请求失败: %s", exc)
+            _disabled_until = time.time() + _DISABLE_SECONDS
+            logger.warning("Semantic Scholar request failed: %s", exc)
             return []
 
         return self._parse_json(response.json())
 
     @staticmethod
     def _parse_json(data: dict) -> list[SearchResult]:
-        """解析 Semantic Scholar JSON 响应。"""
         results: list[SearchResult] = []
         papers = data.get("data") or []
 
         for paper in papers:
             title = paper.get("title", "").strip()
             url = paper.get("url", "").strip()
-            abstract = paper.get("abstract") or ""
-            content = abstract.strip() if abstract else ""
-
+            abstract = (paper.get("abstract") or "").strip()
             if not title:
                 continue
 
             metadata: dict = {}
-
             year = paper.get("year")
             if year is not None:
                 metadata["year"] = str(year)
 
             raw_authors = paper.get("authors") or []
-            author_names: list[str] = []
-            for a in raw_authors:
-                name = a.get("name", "").strip()
-                if name:
-                    author_names.append(name)
+            author_names = [a.get("name", "").strip() for a in raw_authors if a.get("name", "").strip()]
             if author_names:
                 metadata["authors"] = author_names
 
@@ -84,7 +90,7 @@ class SemanticScholarAdapter(BaseSourceAdapter):
             results.append(
                 SearchResult(
                     title=title,
-                    content=content,
+                    content=abstract,
                     url=url,
                     source_type=EvidenceType.LITERATURE,
                     metadata=metadata,

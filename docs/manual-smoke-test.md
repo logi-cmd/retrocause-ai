@@ -91,6 +91,21 @@ Expected:
 
 ---
 
+## Scenario 3.5b - Back-to-back live query isolation
+
+1. Submit a live query about one topic, for example Iran talks.
+2. Immediately submit a different live query, for example `美国为什么会推出新的半导体出口管制？`.
+3. Watch the status strip and evidence board while the second run is in flight.
+
+Expected:
+
+- the board switches to the second query immediately instead of keeping the old completed board as if it were current
+- stale SSE events from the first request do not overwrite the second request
+- the final result query and evidence topic match the second request
+- the evidence list does not reuse thin CJK overlap from an unrelated prior query
+
+---
+
 ## Scenario 3.6 — Streamlit demo honesty
 
 1. Launch `streamlit run retrocause/app/entry.py` without an API key.
@@ -186,3 +201,108 @@ Expected:
 
 - On Windows consoles, direct Python stdout may display UTF-8 Chinese text as garbled if the console encoding is GBK. This does **not** necessarily mean the FastAPI JSON response is wrong.
 - Browser automation may fail if Chrome/Playwright browser binaries are not installed locally.
+
+---
+
+## Recent real-analysis validation
+
+Local validation on 2026-04-12 used OpenRouter DeepSeek with the query:
+
+- `为什么美国会同意与伊朗进行首轮谈判？`
+
+Observed result:
+
+- `analysis_mode=live`
+- `freshness_status=mixed`
+- 15 v2 evidence items
+- 5 v2 chains
+- 6 variables
+- 6 edges
+- evidence methods included `llm_fulltext_trusted` and `store_cache`
+- GDELT failed during the run, but the product still returned a live evidence chain instead of demo fallback
+
+Manual expectation for this scenario:
+
+- geopolitics/news questions should route through scenario-fit sources instead of academic-first sources
+- the UI should show a streaming retrieval trace while the pipeline is running
+- evidence coverage should not collapse to only one or two causal evidence items when another bounded scenario-fit adapter is available
+- broad-source failures should degrade through other bounded sources instead of silently becoming demo fallback
+
+Latest local validation on 2026-04-12 also used OpenRouter DeepSeek with the query:
+
+- `美国为什么会推出新的半导体出口管制？`
+
+Observed result:
+
+- `analysis_mode=live`
+- `freshness_status=mixed`
+- 16 v2 evidence items
+- 2 v2 chains
+- 7 unique nodes
+- 7 unique edges
+- evidence methods included `llm_fulltext_trusted` and `store_cache`
+- evidence sources included both `NEWS` and official `ARCHIVE`
+- Federal Register official documents supplied trusted full-text policy evidence
+- no stale Iran-topic evidence appeared in the result
+
+Manual expectation for this scenario:
+
+- Chinese policy questions should keep event-specific retrieval anchors such as `semiconductor` and `export controls`
+- generic rewrites like `United States why reasons diplomacy foreign policy` should be rejected
+- public-news source weakness should be offset by bounded official-source retrieval when the query is regulatory/policy-shaped
+- extracted evidence should be attributed to its best matching source result, not blindly to the first result in a merged batch
+
+Latest clean browser validation on 2026-04-12 used Playwright against a freshly started FastAPI backend and Next.js frontend with the same query:
+
+- `美国为什么会推出新的半导体出口管制？`
+
+Observed browser result:
+
+- `/api/analyze/v2/stream` returned a non-demo live result
+- 8 causal graph cards were rendered by default
+- 7 chain buttons were available for comparison
+- switching between Chinese and English preserved all 8 graph cards instead of resetting to demo/default state
+- clicking a graph card and clicking hypothesis-chain controls produced no console errors or page errors
+
+Regression command:
+
+- set `RETROCAUSE_OPENROUTER_KEY`
+- start backend on `127.0.0.1:8000`
+- start frontend on `localhost:3005`
+- run `npx -y -p playwright node scripts/_qa_frontend_live.js`
+
+Quality expectation for this scenario:
+
+- live/news/policy graph construction should not accept a collapsed 3-4 node graph when the evidence supports a broader causal DAG
+- if the first LLM graph is too narrow, the graph builder may spend one extra model call to retry for broader evidence-supported coverage
+- the default board should prefer the evidence-wide causal map when the DAG is broader than any single root-to-outcome path
+
+Latest clean browser validation on 2026-04-12 also covered a time-sensitive crypto/finance query:
+
+- `比特币今日价格为何跳水`
+
+Observed browser result:
+
+- `/api/analyze/v2/stream` returned a non-demo live result
+- 8 causal graph cards were rendered by default
+- 7 chain buttons were available for comparison
+- Chinese-mode graph cards passed the localization check instead of rendering mostly English variable labels
+- switching between Chinese and English preserved all 8 graph cards
+- clicking a graph card and clicking hypothesis-chain controls produced no console errors or page errors
+
+Regression command:
+
+- set `RETROCAUSE_OPENROUTER_KEY`
+- set `RETROCAUSE_QA_SCENARIO=bitcoin`
+- set `RETROCAUSE_QA_MIN_CARDS=6`
+- set `RETROCAUSE_QA_EXPECTED_PATTERN=比特币|Bitcoin|BTC|加密货币`
+- start backend on `127.0.0.1:8000`
+- start frontend on `localhost:3005`
+- run `npx -y -p playwright node scripts/_qa_frontend_live.js`
+
+Quality expectation for this scenario:
+
+- Chinese crypto market-move questions should parse as `finance`, not `general`
+- retrieval queries should preserve `Bitcoin`, `BTC`, `price`, and selloff/drop anchors
+- finance/crypto graphs should use the same low-coverage retry gate as live news/policy questions
+- Chinese UI cards should not expose mostly English market/policy variable labels

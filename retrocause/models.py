@@ -79,6 +79,10 @@ class Evidence:
     prior_reliability: float = 0.5
     posterior_reliability: float = 0.5
     linked_variables: list[str] = field(default_factory=list)
+    source_tier: str = "base"
+    freshness: str = "unknown"
+    captured_at: Optional[str] = None
+    extraction_method: str = "manual"
 
 
 @dataclass
@@ -182,6 +186,7 @@ class AnalysisResult:
     variables: list[CausalVariable]
     edges: list[CausalEdge]
     hypotheses: list[HypothesisChain]
+    evidences: list[Evidence] = field(default_factory=list)
     total_evidence_count: int = 0
     total_uncertainty: float = 0.0
     recommended_next_steps: list[str] = field(default_factory=list)
@@ -189,3 +194,5 @@ class AnalysisResult:
     demo_topic: Optional[str] = None
     evaluation: PipelineEvaluation | None = None
     uncertainty_report: Optional[UncertaintyReport] = None
+    analysis_mode: str = "live"
+    freshness_status: str = "unknown"

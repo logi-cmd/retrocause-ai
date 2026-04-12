@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from retrocause.engine import analyze
+from retrocause.evidence_store import EvidenceStore
 from retrocause.llm import ExtractedEvidence
-from retrocause.models import EvidenceType
+from retrocause.models import Evidence, EvidenceType
 from retrocause.sources.base import BaseSourceAdapter, SearchResult
 
 
@@ -93,6 +94,38 @@ class MockLLMClient:
             "devil_advocate": "Evidence gaps remain on alternative paths",
             "arbiter": "Plausible but still uncertain",
         }
+
+
+class FallbackOnlyLLMClient(MockLLMClient):
+    def __init__(self):
+        self.last_evidence_texts: list[str] = []
+
+    def extract_evidence(
+        self, query: str, raw_text: str, source_type: str
+    ) -> list[ExtractedEvidence]:
+        return []
+
+    def build_causal_graph(self, query: str, evidence_texts: list[str], domain: str) -> dict:
+        self.last_evidence_texts = evidence_texts
+        return {
+            "variables": [
+                {"name": "flight_path_deviation", "description": "Unexpected route change"},
+                {"name": "mh370_disappearance", "description": "Aircraft loss event"},
+            ],
+            "edges": [
+                {
+                    "source": "flight_path_deviation",
+                    "target": "mh370_disappearance",
+                    "conditional_prob": 0.82,
+                }
+            ],
+            "result_variable": "mh370_disappearance",
+        }
+
+
+class InMemoryEvidenceStore(EvidenceStore):
+    def _save(self) -> None:
+        return None
 
 
 def test_full_pipeline_with_mock():
@@ -187,3 +220,102 @@ def test_pipeline_no_llm_graceful():
     assert result.total_evidence_count == 0
     assert len(result.variables) == 0
     assert len(result.hypotheses) == 0
+
+
+def test_pipeline_prefers_cached_high_quality_evidence_for_graph(monkeypatch):
+    store = InMemoryEvidenceStore("evidence_store.json")
+    store.add_evidences(
+        "MH370为什么失踪",
+        "aviation",
+        [
+            Evidence(
+                id="ev-cache-1",
+                content="Satellite handshake analysis links route deviation to the MH370 disappearance.",
+                source_type=EvidenceType.SCIENTIFIC,
+                source_url="https://example.com/report",
+                prior_reliability=0.88,
+                posterior_reliability=0.88,
+                linked_variables=["flight_path_deviation", "mh370_disappearance"],
+                source_tier="base",
+                freshness="stable",
+                captured_at="2026-04-11",
+                extraction_method="llm",
+            )
+        ],
+    )
+    monkeypatch.setattr("retrocause.engine.EvidenceStore", lambda: store)
+
+    llm_client = FallbackOnlyLLMClient()
+
+    class ThinSourceAdapter(BaseSourceAdapter):
+        @property
+        def name(self) -> str:
+            return "thin-source"
+
+        @property
+        def source_type(self) -> EvidenceType:
+            return EvidenceType.NEWS
+
+        def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
+            return [
+                SearchResult(
+                    title="Speculation roundup",
+                    content="Short summary with weak detail.",
+                    url="https://example.com/speculation",
+                    source_type=EvidenceType.NEWS,
+                )
+            ]
+
+    result = analyze(
+        query="MH370为什么失踪",
+        llm_client=llm_client,
+        source_adapters=[ThinSourceAdapter()],
+    )
+
+    assert any(
+        item.extraction_method == "store_cache" and "Satellite handshake analysis" in item.content
+        for item in result.evidences
+    )
+    assert any("Satellite handshake analysis" in text for text in llm_client.last_evidence_texts)
+
+    variable = next(item for item in result.variables if item.name == "flight_path_deviation")
+    edge = next(item for item in result.edges if item.source == "flight_path_deviation")
+
+    assert variable.evidence_ids
+    assert variable.posterior_support >= 0.75
+    assert edge.supporting_evidence_ids
+    assert 0.6 <= edge.conditional_prob <= 1.0
+
+
+def test_time_sensitive_query_with_only_stable_evidence_degrades_to_partial_live(monkeypatch):
+    store = InMemoryEvidenceStore("evidence_store.json")
+    store.add_evidences(
+        "Why did this stock fall today?",
+        "finance",
+        [
+            Evidence(
+                id="ev-cache-stale",
+                content="Long-term valuation concerns pressured the stock.",
+                source_type=EvidenceType.SCIENTIFIC,
+                source_url="https://example.com/report",
+                prior_reliability=0.9,
+                posterior_reliability=0.9,
+                linked_variables=["valuation", "stock_drop"],
+                source_tier="base",
+                freshness="stable",
+                captured_at="2026-04-11",
+                extraction_method="llm",
+            )
+        ],
+        time_scope="trading_day",
+    )
+    monkeypatch.setattr("retrocause.engine.EvidenceStore", lambda: store)
+
+    result = analyze(
+        query="Why did this stock fall today?",
+        llm_client=FallbackOnlyLLMClient(),
+        source_adapters=[],
+    )
+
+    assert result.analysis_mode == "partial_live"
+    assert any("Fresh evidence is insufficient" in item for item in result.recommended_next_steps)

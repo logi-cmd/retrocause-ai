@@ -5,12 +5,14 @@ from __future__ import annotations
 import pytest
 
 from retrocause.api.main import (
+    AnalyzeRequest,
     AnalyzeResponseV2,
     EvidenceBindingV2,
     GraphNodeV2,
     GraphEdgeV2,
     HypothesisChainV2,
     PipelineEvaluationV2,
+    analyze_query_v2,
     _result_to_v2,
 )
 from retrocause.app.demo_data import (
@@ -32,6 +34,11 @@ from retrocause.models import (
     HypothesisStatus,
 )
 from retrocause.pipeline import Pipeline, PipelineContext
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -139,6 +146,8 @@ def test_result_to_v2_minimal():
     assert v2.query == "test query"
     assert v2.is_demo is True
     assert v2.demo_topic == "test"
+    assert v2.analysis_mode == "demo"
+    assert v2.freshness_status == "unknown"
     assert len(v2.chains) == 1
     assert v2.chains[0].chain_id == "chain-1"
     assert v2.chains[0].probability == 0.6
@@ -239,6 +248,63 @@ def test_result_to_v2_node_types():
     assert node_types["var_b"] == "effect"
 
 
+def test_result_to_v2_infers_time_range_from_query():
+    result = _make_minimal_result()
+    result.query = "Why did this stock fall today?"
+    v2 = _result_to_v2(result)
+    assert v2.time_range == "today"
+
+
+def test_result_to_v2_partial_live_reasons_follow_evaluation():
+    result = _make_minimal_result()
+    result.analysis_mode = "partial_live"
+    result.freshness_status = "stable"
+    result.evaluation = PipelineEvaluationV2.model_validate(
+        {
+            "evidence_sufficiency": 0.4,
+            "probability_coherence": 0.8,
+            "chain_diversity": 0.5,
+            "overall_confidence": 0.55,
+            "weaknesses": ["Fallback-summary evidence dominates the run (3/4 items)."],
+            "recommended_actions": ["Reduce fallback-summary evidence."],
+        }
+    )
+    # Convert back to the dataclass-like shape expected by _result_to_v2.
+    from retrocause.evaluation import PipelineEvaluation
+
+    result.evaluation = PipelineEvaluation(
+        evidence_sufficiency=result.evaluation.evidence_sufficiency,
+        probability_coherence=result.evaluation.probability_coherence,
+        chain_diversity=result.evaluation.chain_diversity,
+        overall_confidence=result.evaluation.overall_confidence,
+        weaknesses=result.evaluation.weaknesses,
+        recommended_actions=result.evaluation.recommended_actions,
+    )
+    v2 = _result_to_v2(result)
+    assert v2.partial_live_reasons
+    assert "Fallback-summary evidence dominates the run" in v2.partial_live_reasons[0]
+
+
+@pytest.mark.anyio
+async def test_analyze_query_v2_returns_partial_live_instead_of_demo_on_live_failure(monkeypatch):
+    def _fail_run_real_analysis(*args, **kwargs):
+        raise RuntimeError("401 User not found.")
+
+    monkeypatch.setattr("retrocause.app.demo_data.run_real_analysis", _fail_run_real_analysis)
+
+    request = AnalyzeRequest(
+        query="为什么美国会同意与伊朗进行首轮谈判？",
+        model="openrouter",
+        api_key="sk-test",
+        explicit_model="openai/gpt-4o-mini",
+    )
+    response = await analyze_query_v2(request)
+    assert response.is_demo is False
+    assert response.analysis_mode == "partial_live"
+    assert response.error is not None
+    assert response.chains == []
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # 3. Pydantic Schema 验证 — 确保 API 模型能正确序列化
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -250,6 +316,8 @@ def test_v2_schema_round_trip():
         query="test",
         is_demo=True,
         demo_topic="svb",
+        time_range="today",
+        partial_live_reasons=[],
         recommended_chain_id="chain-1",
         chains=[
             HypothesisChainV2(
@@ -294,6 +362,9 @@ def test_v2_schema_round_trip():
                 source="test",
                 reliability="0.80",
                 is_supporting=True,
+                source_tier="base",
+                freshness="stable",
+                extraction_method="manual",
             ),
         ],
         upstream_map={"entries": []},
@@ -310,7 +381,11 @@ def test_v2_schema_round_trip():
     json_str = v2.model_dump_json()
     parsed = AnalyzeResponseV2.model_validate_json(json_str)
     assert parsed.query == "test"
+    assert parsed.time_range == "today"
+    assert parsed.partial_live_reasons == []
     assert parsed.evaluation.overall_confidence == 0.63
+    assert parsed.evidences[0].source_tier == "base"
+    assert parsed.evidences[0].freshness == "stable"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -460,6 +535,8 @@ def test_analysis_result_defaults():
     assert r.is_demo is False
     assert r.demo_topic is None
     assert r.evaluation is None
+    assert r.analysis_mode == "live"
+    assert r.freshness_status == "unknown"
     assert r.total_evidence_count == 0
     assert r.total_uncertainty == 0.0
     assert r.recommended_next_steps == []
