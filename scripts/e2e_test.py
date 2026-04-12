@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import httpx
 import json
+import os
 import sys
 import time
 from typing import Any
@@ -11,8 +12,8 @@ except ImportError:
     print("[SKIP] playwright not installed — UI tests skipped")
     sync_playwright = None
 
-BASE = "http://127.0.0.1:8000"
-FRONTEND = "http://localhost:3005"
+BASE = os.environ.get("RETROCAUSE_E2E_BASE", "http://127.0.0.1:8000")
+FRONTEND = os.environ.get("RETROCAUSE_E2E_FRONTEND", "http://localhost:3005")
 TIMEOUT = 30
 
 passed = 0
@@ -334,8 +335,10 @@ check("nonsense query returns 200", status == 200)
 check("nonsense falls back to demo", data.get("is_demo") is True)
 
 status, data = v2_post("Why did dinosaurs go extinct?", api_key="sk-fake-key-will-fail")
-check("bad API key returns 200 (demo fallback)", status == 200)
-check("bad API key is still demo", data.get("is_demo") is True)
+check("bad API key returns 200 (explicit partial_live failure)", status == 200)
+check("bad API key is not silently demo", data.get("is_demo") is False)
+check("bad API key is partial_live", data.get("analysis_mode") == "partial_live")
+check("bad API key exposes error", bool(data.get("error")))
 
 # ═══════════════════════════════════════════════════════════════════════
 # SECTION 10: Frontend serves HTML
@@ -363,6 +366,10 @@ else:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
         page.set_default_timeout(15_000)
+        console_errors = []
+        page_errors = []
+        page.on("console", lambda msg: console_errors.append(msg) if msg.type == "error" else None)
+        page.on("pageerror", lambda exc: page_errors.append(exc))
 
         # 11a: Initial load
         print("\n  --- 11a: Initial Load ---")
@@ -401,7 +408,27 @@ else:
         textarea = page.locator("textarea").first
         check("UI textarea found", textarea.count() > 0)
         if textarea.count() > 0:
-            textarea.fill("Why did SVB collapse?")
+            stream_status, stream_payload = v2_post("Why did dinosaurs go extinct?")
+            if stream_status == 200 and len(stream_payload.get("chains", [])) >= 2:
+                stream_event = {
+                    "type": "done",
+                    "is_demo": stream_payload.get("is_demo", True),
+                    "demo_topic": stream_payload.get("demo_topic"),
+                    "data": stream_payload,
+                }
+
+                page.route(
+                    "**/api/analyze/v2/stream",
+                    lambda route: route.fulfill(
+                        status=200,
+                        headers={"content-type": "text/event-stream"},
+                        body=f"data: {json.dumps(stream_event, ensure_ascii=False)}\n\n",
+                    ),
+                )
+            else:
+                skip("UI chain compare mock stream", "backend did not provide a 2-chain fixture")
+
+            textarea.fill("Why did dinosaurs go extinct?")
 
             submit = page.locator("button:has-text('Analyze')").first
             if submit.count() == 0:
@@ -424,14 +451,41 @@ else:
                     "cards disappeared after query",
                 )
 
-                # 11d: Node selection
-                print("\n  --- 11d: Node Click + Selection ---")
+                # 11d: Chain comparison switching regression
+                print("\n  --- 11d: Chain Compare Switching ---")
+                compare_buttons = page.locator("[data-testid^='chain-compare-']")
+                compare_count = compare_buttons.count()
+                check(
+                    "UI chain compare has alternatives",
+                    compare_count >= 2,
+                    f"found {compare_count} chain compare buttons",
+                )
+                if compare_count >= 2:
+                    first_chain = compare_buttons.nth(0)
+                    second_chain = compare_buttons.nth(1)
+                    second_chain.click()
+                    time.sleep(0.5)
+                    check(
+                        "UI chain B becomes active",
+                        second_chain.get_attribute("aria-pressed") == "true",
+                        f"aria-pressed={second_chain.get_attribute('aria-pressed')}",
+                    )
+                    first_chain.click()
+                    time.sleep(0.5)
+                    check(
+                        "UI chain A becomes active again",
+                        first_chain.get_attribute("aria-pressed") == "true",
+                        f"aria-pressed={first_chain.get_attribute('aria-pressed')}",
+                    )
+
+                # 11e: Node selection
+                print("\n  --- 11e: Node Click + Selection ---")
                 first_card = cards_after.first
                 first_card.click()
                 time.sleep(0.5)
 
-                selected = page.locator(".sticky-card.ring-2")
-                check("UI node selected (ring)", selected.count() > 0, "no .ring-2 on clicked card")
+                selected = page.locator("[data-testid^='sticky-card-'][aria-pressed='true']")
+                check("UI node selected", selected.count() > 0, "no selected sticky card")
 
                 right_after_click = page.locator(".right-panel").text_content() or ""
                 has_detail = (
@@ -448,14 +502,18 @@ else:
                     f"right panel: {(right_after_click or '')[:150]}",
                 )
 
-                # 11e: Deselect
+                # 11f: Deselect
                 if selected.count() > 0:
                     first_card.click()
                     time.sleep(0.3)
-                    check("UI node deselection works", True)
+                    check(
+                        "UI node deselection works",
+                        selected.count() == 0,
+                        "sticky card still selected after second click",
+                    )
 
-        # 11f: Language toggle
-        print("\n  --- 11f: Language Toggle ---")
+        # 11g: Language toggle
+        print("\n  --- 11g: Language Toggle ---")
         lang_btn = page.locator("button:has-text('EN')").first
         if lang_btn.count() == 0:
             lang_btn = page.locator("button:has-text('中')").first
@@ -475,19 +533,17 @@ else:
         else:
             skip("UI language toggle", "button not found")
 
-        # 11g: Second node click + multi-hop hint
-        print("\n  --- 11g: Multi-node Interaction ---")
+        # 11h: Post-toggle node click
+        print("\n  --- 11h: Post-toggle Node Interaction ---")
         all_cards = page.locator(".sticky-card")
-        if all_cards.count() > 1:
-            all_cards.nth(1).click()
+        if all_cards.count() > 0:
+            all_cards.first.click()
             time.sleep(0.5)
-            selected2 = page.locator(".sticky-card.ring-2")
-            check("UI second node selectable", selected2.count() > 0)
+            selected2 = page.locator("[data-testid^='sticky-card-'][aria-pressed='true']")
+            check("UI node selectable after language toggle", selected2.count() > 0)
 
-        # 11h: No console errors
-        print("\n  --- 11h: Console Health ---")
-        console_errors = []
-        page.on("console", lambda msg: console_errors.append(msg) if msg.type == "error" else None)
+        # 11i: No console errors
+        print("\n  --- 11i: Console Health ---")
         page.reload(wait_until="networkidle")
         time.sleep(2)
         critical_errors = [
@@ -497,8 +553,10 @@ else:
         ]
         check(
             "UI no critical console errors",
-            len(critical_errors) == 0,
-            f"{len(critical_errors)} errors: {[e.text[:80] for e in critical_errors[:3]]}",
+            len(critical_errors) == 0 and len(page_errors) == 0,
+            f"{len(critical_errors)} console errors, {len(page_errors)} page errors: "
+            f"{[e.text[:80] for e in critical_errors[:3]]} "
+            f"{[str(e)[:80] for e in page_errors[:3]]}",
         )
 
         browser.close()

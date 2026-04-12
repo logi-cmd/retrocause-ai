@@ -13,6 +13,8 @@ import {
   type EvidenceReliability,
 } from "@/data/mockData";
 
+const API_BASE = process.env.NEXT_PUBLIC_RETROCAUSE_API_BASE ?? "http://localhost:8000";
+
 type ApiNode = {
   id: string;
   label: string;
@@ -74,6 +76,14 @@ type ApiChain = {
   refuting_evidence_ids: string[];
 };
 
+type ApiRetrievalTrace = {
+  source: string;
+  query: string;
+  result_count: number;
+  cache_hit?: boolean;
+  error?: string | null;
+};
+
 type AnalyzeResponseV2 = {
   query: string;
   is_demo: boolean;
@@ -85,6 +95,7 @@ type AnalyzeResponseV2 = {
   recommended_chain_id: string | null;
   evidences: ApiEvidence[];
   chains: ApiChain[];
+  retrieval_trace?: ApiRetrievalTrace[];
   evaluation?: {
     evidence_sufficiency: number;
     probability_coherence: number;
@@ -954,6 +965,10 @@ function StickyCard({
   return (
     <div
       className={`sticky-card ${note.color} ${isSelected ? "ring-2 ring-[#a0503c]/40" : ""}`}
+      role="button"
+      tabIndex={0}
+      aria-pressed={isSelected}
+      data-testid={`sticky-card-${note.id}`}
       style={{
         position: "absolute",
         top: note.top,
@@ -968,6 +983,12 @@ function StickyCard({
         willChange: isDragging ? "top, left, transform" : undefined,
       }}
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      }}
       onMouseDown={onMouseDown}
     >
       <Pushpin />
@@ -1011,7 +1032,9 @@ export default function Home() {
   const [statusNote, setStatusNote] = useState("");
   const [availableChains, setAvailableChains] = useState<AnalyzeResponseV2["chains"]>([]);
   const [recommendedChainId, setRecommendedChainId] = useState<string | null>(null);
+  const [selectedChainId, setSelectedChainId] = useState<string | null>(null);
   const [evidencePool, setEvidencePool] = useState<AnalyzeResponseV2["evidences"]>([]);
+  const [retrievalTrace, setRetrievalTrace] = useState<ApiRetrievalTrace[]>([]);
   const [pipelineEval, setPipelineEval] = useState<AnalyzeResponseV2["evaluation"]>(null);
   const [uncertaintyReport, setUncertaintyReport] = useState<AnalyzeResponseV2["uncertainty_report"]>(null);
   const [evidenceSourceFilter, setEvidenceSourceFilter] = useState<string>("all");
@@ -1054,8 +1077,9 @@ export default function Home() {
 
   useEffect(() => {
     if (availableChains.length > 0) {
+      const targetChainId = selectedChainId ?? recommendedChainId;
       const currentApiChain =
-        availableChains.find((chain) => chain.chain_id === activeChain.metadata.id) ??
+        availableChains.find((chain) => chain.chain_id === targetChainId) ??
         availableChains.find((chain) => chain.chain_id === recommendedChainId) ??
         availableChains[0];
       setActiveChain(toLocalChain(currentApiChain, locale, evidencePool));
@@ -1071,7 +1095,6 @@ export default function Home() {
       setActiveChain(localizedDemo.primaryChain);
     }
   }, [
-    activeChain.metadata.id,
     analysisMode.isDemo,
     analysisMode.loading,
     availableChains,
@@ -1081,11 +1104,12 @@ export default function Home() {
     locale,
     localizedDemo.primaryChain,
     recommendedChainId,
+    selectedChainId,
   ]);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("http://localhost:8000/api/providers")
+    fetch(`${API_BASE}/api/providers`)
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
@@ -1208,7 +1232,8 @@ export default function Home() {
     return next;
   }, [mockPrimaryChain.edges, selectedEvidenceEdgeIds, selectedFocusEdgeId, selectedNodeId]);
   const chainProbabilityItems = availableChains.slice(0, 3);
-  const activeChainIsRecommended = !recommendedChainId || mockPrimaryChain.metadata.id === recommendedChainId;
+  const activeChainId = selectedChainId ?? mockPrimaryChain.metadata.id;
+  const activeChainIsRecommended = !recommendedChainId || activeChainId === recommendedChainId;
   const activeChainConfidence = Math.round(mockPrimaryChain.metadata.confidence * 100);
   const hasLowConfidence = activeChainConfidence < 50;
   const hasLowEvidenceCoverage = mockPrimaryChain.metadata.primaryEvidenceCount < 3;
@@ -1480,7 +1505,9 @@ export default function Home() {
     setActiveChain(makePlaceholderChain(query, locale));
     setAvailableChains([]);
     setRecommendedChainId(null);
+    setSelectedChainId(null);
     setEvidencePool([]);
+    setRetrievalTrace([]);
     setPipelineEval(null);
     setUncertaintyReport(null);
     setSelectedNodeId(null);
@@ -1509,7 +1536,9 @@ export default function Home() {
       if (payload.chains.length === 0) {
         setAvailableChains([]);
         setRecommendedChainId(null);
+        setSelectedChainId(null);
         setEvidencePool(payload.evidences);
+        setRetrievalTrace(payload.retrieval_trace ?? []);
         setPipelineEval(payload.evaluation ?? null);
         setUncertaintyReport(payload.uncertainty_report ?? null);
         setActiveChain(makePlaceholderChain(payload.query, locale));
@@ -1540,7 +1569,9 @@ export default function Home() {
 
       setAvailableChains(payload.chains);
       setRecommendedChainId(payload.recommended_chain_id);
+      setSelectedChainId(recommended.chain_id);
       setEvidencePool(payload.evidences);
+      setRetrievalTrace(payload.retrieval_trace ?? []);
       setPipelineEval(payload.evaluation ?? null);
       setUncertaintyReport(payload.uncertainty_report ?? null);
       setActiveChain(toLocalChain(recommended, locale, payload.evidences));
@@ -1591,7 +1622,9 @@ export default function Home() {
       setActiveChain(localizedDemo.primaryChain);
       setAvailableChains([]);
       setRecommendedChainId(null);
+      setSelectedChainId(null);
       setEvidencePool([]);
+      setRetrievalTrace([]);
       setPipelineEval(null);
       setUncertaintyReport(null);
       setEvidenceQualityFilter("all");
@@ -1618,7 +1651,7 @@ export default function Home() {
 
     try {
       // Try SSE streaming endpoint first
-      const response = await fetch("http://localhost:8000/api/analyze/v2/stream", {
+      const response = await fetch(`${API_BASE}/api/analyze/v2/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -2072,6 +2105,7 @@ export default function Home() {
                   setSelectedFocusEdgeId(null);
                   setSelectedEvidenceId(null);
                   setPanOffset({ x: 0, y: 0 });
+                  setSelectedChainId(chain.chain_id);
                   setActiveChain(toLocalChain(chain, locale, evidencePool));
                 }}
                 style={{
@@ -2081,8 +2115,8 @@ export default function Home() {
                   marginTop: "6px",
                   padding: "6px 8px",
                   borderRadius: "4px",
-                  border: chain.chain_id === mockPrimaryChain.metadata.id ? "1px solid rgba(59,110,165,0.28)" : "1px solid rgba(160,140,110,0.12)",
-                  background: chain.chain_id === mockPrimaryChain.metadata.id ? "rgba(59,110,165,0.08)" : "rgba(255,255,255,0.55)",
+                  border: chain.chain_id === activeChainId ? "1px solid rgba(59,110,165,0.28)" : "1px solid rgba(160,140,110,0.12)",
+                  background: chain.chain_id === activeChainId ? "rgba(59,110,165,0.08)" : "rgba(255,255,255,0.55)",
                   color: "#5c4a32",
                   fontSize: "0.62rem",
                   cursor: "pointer",
@@ -2116,20 +2150,29 @@ export default function Home() {
                   setSelectedFocusEdgeId(null);
                   setSelectedEvidenceId(null);
                   setPanOffset({ x: 0, y: 0 });
+                  setSelectedChainId(nextChain.chain_id);
                   setActiveChain(toLocalChain(nextChain, locale, evidencePool));
                 }}
+                aria-pressed={chain.chain_id === activeChainId}
+                data-testid={`chain-compare-${chain.chain_id}`}
                 style={{
                   width: "100%",
                   marginTop: "6px",
                   padding: "6px 4px",
-                  borderWidth: chain.chain_id === mockPrimaryChain.metadata.id ? "1px" : "0",
-                  borderStyle: chain.chain_id === mockPrimaryChain.metadata.id ? "solid" : "none",
-                  borderColor: chain.chain_id === mockPrimaryChain.metadata.id ? "rgba(59,110,165,0.22)" : "transparent",
                   borderTopWidth: "1px",
+                  borderRightWidth: chain.chain_id === activeChainId ? "1px" : "0",
+                  borderBottomWidth: chain.chain_id === activeChainId ? "1px" : "0",
+                  borderLeftWidth: chain.chain_id === activeChainId ? "1px" : "0",
                   borderTopStyle: "dashed",
+                  borderRightStyle: chain.chain_id === activeChainId ? "solid" : "none",
+                  borderBottomStyle: chain.chain_id === activeChainId ? "solid" : "none",
+                  borderLeftStyle: chain.chain_id === activeChainId ? "solid" : "none",
                   borderTopColor: "rgba(160,140,110,0.18)",
+                  borderRightColor: chain.chain_id === activeChainId ? "rgba(59,110,165,0.22)" : "transparent",
+                  borderBottomColor: chain.chain_id === activeChainId ? "rgba(59,110,165,0.22)" : "transparent",
+                  borderLeftColor: chain.chain_id === activeChainId ? "rgba(59,110,165,0.22)" : "transparent",
                   borderRadius: "4px",
-                  background: chain.chain_id === mockPrimaryChain.metadata.id
+                  background: chain.chain_id === activeChainId
                     ? "rgba(59,110,165,0.08)"
                     : "transparent",
                   cursor: "pointer",
@@ -2141,7 +2184,7 @@ export default function Home() {
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
-                  <strong style={{ color: chain.chain_id === mockPrimaryChain.metadata.id ? "#3b6ea5" : "#5c4a32" }}>{chain.label}</strong>
+                  <strong style={{ color: chain.chain_id === activeChainId ? "#3b6ea5" : "#5c4a32" }}>{chain.label}</strong>
                   <span>{chain.probability}%</span>
                 </div>
                 <div>
@@ -2401,6 +2444,36 @@ export default function Home() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+          {!analysisMode.loading && retrievalTrace.length > 0 && (
+            <div className="retrieval-progress" style={{ marginTop: "10px" }}>
+              <div style={{ fontSize: "0.52rem", color: "#4a7a9e", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "6px" }}>
+                {locale === "en" ? "Source trace" : "检索来源轨迹"}
+              </div>
+              <div style={{ display: "grid", gap: "5px" }}>
+                {retrievalTrace.slice(0, 6).map((item, index) => (
+                  <div
+                    key={`${item.source}-${item.query}-${index}`}
+                    style={{
+                      display: "grid",
+                      gap: "2px",
+                      padding: "5px 6px",
+                      borderRadius: "8px",
+                      background: item.error ? "rgba(192,57,43,0.08)" : "rgba(255,255,255,0.55)",
+                      border: item.error ? "1px solid rgba(192,57,43,0.18)" : "1px solid rgba(160,140,110,0.14)",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "6px", fontSize: "0.55rem", color: item.error ? "#a13b2f" : "#5c4a32" }}>
+                      <span>{item.source}{item.cache_hit ? (locale === "en" ? " cache" : " 缓存") : ""}</span>
+                      <span>{item.error ? item.error : `${item.result_count} ${locale === "en" ? "hits" : "条"}`}</span>
+                    </div>
+                    <div style={{ fontSize: "0.54rem", color: "#8b7355", lineHeight: 1.35 }}>
+                      {item.query}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

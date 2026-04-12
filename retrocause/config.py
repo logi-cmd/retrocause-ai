@@ -20,6 +20,7 @@ class RetroCauseConfig:
     hot_query_cache_seconds: float = 90.0
     evergreen_query_cache_seconds: float = 600.0
     source_min_interval_seconds: float = 0.2
+    source_error_cooldown_seconds: float = 30.0
     bayesian_num_samples: int = 2000
     bayesian_num_warmup: int = 1000
     counterfactual_sensitivity_threshold: float = 0.3
@@ -42,6 +43,9 @@ class RetroCauseConfig:
             ),
             source_min_interval_seconds=float(
                 os.environ.get("RETROCAUSE_SOURCE_MIN_INTERVAL_SECONDS", "0.2")
+            ),
+            source_error_cooldown_seconds=float(
+                os.environ.get("RETROCAUSE_SOURCE_ERROR_COOLDOWN_SECONDS", "30")
             ),
             counterfactual_min_score=float(
                 os.environ.get("RETROCAUSE_COUNTERFACTUAL_MIN_SCORE", "0.0")

@@ -1065,14 +1065,19 @@ PROVIDERS: dict[str, dict] = {
 
 
 def _select_source_names(configured_sources: str | None, domain: str) -> list[str]:
-    if configured_sources:
-        return [item.strip() for item in configured_sources.split(",") if item.strip()]
+    from retrocause.evidence_access import QueryPlan, broker_source_names
 
-    if domain == "geopolitics":
-        return ["ap_news", "federal_register", "gdelt", "web"]
-    if domain in {"finance", "business"}:
-        return ["ap_news", "web", "gdelt", "arxiv"]
-    return ["arxiv", "semantic_scholar", "web"]
+    plan = QueryPlan(
+        query="",
+        domain=domain,
+        time_range=None,
+        language="en",
+        entities=[],
+        scenario="policy" if domain == "geopolitics" else "market"
+        if domain in {"finance", "business"}
+        else "academic",
+    )
+    return broker_source_names(configured_sources, plan)
 
 
 def run_real_analysis(
@@ -1100,7 +1105,11 @@ def run_real_analysis(
         "gdelt": _Gdelt,
     }
     parsed = _parse_input(query)
-    requested_sources = _select_source_names(os.environ.get("RETROCAUSE_ENABLED_SOURCES"), parsed.domain)
+    from retrocause.evidence_access import broker_source_names, plan_query as _plan_query
+
+    requested_sources = broker_source_names(
+        os.environ.get("RETROCAUSE_ENABLED_SOURCES"), _plan_query(query, parsed)
+    )
 
     cfg = _Config.from_env()
     llm = _LLMClient(
@@ -1146,7 +1155,11 @@ def run_real_analysis_with_progress(
         "gdelt": _Gdelt,
     }
     parsed = _parse_input(query)
-    requested_sources = _select_source_names(os.environ.get("RETROCAUSE_ENABLED_SOURCES"), parsed.domain)
+    from retrocause.evidence_access import broker_source_names, plan_query as _plan_query
+
+    requested_sources = broker_source_names(
+        os.environ.get("RETROCAUSE_ENABLED_SOURCES"), _plan_query(query, parsed)
+    )
 
     cfg = _Config.from_env()
     llm = _LLMClient(

@@ -196,3 +196,4 @@ class AnalysisResult:
     uncertainty_report: Optional[UncertaintyReport] = None
     analysis_mode: str = "live"
     freshness_status: str = "unknown"
+    retrieval_trace: list[dict] = field(default_factory=list)

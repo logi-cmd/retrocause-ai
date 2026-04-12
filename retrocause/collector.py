@@ -4,39 +4,56 @@ from __future__ import annotations
 
 import logging
 import re
-import time
 from datetime import date, datetime
 
+from retrocause.evidence_access import (
+    EvidenceAccessBatch,
+    EvidenceAccessLayer,
+    EvidenceAccessPolicy,
+    SourceAttempt,
+    reset_evidence_access_state,
+)
 from retrocause.models import CausalEdge, CausalVariable, Evidence, EvidenceType
+from retrocause.sources.base import SearchResult
 
 logger = logging.getLogger(__name__)
 
 _FRESH_TYPES = {EvidenceType.NEWS, EvidenceType.SOCIAL, EvidenceType.TESTIMONY}
 _SOURCE_MIN_INTERVAL_SECONDS = 0.0
 _SOURCE_QUERY_CACHE_TTL = 180.0
+_SOURCE_ERROR_COOLDOWN_SECONDS = 30.0
 _EXTRACTION_TEXT_LIMIT = 16000
 _EXTRACTION_TEXT_PER_RESULT_LIMIT = 6000
 _GEOPOLITICS_MIN_EVIDENCE = 6
 _GEOPOLITICS_MIN_SOURCE_ADAPTERS = 2
-_SOURCE_LAST_CALL_AT: dict[str, float] = {}
-_SOURCE_QUERY_CACHE: dict[tuple[str, str, int], tuple[float, list]] = {}
+_EVIDENCE_ACCESS = EvidenceAccessLayer()
 
 
 def configure_source_limits(
     *,
     min_interval_seconds: float | None = None,
     query_cache_ttl: float | None = None,
+    source_error_cooldown_seconds: float | None = None,
 ) -> None:
-    global _SOURCE_MIN_INTERVAL_SECONDS, _SOURCE_QUERY_CACHE_TTL
+    global _SOURCE_MIN_INTERVAL_SECONDS, _SOURCE_QUERY_CACHE_TTL, _SOURCE_ERROR_COOLDOWN_SECONDS
+    global _EVIDENCE_ACCESS
     if min_interval_seconds is not None:
         _SOURCE_MIN_INTERVAL_SECONDS = max(0.0, float(min_interval_seconds))
     if query_cache_ttl is not None:
         _SOURCE_QUERY_CACHE_TTL = max(0.0, float(query_cache_ttl))
+    if source_error_cooldown_seconds is not None:
+        _SOURCE_ERROR_COOLDOWN_SECONDS = max(0.0, float(source_error_cooldown_seconds))
+    _EVIDENCE_ACCESS = EvidenceAccessLayer(
+        EvidenceAccessPolicy(
+            min_interval_seconds=_SOURCE_MIN_INTERVAL_SECONDS,
+            query_cache_ttl=_SOURCE_QUERY_CACHE_TTL,
+            source_error_cooldown_seconds=_SOURCE_ERROR_COOLDOWN_SECONDS,
+        )
+    )
 
 
 def reset_source_limit_state() -> None:
-    _SOURCE_LAST_CALL_AT.clear()
-    _SOURCE_QUERY_CACHE.clear()
+    reset_evidence_access_state()
 
 
 def _infer_source_tier(source_type: EvidenceType) -> str:
@@ -59,18 +76,6 @@ def _infer_freshness(source_type: EvidenceType, timestamp: str | None) -> str:
     if age_days <= 180:
         return "recent"
     return "stable"
-
-
-class SearchResult:
-    """Single search result returned by a source adapter."""
-
-    __slots__ = ("title", "content", "source_type", "url")
-
-    def __init__(self, title: str, content: str, source_type: EvidenceType, url: str = ""):
-        self.title = title
-        self.content = content
-        self.source_type = source_type
-        self.url = url
 
 
 def _result_quality(result: object) -> str:
@@ -162,49 +167,14 @@ def _parallel_search(
     source_adapters: list[object],
     max_results: int,
     min_source_adapters: int = 1,
-) -> list[SearchResult]:
+) -> EvidenceAccessBatch:
     """Search adapters in priority order and stop once enough results are collected."""
-    results: list[SearchResult] = []
-    searched_adapters = 0
-    for adapter in source_adapters:
-        cache_key = (getattr(adapter, "name", "unknown"), sub_query.strip().lower(), max_results)
-        cached = _SOURCE_QUERY_CACHE.get(cache_key)
-        now = time.time()
-        if cached and now - cached[0] <= _SOURCE_QUERY_CACHE_TTL:
-            adapter_results = cached[1]
-            results.extend(adapter_results)
-            searched_adapters += 1
-            if len(results) >= max_results and searched_adapters >= min_source_adapters:
-                break
-            continue
-
-        last_called = _SOURCE_LAST_CALL_AT.get(cache_key[0], 0.0)
-        remaining = _SOURCE_MIN_INTERVAL_SECONDS - (now - last_called)
-        if remaining > 0:
-            logger.info(
-                "_parallel_search: source %s delayed by shared limiter for %.3fs",
-                cache_key[0],
-                remaining,
-            )
-            time.sleep(remaining)
-        try:
-            adapter_results = adapter.search(sub_query, max_results=max_results)  # type: ignore[attr-defined]
-        except Exception:
-            logger.warning(
-                "_parallel_search: %s search failed (query=%s)",
-                adapter.name,  # type: ignore[attr-defined]
-                sub_query,
-            )
-            continue
-
-        _SOURCE_LAST_CALL_AT[cache_key[0]] = time.time()
-        _SOURCE_QUERY_CACHE[cache_key] = (time.time(), adapter_results)
-        searched_adapters += 1
-        results.extend(adapter_results)
-        if len(results) >= max_results and searched_adapters >= min_source_adapters:
-            break
-
-    return results
+    return _EVIDENCE_ACCESS.search(
+        sub_query,
+        source_adapters,
+        max_results,
+        min_source_adapters=min_source_adapters,
+    )
 
 
 def _collection_quality_met(domain: str, evidences: list[Evidence]) -> bool:
@@ -225,11 +195,13 @@ class EvidenceCollector:
     evidence_store: list[Evidence]
     _counter: int
     _seen_contents: set[str]
+    access_trace: list[SourceAttempt]
 
     def __init__(self):
         self.evidence_store = []
         self._counter = 0
         self._seen_contents = set()
+        self.access_trace = []
 
     def add_evidence(
         self,
@@ -328,12 +300,14 @@ class EvidenceCollector:
                 if domain == "geopolitics"
                 else 1
             )
-            all_results = _parallel_search(
+            access_batch = _parallel_search(
                 sub_query,
                 source_adapters,
                 max_results_per_source,
                 min_source_adapters=min_source_adapters,
             )
+            self.access_trace.extend(access_batch.attempts)
+            all_results = access_batch.results
             if not all_results:
                 continue
 
@@ -467,7 +441,9 @@ class EvidenceCollector:
     ) -> list[Evidence]:
         new_evidence: list[Evidence] = []
         for sub_query in sub_queries:
-            all_results = _parallel_search(sub_query, source_adapters, max_results_per_source)
+            access_batch = _parallel_search(sub_query, source_adapters, max_results_per_source)
+            self.access_trace.extend(access_batch.attempts)
+            all_results = access_batch.results
             if not all_results:
                 continue
 

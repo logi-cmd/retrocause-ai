@@ -22,6 +22,7 @@
 - structured uncertainty report (per-node / per-edge) and evidence conflict classification
 - homepage evidence filtering by source / stance / confidence
 - homepage chain comparison snapshot and richer right-panel rendering for live API evidence
+- Evidence Access Layer for query planning, source brokering, multi-source aggregation, evidence quality ordering, short-lived caching, source cooldown, and API/UI retrieval trace transparency
 
 ## Current Limitations
 

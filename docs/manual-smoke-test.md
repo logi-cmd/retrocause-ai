@@ -87,6 +87,7 @@ Expected:
 - request body includes `query`, `model`, and `api_key`
 - homepage does not claim hosted/SaaS-grade credential handling
 - if the backend succeeds, the board is labeled as live analysis
+- after completion, the status panel can show source trace rows with source name, query text, hit count, cache marker, or source error/cooldown
 - if the backend fails, the board falls back to explicitly labeled demo data
 
 ---
@@ -263,6 +264,8 @@ Observed browser result:
 - 7 chain buttons were available for comparison
 - switching between Chinese and English preserved all 8 graph cards instead of resetting to demo/default state
 - clicking a graph card and clicking hypothesis-chain controls produced no console errors or page errors
+- chain-compare controls must support B -> A switching with the selected chain reflected by `aria-pressed`, and must not mix React inline border shorthand with side-specific border properties
+- locale persistence must be applied after hydration, so stored English/Chinese preference does not create a React hydration mismatch on first render
 
 Regression command:
 

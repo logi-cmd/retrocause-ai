@@ -40,6 +40,12 @@ Operationally, the highest-leverage savings come from stopping doomed runs earli
 
 The current OSS live path now includes these safeguards:
 
+- evidence retrieval now passes through `retrocause/evidence_access.py` instead of letting each collector path call adapters directly
+- query planning identifies domain, time window, language, coarse entities, and scenario before source selection
+- source brokering routes market/news/policy/academic questions to scenario-fit source classes while still honoring `RETROCAUSE_ENABLED_SOURCES`
+- search aggregation combines multiple adapters and sorts results by quality tier before LLM extraction
+- source pacing, short-lived search-result caching, and source cooldown are centralized so one failed source does not trigger repeated high-frequency calls
+- API V2 responses can expose retrieval trace rows showing source, query, result count, cache hit, and source error/cooldown status
 - model-access preflight before expensive retrieval starts
 - query-decomposition validation for placeholder/generic causal prompts
 - unanchored-year rejection, so a query without a date cannot silently become a stale year-specific search
@@ -502,24 +508,29 @@ It needs a sharper operating layer.
 
 Highest-priority optimizations:
 
-1. provider/model preflight
+1. Evidence Access Layer
+   - implemented as `retrocause/evidence_access.py`
+   - owns query planner, source broker, search aggregator, quality ordering, source pacing, short-lived cache, source cooldown, and retrieval trace metadata
+   - keeps source adapters focused on a single upstream source instead of spreading routing/cost logic across adapters
+
+2. provider/model preflight
    - fail fast on auth, region, or model-access issues
    - do not spend retrieval budget after a known provider failure
 
-2. decomposition validation and fallback rewrite
+3. decomposition validation and fallback rewrite
    - reject placeholder outputs
    - fall back to safer canonicalized rewrite instead of shipping bad subqueries
 
-3. scenario-aware source routing
+4. scenario-aware source routing
    - route policy, geopolitics, and market questions away from academic-first paths
 
-4. costed stop-loss policy
+5. costed stop-loss policy
    - stop live runs once the remaining budget cannot realistically upgrade the mode
 
-5. source-health-informed routing
+6. source-health-informed routing
    - incorporate recent 429 / timeout signals directly into routing decisions
 
-6. multilingual retrieval normalization
+7. multilingual retrieval normalization
    - improve Chinese and mixed-language searchability without forcing every question through brittle free-form decomposition
 
-These six items are the shortest path to better live reachability without giving up quality or cost discipline.
+These items are the shortest path to better live reachability without giving up quality or cost discipline.

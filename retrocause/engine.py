@@ -216,7 +216,10 @@ class EvidenceCollectionStep(PipelineStep):
         self._source_adapters = source_adapters
         self._config = config or RetroCauseConfig()
         self._evidence_store = EvidenceStore()
-        configure_source_limits(min_interval_seconds=self._config.source_min_interval_seconds)
+        configure_source_limits(
+            min_interval_seconds=self._config.source_min_interval_seconds,
+            source_error_cooldown_seconds=self._config.source_error_cooldown_seconds,
+        )
 
     def execute(self, ctx: PipelineContext) -> PipelineContext:
         if self._llm_client is None or self._source_adapters is None:
@@ -254,6 +257,16 @@ class EvidenceCollectionStep(PipelineStep):
         evidence = self.collector.get_evidence()
         ctx.total_evidence_count = len(evidence)
         ctx.extra["evidences"] = evidence
+        ctx.extra["evidence_access_trace"] = [
+            {
+                "source": item.name,
+                "query": item.query,
+                "result_count": item.result_count,
+                "cache_hit": item.cache_hit,
+                "error": item.error,
+            }
+            for item in self.collector.access_trace
+        ]
         self._evidence_store.add_evidences(
             ctx.query,
             ctx.domain,
@@ -538,6 +551,7 @@ class RetroCauseEngine:
             uncertainty_report=ctx.extra.get("uncertainty_report"),
         )
         result.total_uncertainty = ctx.total_uncertainty
+        result.retrieval_trace = ctx.extra.get("evidence_access_trace", [])
         result.analysis_mode = _infer_analysis_mode(result.evidences)
         result.freshness_status = _summarize_freshness(result.evidences)
         if not _time_quality_ok(self.parsed, result.evidences):

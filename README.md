@@ -66,6 +66,8 @@ RetroCause is currently a **research-grade alpha**:
 - finance/crypto time-sensitive questions such as Bitcoin intraday price drops now route through the finance/news path, keep search-effective anchors like `Bitcoin`, `BTC`, `price`, and `selloff`, and use the same low-coverage graph retry gate
 - hypothesis generation now adds an evidence-wide causal map when the supported DAG is broader than any single root-to-outcome path, so the default board does not hide relevant factors behind narrow path-only chains
 - the homepage preserves live results across language toggles and localizes common live causal labels in Chinese, including crypto/market/policy factors, without changing internal node ids used for graph/edge selection
+- live retrieval now runs through a dedicated Evidence Access Layer for query planning, scenario-aware source brokering, multi-source aggregation, quality-first result ordering, short-lived search caching, source pacing, source cooldown, and retrieval trace metadata
+- the API and homepage can now expose source-level retrieval trace rows so users can see which source was queried, how many results were found, whether cache was used, and which source failed or cooled down
 - graph evidence anchoring now handles snake_case vs natural-language variable names, reducing unnecessary follow-up retrieval and improving complete evidence-chain coverage
 - interactive environment-based runs keep expensive debate refinement off by default; set `RETROCAUSE_DEBATE_MAX_ROUNDS=1` for deeper/offline debate passes
 - repeated queries can reuse a local high-quality evidence store to widen coverage
@@ -188,6 +190,7 @@ Additional budget controls are available for hot-query caching and shared source
 RETROCAUSE_HOT_QUERY_CACHE_SECONDS=90
 RETROCAUSE_EVERGREEN_QUERY_CACHE_SECONDS=600
 RETROCAUSE_SOURCE_MIN_INTERVAL_SECONDS=0.2
+RETROCAUSE_SOURCE_ERROR_COOLDOWN_SECONDS=30
 RETROCAUSE_DEBATE_MAX_ROUNDS=0
 RETROCAUSE_COUNTERFACTUAL_MIN_SCORE=0.0
 ```
@@ -238,6 +241,8 @@ These examples are useful for demo screenshots, GitHub sharing, and early user o
 ---
 
 ## What the pipeline does
+
+The retrieval portion now goes through `retrocause/evidence_access.py` before individual source adapters are called. That layer identifies the query scenario, brokers source classes, aggregates multiple adapters, ranks results by evidence quality, applies short-lived cache/coalescing and source cooldown, and emits trace metadata for the API/UI.
 
 ```text
 Question
@@ -487,7 +492,8 @@ Current OSS runtime architecture (high level):
 | launcher | `start.py` starts FastAPI (`:8000`) + Next.js (`:3005`) |
 | API contract | `retrocause/api/main.py` exposes `/api/analyze/v2`, `/api/analyze/v2/stream` (SSE), `/api/providers`, demo/real metadata |
 | inference runtime | `retrocause/engine.py` staged pipeline: evidence -> graph -> hypotheses -> anchoring -> counterfactual -> debate -> evaluation |
-| evidence sources | `retrocause/sources/*` adapters for DuckDuckGo, AP News, Federal Register, GDELT, ArXiv, Semantic Scholar |
+| evidence access | `retrocause/evidence_access.py` plans queries, brokers sources, aggregates adapter results, sorts by evidence quality, caches short-lived searches, applies source pacing/cooldown, and emits retrieval traces |
+| evidence sources | `retrocause/sources/*` adapters for DuckDuckGo/web fulltext, AP News, Federal Register, GDELT, ArXiv, Semantic Scholar |
 | model routing | `retrocause/llm.py` + provider config in `retrocause/app/demo_data.py` |
 | browser product surface | Next.js evidence-board homepage + interactive graph/canvas panels |
 | fallback UX | Streamlit path remains available as a demo-oriented backup interface |
@@ -526,7 +532,7 @@ Rule of thumb:
 
 Current local validation includes:
 
-- `pytest tests/` passing locally (179 tests: unit, integration, comprehensive boundary, CausalRAG, uncertainty, citation, evidence-store, query-routing, web-source, AP News source, Federal Register source)
+- `pytest tests/` passing locally (191 tests: unit, integration, comprehensive boundary, CausalRAG, uncertainty, citation, evidence-store, evidence-access, query-routing, web-source, AP News source, Federal Register source)
 - `ruff check` on all source and test files
 - diagnostics clean on source files (39 Python files + frontend)
 - frontend build (`npm run build`) passing in `frontend/`
@@ -536,7 +542,7 @@ Current local validation includes:
 - clean Playwright live browser E2E for `比特币今日价格为何跳水` passed through `/api/analyze/v2/stream` with OpenRouter DeepSeek: non-demo live result, 8 causal graph cards, 7 chain buttons, Chinese-mode cards passed localization checks, language toggle preserved all 8 cards, and chain/card clicks produced no console or page errors
 - API smoke test (`scripts/smoke_test.py`): 38/38 PASS — backend root, V2 API (5 demo topics), V1 compat, edge variable integrity, frontend HTML
 - UI smoke test (`scripts/ui_smoke_test.py`): 21/21 PASS — Playwright/Chromium headless tests covering initial load, demo transparency, query flow, node click/multi-hop, language toggle
-- end-to-end test (`scripts/e2e_test.py`): 589/589 PASS — full-stack E2E covering backend connectivity, V2 API (all 5 demos with field-level validation), V1 backward compat, evidence pool integrity, upstream map consistency, new capability schemas (uncertainty / citation / conflict), edge cases (empty query / single char / nonsense / bad key), frontend HTML delivery, and Playwright UI E2E (load / demo transparency / query flow / node interaction / language toggle / multi-node / console health)
+- end-to-end test (`scripts/e2e_test.py`): 591/591 PASS — full-stack E2E covering backend connectivity, V2 API (all 5 demos with field-level validation), explicit `partial_live` failure transparency for bad keys, V1 backward compat, evidence pool integrity, upstream map consistency, new capability schemas (uncertainty / citation / conflict), edge cases (empty query / single char / nonsense / bad key), frontend HTML delivery, and Playwright UI E2E (load / demo transparency / query flow / node interaction / language toggle / multi-node / console health)
 
 ### Local testing
 

@@ -248,6 +248,14 @@ class PipelineEvaluationV2(BaseModel):
     recommended_actions: List[str] = []
 
 
+class RetrievalTraceItemV2(BaseModel):
+    source: str
+    query: str
+    result_count: int
+    cache_hit: bool = False
+    error: Optional[str] = None
+
+
 class AnalyzeResponseV2(BaseModel):
     """
     Enriched top-level response for multi-hop causal tracing.
@@ -272,6 +280,8 @@ class AnalyzeResponseV2(BaseModel):
     upstream_map: UpstreamMapV2
     # Pipeline quality evaluation (absent for demo results)
     evaluation: Optional[PipelineEvaluationV2] = None
+    # Source-level retrieval trace for UI transparency.
+    retrieval_trace: List[RetrievalTraceItemV2] = []
     # Uncertainty report
     uncertainty_report: Optional[UncertaintyReportV2] = None
     # Error message when real analysis fails (non-empty = something went wrong)
@@ -347,6 +357,7 @@ def _empty_live_failure_response(query: str, error_msg: str) -> AnalyzeResponseV
         evidences=[],
         upstream_map=UpstreamMapV2(entries=[]),
         evaluation=None,
+        retrieval_trace=[],
         uncertainty_report=None,
         error=error_msg,
     )
@@ -627,6 +638,16 @@ def _result_to_v2(
         evidences=_collect_evidence_bindings(chains_v2, result.evidences),
         upstream_map=_build_upstream_map(list(all_nodes_v2.values())),
         evaluation=evaluation_v2,
+        retrieval_trace=[
+            RetrievalTraceItemV2(
+                source=str(item.get("source", "")),
+                query=str(item.get("query", "")),
+                result_count=int(item.get("result_count", 0)),
+                cache_hit=bool(item.get("cache_hit", False)),
+                error=item.get("error"),
+            )
+            for item in getattr(result, "retrieval_trace", [])
+        ],
         uncertainty_report=uncertainty_v2,
     )
 

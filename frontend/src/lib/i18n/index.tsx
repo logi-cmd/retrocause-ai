@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -38,7 +39,14 @@ function readStoredLocale(): Locale {
 }
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(() => readStoredLocale());
+  const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setLocaleState(readStoredLocale());
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next);

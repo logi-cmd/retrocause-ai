@@ -199,6 +199,8 @@ But recent live debugging shows four gaps still block broad reliability:
 
 The OSS implementation now moves several quality/cost controls into the default live path:
 
+- Evidence Access Layer is now a real service boundary in `retrocause/evidence_access.py`, covering query planning, scenario-aware source brokering, multi-source search aggregation, quality-first result sorting, short-lived search caching, source pacing, source cooldown, and retrieval trace output
+- API V2 and the homepage can now surface retrieval trace rows, so users can see what the system searched, which sources responded, which results came from cache, and which sources failed or cooled down
 - scenario-aware source routing sends geopolitical/news questions to AP News, Federal Register, GDELT, and web before academic sources
 - AP News can provide trusted fulltext evidence for time-sensitive diplomatic and policy questions
 - Federal Register can provide official trusted fulltext for policy/regulatory questions such as export controls, sanctions, tariffs, and semiconductor restrictions
