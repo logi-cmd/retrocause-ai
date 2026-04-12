@@ -159,6 +159,8 @@ class EvidenceStore:
 
         ranked: list[tuple[float, dict]] = []
         for item in self._items:
+            if time_scope and item.get("time_scope") != time_scope:
+                continue
             item_tokens = set(item.get("query_tokens", [])) | _normalize_tokens(item.get("content", ""))
             if not _has_enough_overlap(query_tokens, item_tokens):
                 continue

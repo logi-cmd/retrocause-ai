@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import date
+
+import retrocause.collector as collector_module
 from retrocause.collector import EvidenceCollector, reset_source_limit_state
 from retrocause.engine import RetroCauseEngine, analyze
 from retrocause.llm import ExtractedEvidence
@@ -350,6 +353,82 @@ def test_auto_collect_attributes_extracted_evidence_to_best_matching_source():
     assert new_evidence[0].source_type == EvidenceType.ARCHIVE
     assert new_evidence[0].source_url == "https://www.federalregister.gov/documents/export-controls"
     assert new_evidence[0].timestamp == "2024-12-05"
+
+
+def test_auto_collect_excludes_stale_dated_results_for_yesterday_market_query(monkeypatch):
+    _reset_source_state()
+    monkeypatch.setattr(collector_module, "_today", lambda: date(2026, 4, 13))
+    collector = EvidenceCollector()
+
+    class _CapturingLLM(_FakeLLMClient):
+        def __init__(self):
+            super().__init__(
+                sub_queries=["Bitcoin BTC price drop"],
+                extracted=[
+                    ExtractedEvidence(
+                        content="Bitcoin fell during the April 12 trading session after liquidations.",
+                        relevance=0.9,
+                        variables=["bitcoin_price_drop", "liquidations"],
+                        confidence=0.82,
+                    )
+                ],
+            )
+            self.last_raw_text = ""
+
+        def build_search_queries(self, query: str, domain: str) -> list[str]:
+            return self._sub_queries
+
+        def extract_evidence(
+            self, query: str, raw_text: str, source_type: str
+        ) -> list[ExtractedEvidence]:
+            self.last_raw_text = raw_text
+            return self._extracted
+
+    source = _NamedFakeSourceAdapter(
+        "market_news",
+        [
+            SearchResult(
+                title="Old Bitcoin selloff",
+                content="A stale article about a March selloff.",
+                url="https://example.com/old",
+                source_type=EvidenceType.NEWS,
+                metadata={
+                    "published": "2026-03-01",
+                    "content_quality": "trusted_fulltext",
+                    "page_content": "Bitcoin fell in March after old macro worries.",
+                },
+            ),
+            SearchResult(
+                title="April 12 Bitcoin selloff",
+                content="A fresh article about yesterday's selloff.",
+                url="https://example.com/yesterday",
+                source_type=EvidenceType.NEWS,
+                metadata={
+                    "published": "2026-04-12",
+                    "content_quality": "trusted_fulltext",
+                    "page_content": (
+                        "Bitcoin fell during the April 12, 2026 trading session after "
+                        "liquidations and ETF outflows."
+                    ),
+                },
+            ),
+        ],
+    )
+    fake_llm = _CapturingLLM()
+
+    new_evidence = collector.auto_collect(
+        query="\u6628\u5929\u6bd4\u7279\u5e01\u4ef7\u683c\u8df3\u6c34",
+        domain="finance",
+        llm_client=fake_llm,
+        source_adapters=[source],
+        max_results_per_source=5,
+    )
+
+    assert "2026-04-12" in source.calls[0]
+    assert "Old Bitcoin selloff" not in fake_llm.last_raw_text
+    assert "April 12 Bitcoin selloff" in fake_llm.last_raw_text
+    assert len(new_evidence) == 1
+    assert new_evidence[0].timestamp == "2026-04-12"
 
 
 def test_auto_collect_no_llm():

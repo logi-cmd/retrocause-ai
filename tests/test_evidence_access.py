@@ -4,9 +4,14 @@ from retrocause.evidence_access import (
     EvidenceAccessLayer,
     EvidenceAccessPolicy,
     broker_source_names,
+    enrich_query_with_time_context,
     plan_query,
     reset_evidence_access_state,
+    result_matches_time_range,
+    time_scope_key,
 )
+from datetime import date
+
 from retrocause.models import EvidenceType
 from retrocause.sources.base import BaseSourceAdapter, SearchResult
 
@@ -49,6 +54,16 @@ def _result(title: str, quality: str, url: str) -> SearchResult:
     )
 
 
+def _dated_result(title: str, published: str) -> SearchResult:
+    return SearchResult(
+        title=title,
+        content=f"{title} content",
+        url=f"https://example.com/{title}",
+        source_type=EvidenceType.NEWS,
+        metadata={"content_quality": "trusted_fulltext", "published": published},
+    )
+
+
 def test_access_layer_attempts_minimum_source_coverage_before_stopping():
     reset_evidence_access_state()
     access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
@@ -83,6 +98,29 @@ def test_access_layer_reuses_cached_adapter_results_without_new_upstream_call():
     assert first.results[0].title == "cached item"
     assert second.results[0].title == "cached item"
     assert second.cache_hits == 1
+
+
+def test_access_layer_filters_stale_results_for_yesterday_queries():
+    reset_evidence_access_state()
+    access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
+    source = _Source(
+        "dated",
+        [
+            _dated_result("old bitcoin selloff", "2026-04-10"),
+            _dated_result("yesterday bitcoin selloff", "2026-04-12"),
+        ],
+    )
+
+    batch = access.search(
+        "bitcoin price drop April 12 2026",
+        [source],
+        max_results=5,
+        time_range="yesterday",
+        today=date(2026, 4, 13),
+    )
+
+    assert [item.title for item in batch.results] == ["yesterday bitcoin selloff"]
+    assert batch.attempts[0].result_count == 1
 
 
 def test_access_layer_records_source_errors_and_continues_to_next_adapter():
@@ -125,11 +163,40 @@ def test_query_planner_detects_language_time_entities_and_scenario():
     assert "btc" in plan.entities
 
 
+def test_time_scope_uses_absolute_calendar_bucket_for_relative_queries():
+    assert time_scope_key("yesterday", today=date(2026, 4, 13)) == "yesterday:2026-04-12"
+    assert time_scope_key("today", today=date(2026, 4, 13)) == "today:2026-04-13"
+
+
+def test_time_context_adds_absolute_date_to_yesterday_query():
+    query = enrich_query_with_time_context(
+        "Bitcoin BTC price drop yesterday",
+        "yesterday",
+        today=date(2026, 4, 13),
+    )
+
+    assert "2026-04-12" in query
+    assert "April 12, 2026" in query
+
+
+def test_result_time_matching_rejects_stale_published_dates():
+    assert result_matches_time_range(
+        _dated_result("fresh", "2026-04-12"),
+        "yesterday",
+        today=date(2026, 4, 13),
+    )
+    assert not result_matches_time_range(
+        _dated_result("stale", "2026-03-01"),
+        "yesterday",
+        today=date(2026, 4, 13),
+    )
+
+
 def test_source_broker_routes_market_and_policy_queries_to_scenario_fit_sources():
     market_plan = plan_query("比特币今日价格为何跳水")
     policy_plan = plan_query("美国为什么会推出新的半导体出口管制？")
 
-    assert broker_source_names(None, market_plan)[:3] == ["ap_news", "web", "gdelt"]
+    assert broker_source_names(None, market_plan)[:3] == ["ap_news", "gdelt", "web"]
     assert broker_source_names(None, policy_plan)[:4] == [
         "ap_news",
         "federal_register",

@@ -294,6 +294,8 @@ Latest clean browser validation on 2026-04-12 also covered a time-sensitive cryp
 
 - `比特币今日价格为何跳水`
 
+For relative market/news queries such as `昨天比特币价格跳水`, confirm that retrieval traces include concrete date context and that dated evidence outside the inferred calendar window is not used to build the graph.
+
 Observed browser result:
 
 - `/api/analyze/v2/stream` returned a non-demo live result

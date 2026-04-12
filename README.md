@@ -76,6 +76,7 @@ RetroCause is currently a **research-grade alpha**:
 - repeated queries can reuse a local high-quality evidence store to widen coverage
 - web retrieval now prefers trusted domains, fetches a small number of page bodies, and reuses short-lived query caches during source throttling
 - time-sensitive queries now infer a time window and use time-aware cache keys plus in-process request coalescing
+- relative time-sensitive queries now materialize `today`, `yesterday`, and `trading_day` into absolute calendar buckets, append concrete date context to live searches, and reject explicitly stale dated results before LLM extraction or graph construction
 - the operational policy for cost control, caching, rate-limit resilience, and OSS vs Pro source strategy now lives in `docs/operational-plan.md`
 - the mature product strategy for quality, cost, rate limits, and OSS/Pro scope now lives in `docs/mature-product-plan.md`
 - the architecture planning docs now also cover current live bottlenecks, scenario-aware routing, stop-loss budgets, and where RetroCause must be meaningfully better than generic chat

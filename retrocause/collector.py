@@ -14,6 +14,7 @@ from retrocause.evidence_access import (
     reset_evidence_access_state,
 )
 from retrocause.models import CausalEdge, CausalVariable, Evidence, EvidenceType
+from retrocause.parser import parse_input
 from retrocause.sources.base import SearchResult
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,10 @@ _EXTRACTION_TEXT_PER_RESULT_LIMIT = 6000
 _GEOPOLITICS_MIN_EVIDENCE = 6
 _GEOPOLITICS_MIN_SOURCE_ADAPTERS = 2
 _EVIDENCE_ACCESS = EvidenceAccessLayer()
+
+
+def _today() -> date:
+    return date.today()
 
 
 def configure_source_limits(
@@ -70,7 +75,7 @@ def _infer_freshness(source_type: EvidenceType, timestamp: str | None) -> str:
     except ValueError:
         return "unknown"
 
-    age_days = (date.today() - evidence_date).days
+    age_days = (_today() - evidence_date).days
     if age_days <= 30:
         return "fresh"
     if age_days <= 180:
@@ -167,6 +172,7 @@ def _parallel_search(
     source_adapters: list[object],
     max_results: int,
     min_source_adapters: int = 1,
+    time_range: str | None = None,
 ) -> EvidenceAccessBatch:
     """Search adapters in priority order and stop once enough results are collected."""
     return _EVIDENCE_ACCESS.search(
@@ -174,6 +180,8 @@ def _parallel_search(
         source_adapters,
         max_results,
         min_source_adapters=min_source_adapters,
+        time_range=time_range,
+        today=_today(),
     )
 
 
@@ -233,7 +241,7 @@ class EvidenceCollector:
             timestamp=timestamp,
             source_tier=source_tier or _infer_source_tier(source_type),
             freshness=freshness or _infer_freshness(source_type, timestamp),
-            captured_at=captured_at or date.today().isoformat(),
+            captured_at=captured_at or _today().isoformat(),
             extraction_method=extraction_method,
         )
         self.evidence_store.append(evidence)
@@ -270,11 +278,13 @@ class EvidenceCollector:
         source_adapters: list[object] | None = None,
         max_sub_queries: int | None = None,
         max_results_per_source: int = 5,
+        time_range: str | None = None,
     ) -> list[Evidence]:
         if llm_client is None or source_adapters is None:
             logger.info("auto_collect: missing llm_client or source_adapters, skipping")
             return []
 
+        effective_time_range = time_range if time_range is not None else parse_input(query).time_range
         query_builder = getattr(llm_client, "build_search_queries", None)
         if callable(query_builder):
             sub_queries = query_builder(query, domain)
@@ -305,6 +315,7 @@ class EvidenceCollector:
                 source_adapters,
                 max_results_per_source,
                 min_source_adapters=min_source_adapters,
+                time_range=effective_time_range,
             )
             self.access_trace.extend(access_batch.attempts)
             all_results = access_batch.results
@@ -368,6 +379,7 @@ class EvidenceCollector:
         source_adapters: list[object] | None = None,
         max_sub_queries: int | None = None,
         max_results_per_source: int = 5,
+        time_range: str | None = None,
     ) -> list[Evidence]:
         if llm_client is None or source_adapters is None:
             logger.info("graph_guided_collect: missing llm_client or source_adapters, skipping")
@@ -383,7 +395,12 @@ class EvidenceCollector:
 
         logger.info("graph_guided_collect: generated %d targeted sub-queries", len(sub_queries))
         return self._execute_subqueries(
-            query, sub_queries, llm_client, source_adapters, max_results_per_source
+            query,
+            sub_queries,
+            llm_client,
+            source_adapters,
+            max_results_per_source,
+            time_range=time_range if time_range is not None else parse_input(query).time_range,
         )
 
     def search_by_causal_path(
@@ -405,7 +422,12 @@ class EvidenceCollector:
 
         logger.info("search_by_causal_path: generated %d chain queries (%s)", len(sub_queries), path_str)
         return self._execute_subqueries(
-            query, sub_queries, llm_client, source_adapters, max_results_per_source
+            query,
+            sub_queries,
+            llm_client,
+            source_adapters,
+            max_results_per_source,
+            time_range=parse_input(query).time_range,
         )
 
     def _build_graph_aware_subqueries(
@@ -438,10 +460,17 @@ class EvidenceCollector:
         llm_client: object,
         source_adapters: list[object],
         max_results_per_source: int,
+        time_range: str | None = None,
     ) -> list[Evidence]:
         new_evidence: list[Evidence] = []
+        effective_time_range = time_range if time_range is not None else parse_input(original_query).time_range
         for sub_query in sub_queries:
-            access_batch = _parallel_search(sub_query, source_adapters, max_results_per_source)
+            access_batch = _parallel_search(
+                sub_query,
+                source_adapters,
+                max_results_per_source,
+                time_range=effective_time_range,
+            )
             self.access_trace.extend(access_batch.attempts)
             all_results = access_batch.results
             if not all_results:

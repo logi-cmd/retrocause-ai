@@ -11,6 +11,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 
 from retrocause.models import EvidenceType
 from retrocause.parser import ParsedQuery, parse_input
@@ -32,6 +33,10 @@ QUALITY_ORDER = {
 _SOURCE_LAST_CALL_AT: dict[str, float] = {}
 _SOURCE_QUERY_CACHE: dict[tuple[str, str, int], tuple[float, list[SearchResult]]] = {}
 _SOURCE_COOLDOWN_UNTIL: dict[str, float] = {}
+
+
+def _today() -> date:
+    return date.today()
 
 
 @dataclass(frozen=True)
@@ -99,6 +104,87 @@ def _dedupe(items: list[str]) -> list[str]:
         seen.add(key)
         output.append(key)
     return output
+
+
+def _parse_date(value: object) -> date | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    match = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", text)
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(1), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _target_date_for_range(time_range: str | None, today: date | None = None) -> date | None:
+    resolved_today = today or _today()
+    if time_range in {"today", "trading_day"}:
+        return resolved_today
+    if time_range in {"yesterday", "last_24h"}:
+        return resolved_today - timedelta(days=1)
+    return None
+
+
+def time_scope_key(time_range: str | None, today: date | None = None) -> str | None:
+    """Return an absolute cache bucket for relative time windows."""
+
+    if not time_range:
+        return None
+    resolved_today = today or _today()
+    target_date = _target_date_for_range(time_range, resolved_today)
+    if target_date is not None:
+        return f"{time_range}:{target_date.isoformat()}"
+    if time_range == "last_7d":
+        return f"last_7d:{resolved_today.isoformat()}"
+    return time_range
+
+
+def enrich_query_with_time_context(
+    query: str,
+    time_range: str | None,
+    today: date | None = None,
+) -> str:
+    """Append explicit date context for relative fresh-news queries."""
+
+    if not time_range:
+        return query
+    target_date = _target_date_for_range(time_range, today)
+    if target_date is None:
+        return query
+    iso_date = target_date.isoformat()
+    month_date = f"{target_date.strftime('%B')} {target_date.day}, {target_date.year}"
+    if iso_date in query or month_date in query:
+        return query
+    return f"{query} {iso_date} {month_date}"
+
+
+def result_matches_time_range(
+    result: SearchResult,
+    time_range: str | None,
+    today: date | None = None,
+) -> bool:
+    """Reject explicitly stale dated results for relative time-sensitive queries."""
+
+    if not time_range:
+        return True
+    metadata = result.metadata or {}
+    published = _parse_date(metadata.get("published") or metadata.get("date") or metadata.get("year"))
+    if published is None:
+        return True
+
+    resolved_today = today or _today()
+    if time_range in {"today", "trading_day"}:
+        return published == resolved_today
+    if time_range == "yesterday":
+        return published == resolved_today - timedelta(days=1)
+    if time_range == "last_24h":
+        return resolved_today - timedelta(days=1) <= published <= resolved_today
+    if time_range == "last_7d":
+        return resolved_today - timedelta(days=7) <= published <= resolved_today
+    return True
 
 
 def _infer_entities(query: str, parsed: ParsedQuery) -> list[str]:
@@ -169,6 +255,8 @@ def broker_source_names(configured_sources: str | None, plan: QueryPlan) -> list
     if plan.scenario == "policy":
         return ["ap_news", "federal_register", "gdelt", "web"]
     if plan.scenario in {"market", "news"}:
+        if plan.time_range is not None:
+            return ["ap_news", "gdelt", "web"]
         return ["ap_news", "web", "gdelt", "arxiv"]
     if plan.scenario == "academic":
         return ["arxiv", "semantic_scholar", "web"]
@@ -205,6 +293,8 @@ class EvidenceAccessLayer:
         max_results: int,
         *,
         min_source_adapters: int = 1,
+        time_range: str | None = None,
+        today: date | None = None,
     ) -> EvidenceAccessBatch:
         """Search multiple source adapters with cache, cooldown, and trace metadata."""
 
@@ -214,10 +304,15 @@ class EvidenceAccessLayer:
         cache_hits = 0
         searched_adapters = 0
         min_adapters = max(1, min(min_source_adapters, len(source_adapters)))
+        scoped_query = enrich_query_with_time_context(query, time_range, today)
 
         for adapter in source_adapters:
             adapter_name = str(getattr(adapter, "name", adapter.__class__.__name__))
-            cache_key = (adapter_name, query.strip().lower(), max_results)
+            cache_key = (
+                adapter_name,
+                f"{time_scope_key(time_range, today) or 'evergreen'}::{scoped_query.strip().lower()}",
+                max_results,
+            )
             now = time.time()
             cached = _SOURCE_QUERY_CACHE.get(cache_key)
             if cached and now - cached[0] <= self.policy.query_cache_ttl:
@@ -225,7 +320,7 @@ class EvidenceAccessLayer:
                 attempts.append(
                     SourceAttempt(
                         name=adapter_name,
-                        query=query,
+                        query=scoped_query,
                         result_count=len(adapter_results),
                         cache_hit=True,
                     )
@@ -243,7 +338,7 @@ class EvidenceAccessLayer:
                 attempts.append(
                     SourceAttempt(
                         name=adapter_name,
-                        query=query,
+                        query=scoped_query,
                         result_count=0,
                         error="cooldown",
                     )
@@ -252,14 +347,19 @@ class EvidenceAccessLayer:
 
             self._pace_source(adapter_name, now)
             try:
-                adapter_results = adapter.search(query, max_results=max_results)  # type: ignore[attr-defined]
+                raw_results = adapter.search(scoped_query, max_results=max_results)  # type: ignore[attr-defined]
+                adapter_results = [
+                    result
+                    for result in raw_results
+                    if result_matches_time_range(result, time_range, today)
+                ]
             except Exception as exc:
                 error_name = exc.__class__.__name__
                 errors[adapter_name] = error_name
                 attempts.append(
                     SourceAttempt(
                         name=adapter_name,
-                        query=query,
+                        query=scoped_query,
                         result_count=0,
                         error=error_name,
                     )
@@ -279,7 +379,7 @@ class EvidenceAccessLayer:
             attempts.append(
                 SourceAttempt(
                     name=adapter_name,
-                    query=query,
+                    query=scoped_query,
                     result_count=len(adapter_results),
                 )
             )

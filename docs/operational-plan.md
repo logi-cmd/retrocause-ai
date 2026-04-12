@@ -187,6 +187,9 @@ Expected effect:
 ### 5.3 Freshness boundaries
 
 - never reuse event evidence across the wrong time window
+- relative windows such as `today`, `yesterday`, and `trading_day` must be converted into absolute calendar buckets before cache/store reuse
+- live retrieval queries for relative windows should carry concrete date context, so "yesterday" on different days cannot collapse into the same search/cache key
+- explicitly dated source results outside the inferred window must be filtered before LLM evidence extraction and graph construction
 - stable background evidence may be reused across days or weeks
 - fresh event evidence must remain time-bucketed
 

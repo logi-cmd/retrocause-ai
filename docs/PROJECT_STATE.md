@@ -8,11 +8,12 @@ Last updated: 2026-04-12
 
 ## Current focus
 
-描述当前正在交付的切片。
+Stabilize quality-first live evidence retrieval, especially for time-sensitive market/news queries where relative windows such as `today` and `yesterday` must not reuse stale evidence.
 
 ## Done recently
 
 - 已使用 preset `generic` 初始化项目 guardrails
+- Added absolute calendar buckets and pre-extraction stale-result filtering for relative time-sensitive evidence retrieval.
 
 ## Blockers
 
@@ -20,4 +21,4 @@ Last updated: 2026-04-12
 
 ## Next step
 
-把这里替换成 `retrocause-ai` 的下一个具体动作。
+Re-test live browser/API runs for `昨天比特币价格跳水` and other strong-freshness queries with OpenRouter DeepSeek, then inspect retrieval trace dates and evidence timestamps.

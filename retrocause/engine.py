@@ -12,6 +12,7 @@ from retrocause.models import AnalysisResult, CausalEdge, CausalVariable, Hypoth
 from retrocause.parser import parse_input, ParsedQuery
 from retrocause.collector import EvidenceCollector, configure_source_limits
 from retrocause.evidence_store import EvidenceStore
+from retrocause.evidence_access import time_scope_key
 from retrocause.graph import CausalGraphBuilder
 from retrocause.hypothesis import HypothesisGenerator
 from retrocause.debate import DebateOrchestrator
@@ -116,7 +117,7 @@ def _source_signature(source_adapters: list[SourceAdapter] | None) -> str:
 
 
 def _query_key(parsed: ParsedQuery, source_adapters: list[SourceAdapter] | None = None) -> str:
-    time_scope = parsed.time_range or "evergreen"
+    time_scope = time_scope_key(parsed.time_range) or "evergreen"
     return f"{parsed.domain}::{time_scope}::{_source_signature(source_adapters)}::{parsed.query.strip().lower()}"
 
 
@@ -225,7 +226,7 @@ class EvidenceCollectionStep(PipelineStep):
         if self._llm_client is None or self._source_adapters is None:
             logger.info("EvidenceCollectionStep: 无 LLM/源配置，跳过自动收集")
             return ctx
-        time_scope = ctx.extra.get("time_range")
+        time_scope = ctx.extra.get("time_scope_key")
         cached_evidence = self._evidence_store.search(
             ctx.query,
             ctx.domain,
@@ -253,6 +254,7 @@ class EvidenceCollectionStep(PipelineStep):
             source_adapters=self._source_adapters,
             max_sub_queries=self._config.max_sub_queries,
             max_results_per_source=self._config.max_results_per_source,
+            time_range=ctx.extra.get("time_range"),
         )
         evidence = self.collector.get_evidence()
         ctx.total_evidence_count = len(evidence)
@@ -453,6 +455,7 @@ class CausalRAGStep(PipelineStep):
             llm_client=self._llm_client,
             source_adapters=self._source_adapters,
             max_results_per_source=3,
+            time_range=ctx.extra.get("time_range"),
         )
         ctx.total_evidence_count = len(self.collector.get_evidence())
         return ctx
@@ -532,6 +535,7 @@ class RetroCauseEngine:
     def run(self, on_progress: ProgressCallback | None = None) -> AnalysisResult:
         ctx = PipelineContext(query=self.query, domain=self.parsed.domain, on_progress=on_progress)
         ctx.extra["time_range"] = self.parsed.time_range
+        ctx.extra["time_scope_key"] = time_scope_key(self.parsed.time_range)
         ctx = self._pipeline.run(ctx)
         self.hypotheses = ctx.hypotheses
         self.variables = ctx.variables

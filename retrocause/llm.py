@@ -274,6 +274,8 @@ _CJK_SEARCH_TRANSLATIONS = {
     "虚拟货币": "cryptocurrency crypto",
     "今日": "today",
     "今天": "today",
+    "昨天": "yesterday",
+    "昨日": "yesterday",
     "价格": "price",
     "币价": "price",
     "跳水": "price drop selloff",

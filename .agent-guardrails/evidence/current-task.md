@@ -2,49 +2,52 @@
 
 ## Task
 
-Fix the frontend causal canvas so sticky notes are not clipped by the bottom overlay and can use the available canvas height, including upward dragging in low-height viewports.
-
-## Files Touched
-
-- `package.json`
-- `frontend/src/app/page.tsx`
-- `scripts/e2e_test.py`
-- `README.md`
-- `docs/manual-smoke-test.md`
-- `docs/superpowers/specs/2026-04-12-frontend-analyst-desk-design.md`
+Fix strong time-sensitive evidence retrieval so queries such as `昨天比特币价格跳水` do not collect or build graphs from explicitly stale dated evidence.
 
 ## Root Cause
 
-- Sticky note coordinates are stored relative to `.main-canvas`, but the layout and drag bounds mixed canvas-relative coordinates with viewport/header-relative bounds.
-- The bottom drag guard used an estimated note height instead of the rendered card height, so real cards could still be clipped in short viewports.
+- Relative time windows were reused as plain strings such as `yesterday`, so local caches/stores could mix different calendar days.
+- Search queries did not consistently carry absolute date context for relative Chinese market/news questions.
+- Search results with explicit stale `published` metadata were allowed into merged extraction text before the LLM evidence extraction step.
+
+## Files Touched
+
+- `retrocause/evidence_access.py`
+- `retrocause/collector.py`
+- `retrocause/engine.py`
+- `retrocause/evidence_store.py`
+- `retrocause/llm.py`
+- `tests/test_evidence_access.py`
+- `tests/test_auto_collect.py`
+- `tests/test_evidence_store.py`
+- `README.md`
+- `docs/operational-plan.md`
+- `docs/manual-smoke-test.md`
+- `docs/PROJECT_STATE.md`
 
 ## Changes
 
-- Made layout bounds canvas-relative and reserved only a compact bottom safe area.
-- Used rendered sticky-card height during drag bound calculation.
-- Spread multi-row layouts across the usable canvas height instead of clustering the top row too low.
-- Kept zoom, panel collapse, and bottom-drag E2E coverage aligned with the updated UI.
+- Added absolute time-scope keys such as `yesterday:2026-04-12` and `today:2026-04-13`.
+- Added concrete date enrichment for live search queries, including ISO date and English month-date text.
+- Added pre-extraction filtering for explicitly dated stale search results.
+- Routed time-sensitive market/news queries away from academic fallback sources in the default broker.
+- Made the local evidence store strict for explicit time scopes so different relative days cannot reuse the same event evidence.
+- Added regression tests for stale dated result filtering, absolute time buckets, date-enriched retrieval queries, and store reuse boundaries.
+- Updated README and operational/manual docs with the freshness rule.
 
 ## Commands Run
 
+- `pytest tests/test_evidence_access.py tests/test_auto_collect.py tests/test_evidence_store.py --basetemp=.pytest-tmp`
+  - First run failed before implementation because new expected functions did not exist.
+  - Final result: 29 passed.
 - `npm test`
-  - Result: initially failed because root `package.json` had no `test` script; fixed by adding a root aggregate test script.
-  - Final result: passed.
-- `cmd /c npm.cmd run lint` from `frontend`
-  - Result: passed with existing warnings in unrelated files.
-- `cmd /c npm.cmd run build` from `frontend`
   - Result: passed.
-- `ruff check retrocause/`
-  - Result: passed.
-- `pytest tests/ --basetemp=.pytest-tmp`
-  - Result: 191 passed.
-- `python scripts\e2e_test.py`
-  - Result: 604 passed, 0 failed, 0 skipped.
-- Low-height Playwright measurement at `1675x768`
-  - Result: bottom cards kept approximately 46.8px and 54.8px visible bottom gap; drag-up reached approximately top 83.3px; drag-down kept approximately 46.7px bottom gap.
+  - Included frontend lint/build, `ruff check retrocause/`, `pytest tests/ --basetemp=.pytest-tmp`, and `python scripts/e2e_test.py`.
+  - Python tests: 197 passed.
+  - E2E: 604 passed, 0 failed, 0 skipped.
 
 ## Residual Risks
 
-- Root `npm test` is now available and maps to the practical validation path: frontend lint/build, Python ruff/pytest, and the custom E2E script.
-- The generated guardrails task contract has mojibake in the task text, but the guard rules and required command were still captured and followed as far as the repository allowed.
-- Frontend lint still reports 7 existing warnings in unrelated component files; no lint errors were reported.
+- If a source result has no `published` or equivalent date metadata, the system cannot prove it is stale. Those results are still allowed but remain freshness-limited by downstream freshness status and should not upgrade a time-sensitive run to strong `live` without fresh evidence.
+- Public search engines may still return incomplete results. This fix prevents known-stale dated evidence from contaminating extraction/graph construction; it does not guarantee complete market/news coverage.
+- Frontend lint still reports 7 existing warnings in unrelated component files, but no lint errors.

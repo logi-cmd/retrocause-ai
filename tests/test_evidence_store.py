@@ -105,6 +105,24 @@ def test_evidence_store_respects_time_scope_for_time_sensitive_queries():
     assert results[0].id == "ev-0002"
 
 
+def test_evidence_store_does_not_reuse_relative_yesterday_across_calendar_days():
+    store = InMemoryEvidenceStore("evidence_store.json")
+    store.add_evidences(
+        "Why did Bitcoin fall yesterday?",
+        "finance",
+        [_make_evidence(evidence_id="ev-0001", content="April 12 trading explanation.")],
+        time_scope="yesterday:2026-04-12",
+    )
+
+    results = store.search(
+        "Why did Bitcoin fall yesterday?",
+        "finance",
+        time_scope="yesterday:2026-04-13",
+    )
+
+    assert results == []
+
+
 def test_evidence_store_does_not_reuse_thin_cjk_overlap_between_different_us_questions():
     store = InMemoryEvidenceStore("evidence_store.json")
     iran_query = "\u4e3a\u4ec0\u4e48\u7f8e\u56fd\u4f1a\u540c\u610f\u4e0e\u4f0a\u6717\u8fdb\u884c\u9996\u8f6e\u8c08\u5224\uff1f"
