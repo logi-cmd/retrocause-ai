@@ -4,20 +4,12 @@ import React from "react";
 import { ChainEdgeEvidence, Evidence, EvidenceReliability } from "@/data/mockData";
 import { useI18n } from "@/lib/i18n";
 
-type EvidenceItem =
-  | (ChainEdgeEvidence & { _kind: "chain" })
-  | (Evidence & { _kind: "legacy" });
-
 interface EvidenceListProps {
   evidences: ChainEdgeEvidence[] | Evidence[];
 }
 
 function isChainEvidence(e: ChainEdgeEvidence | Evidence): e is ChainEdgeEvidence {
   return "causalWeight" in e && "reliability" in e && !("source" in e);
-}
-
-function isLegacyEvidence(e: ChainEdgeEvidence | Evidence): e is Evidence {
-  return "source" in e && "content" in e;
 }
 
 function EvidenceCard({ 

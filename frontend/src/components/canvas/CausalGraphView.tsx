@@ -205,7 +205,7 @@ export default function CausalGraphView({ nodes, edges, selectedNodeId, onNodeSe
     updatePositions();
     window.addEventListener('resize', updatePositions);
     return () => window.removeEventListener('resize', updatePositions);
-  }, [nodes]);
+  }, [nodes, positions.length]);
 
   const getPointerPosition = useCallback((e: React.PointerEvent) => {
     if (!containerRef.current) return { x: 0, y: 0 };
@@ -274,7 +274,7 @@ export default function CausalGraphView({ nodes, edges, selectedNodeId, onNodeSe
         path: computeRedStringPath(x1, y1, x2, y2),
       };
     }).filter(Boolean);
-  }, [edges, positions, containerSize]);
+  }, [edges, positions]);
 
   const handleNodeClick = useCallback((nodeId: string) => {
     onNodeSelect?.(nodeId === selectedNodeId ? '' : nodeId);
