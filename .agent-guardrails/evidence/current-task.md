@@ -159,6 +159,71 @@ Note: the working tree already contained unrelated local edits before this task.
 - `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"` after golden-case docs and frontend localization fix
   - Result: pass-with-concerns, 80/100.
   - Non-blocking warnings remain scope/continuity warnings for broad local diff and state-related files; no missing required commands or evidence file.
+- OSS publishing preparation for `logi-cmd`
+  - Result: created a clean export directory at `D:\opencode\retrocause-ai-public-20260413`.
+  - Included root user-facing/project files, backend package, frontend source/config, examples, tests, scripts needed for smoke/E2E, GitHub workflows, and `docs/images/golden-us-iran-live-ui.png`.
+  - Excluded local/internal/nonessential publish artifacts: `.agent-guardrails`, `.codex`, `.gstack`, `logs`, `docs-private`, `docs/superpowers`, root screenshot scratch files, `node_modules`, `.next`, and local caches.
+  - Removed nonessential temporary test scripts from the export after secret scanning found old hardcoded OpenRouter keys in those scratch scripts.
+  - Interpreted "publish with logi-cmd" as GitHub publishing through the authenticated `logi-cmd` account because no local `logi-cmd` CLI was present.
+- `npm --prefix frontend install next@16.2.3`
+  - Result: updated Next.js in the source repo after `npm audit` identified a high-severity advisory in 16.2.2.
+- `npm --prefix frontend install eslint-config-next@16.2.3`
+  - Result: synchronized ESLint config with the Next.js runtime version; `npm audit` reported 0 vulnerabilities.
+- `npm install next@16.2.3` and `npm install eslint-config-next@16.2.3` in `D:\opencode\retrocause-ai-public-20260413\frontend`
+  - Result: synchronized the publish export with the source dependency fix; `npm audit` reported 0 vulnerabilities.
+- Secret scan in `D:\opencode\retrocause-ai-public-20260413`
+  - Result: no `sk-or-v1-`, `ghp_`, `gho_`, or `GITHUB_PERSONAL_ACCESS_TOKEN` patterns remained in the export after removing scratch scripts.
+- Publish export validation
+  - `npm --prefix frontend run lint`: passed with 0 errors and the same 7 existing warnings.
+  - `npm --prefix frontend run build`: passed on Next.js 16.2.3; retained the existing multi-lockfile workspace-root warning.
+  - `ruff check retrocause/`: passed.
+  - `pytest tests/ --basetemp=.pytest-tmp`: 212 passed.
+  - `python scripts/e2e_test.py` against export backend `127.0.0.1:8002` and export frontend `localhost:3005`: passed with exit code 0.
+- Source repo validation after release README, ignore rules, and dependency sync
+  - `npm test`: passed with exit code 0 after starting the source frontend on `localhost:3005` and using the already-running source backend on `127.0.0.1:8000`.
+- Alpha.2 public export validation in `D:\opencode\retrocause-ai-public-20260413`
+  - `npm --prefix frontend run lint`: passed with 0 warnings and 0 errors.
+  - `npm --prefix frontend run build`: passed on Next.js 16.2.3 without the previous multi-lockfile warning.
+  - `ruff check retrocause/`: passed.
+  - `pytest tests/ --basetemp=.pytest-tmp`: 212 passed.
+- Alpha.2 source repo validation
+  - Created/used local `.venv` because the global Python environment could not import `uvicorn` for backend startup.
+  - `npm test`: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, `pytest tests/ --basetemp=.pytest-tmp`, and `python scripts/e2e_test.py`.
+  - Pytest result: 212 passed.
+  - E2E result: 572 passed, 0 failed, 1 skipped.
+  - The skipped item was the optional Playwright full workflow because Playwright was not installed in `.venv`.
+- GitHub publication
+  - Created and pushed the clean public repository with GitHub CLI authenticated as `logi-cmd`.
+  - Published URL: `https://github.com/logi-cmd/retrocause-ai`.
+  - Initial public commit in the export repo: `8436920 Initial open-source release`.
+- GitHub prerelease
+  - Created prerelease tag `v0.1.0-alpha.1` for the public repository.
+  - Release URL: `https://github.com/logi-cmd/retrocause-ai/releases/tag/v0.1.0-alpha.1`.
+  - Release notes include working features, quick-start commands, validation results, and known limits.
+- GitHub prerelease alpha.2
+  - Created and published prerelease tag `v0.1.0-alpha.2` for the public repository.
+  - Release URL: `https://github.com/logi-cmd/retrocause-ai/releases/tag/v0.1.0-alpha.2`.
+  - Public commit: `26d043e Polish alpha release docs and lint`.
+  - Release notes include README status polish, zero-warning frontend lint, Turbopack root config, validation results, and known limits.
+- Source repo alpha.2 state commit
+  - Created local source commit `Prepare alpha release polish`.
+  - This keeps README, project state, frontend alpha.2 polish, dependency metadata, task contract, and evidence notes in one reviewable checkpoint.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"` after source alpha.2 commit
+  - Result: pass-with-concerns, 80/100.
+  - Blocking errors: 0.
+  - Remaining warnings: cross-top-level release scope, dependency metadata config change, and project-state continuity notes.
+  - Mitigation: task contract explicitly declares docs/config/guardrails/internal release polish, rollback notes, and risk justification.
+- Project state documentation
+  - Updated `docs/PROJECT_STATE.md` to record that the OSS package is now published as an alpha prerelease rather than only a local release candidate.
+- Guardrails scope maintenance
+  - Updated `.agent-guardrails/task-contract.json` to include `.gitignore`, because release packaging intentionally added local-only publish exclusions for logs, caches, internal docs, and guardrail state.
+- Alpha.2 polish
+  - Cleaned frontend lint warnings in reusable UI components.
+  - Added `turbopack.root` to `frontend/next.config.ts` so Next.js no longer warns about multiple lockfiles during build.
+  - Updated README and project state to point at `v0.1.0-alpha.2`.
+  - Validated the public export with frontend lint/build, backend lint, and full pytest.
+  - Validated the source repo with root `npm test` using the local `.venv` Python environment.
 
 ## Residual Risks
 
@@ -172,4 +237,6 @@ Note: the working tree already contained unrelated local edits before this task.
 - Direct monetization value remains workflow-dependent; graph inspection alone is less sellable than brief/report/share outputs for repeated market, policy, or strategy use cases.
 - The US/Iran golden case is now live-validated, but the visible Chinese UI still intentionally falls back to generic Chinese labels for some long English model labels instead of fully translating every generated phrase.
 - API calls from Windows PowerShell need explicit UTF-8 JSON bytes for Chinese queries; otherwise the query can arrive as question marks and produce misleading failure results.
-- Frontend lint warnings remain in pre-existing unrelated files; no lint errors were introduced.
+- Frontend lint warnings were cleaned for the alpha.2 polish pass.
+- The publish export intentionally omits nonessential docs and local evidence logs, so public users see the bilingual README and runnable code but not the internal planning trail.
+- The local `logi-cmd` command was not available; publishing uses the GitHub CLI authenticated as `logi-cmd`.

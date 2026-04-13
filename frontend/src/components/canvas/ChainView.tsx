@@ -6,7 +6,6 @@ import {
   ChainNode,
   ChainEdge,
   ChainMetadata,
-  UpstreamNode,
 } from '@/data/mockData';
 import { useI18n } from '@/lib/i18n';
 

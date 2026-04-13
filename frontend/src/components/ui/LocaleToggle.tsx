@@ -1,6 +1,6 @@
 "use client";
 
-import { useI18n, LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
+import { useI18n, LOCALE_LABELS, type Locale } from "@/lib/i18n";
 
 export default function LocaleToggle() {
   const { locale, setLocale } = useI18n();

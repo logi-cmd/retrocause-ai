@@ -20,6 +20,7 @@ frontend/out/
 
 # Local logs
 *.log
+logs/
 uvicorn_stdout.log
 uvicorn_stderr.log
 
@@ -30,5 +31,8 @@ uvicorn_stderr.log
 
 # Local-only business / planning docs (must not be pushed)
 docs-private/
+docs/superpowers/
+.agent-guardrails/
+.codex/
 *.local.md
 .gstack/

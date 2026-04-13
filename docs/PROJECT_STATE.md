@@ -8,7 +8,7 @@ RetroCause is a runnable, inspectable causal explanation product for "why did th
 
 ## Current Status
 
-The OSS version is **locally usable alpha / release candidate**, not yet a tagged public release.
+The OSS version is **published as an alpha prerelease**.
 
 What is done:
 
@@ -20,11 +20,13 @@ What is done:
 - live US/Iran Islamabad talks golden-case validation with OpenRouter DeepSeek V3
 - refreshed live golden-case screenshot under `docs/images/golden-us-iran-live-ui.png`
 - automated validation through the root `npm test` command
+- clean public GitHub repo published at `https://github.com/logi-cmd/retrocause-ai`
+- GitHub prerelease `v0.1.0-alpha.2`
 
 What is not done:
 
-- final commit/tag/release packaging
-- first-time OSS release polish pass over setup copy, known limits, and "what good output looks like" review
+- stable `v0.1.0` release
+- first-time OSS release polish beyond the current bilingual README
 - export/share/report workflows that would make the product directly useful in repeated paid workflows
 
 ## Current Focus
@@ -46,6 +48,8 @@ Current UX focus: make live analysis failures and thin outputs actionable throug
 - Updated OSS readiness docs to distinguish local alpha completeness from polished public release completeness.
 - Completed the 2026-04-13 US/Iran Islamabad talks golden case through API and browser UI with OpenRouter DeepSeek V3.
 - Fixed an over-broad Chinese localization regex that turned `nuclear` into `nucl出口管理条例`.
+- Published the clean OSS alpha package to `logi-cmd/retrocause-ai` and created prerelease `v0.1.0-alpha.1`.
+- Prepared `v0.1.0-alpha.2` with README status polish, zero-warning frontend lint, and explicit Turbopack root config.
 
 ## Blockers
 
@@ -53,7 +57,7 @@ Current UX focus: make live analysis failures and thin outputs actionable throug
 
 ## Next Step
 
-Package the OSS release candidate: review first-time GitHub setup, write a short release note, and decide whether to tag/commit the current local work.
+Post-release polish for the alpha: reduce first-run friction, clean remaining lint warnings, and design the report/share/export workflow that would create clearer repeated-use value.
 
 Release-readiness pass from the user journey:
 

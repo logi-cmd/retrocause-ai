@@ -237,8 +237,7 @@ function ChainTrail({ chain, t }: { chain?: CausalChain; t: (key: TranslationKey
       }} />
       
       <div className="space-y-2">
-        {chain.nodes.slice(0, 4).map((node, i) => {
-          const isLast = i === Math.min(3, chain.nodes.length - 1);
+        {chain.nodes.slice(0, 4).map((node) => {
           const isOutcome = node.type === "outcome";
           const isFactor = node.type === "factor";
           const borderColor = isOutcome
