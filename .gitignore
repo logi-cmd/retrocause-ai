@@ -31,3 +31,4 @@ uvicorn_stderr.log
 # Local-only business / planning docs (must not be pushed)
 docs-private/
 *.local.md
+.gstack/

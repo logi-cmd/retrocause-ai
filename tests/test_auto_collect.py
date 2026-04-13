@@ -8,7 +8,7 @@ import retrocause.collector as collector_module
 from retrocause.collector import EvidenceCollector, reset_source_limit_state
 from retrocause.engine import RetroCauseEngine, analyze
 from retrocause.llm import ExtractedEvidence
-from retrocause.models import EvidenceType
+from retrocause.models import CausalEdge, EvidenceType
 from retrocause.sources.base import BaseSourceAdapter, SearchResult
 
 
@@ -512,3 +512,63 @@ def test_collector_add_evidence_dedup():
     assert ev2 is None
     assert ev3 is not None
     assert len(collector.get_evidence()) == 2
+
+
+def test_collect_refutations_searches_challenge_queries_and_marks_stance():
+    reset_source_limit_state()
+    collector = EvidenceCollector()
+
+    class _ChallengeLLM(_FakeLLMClient):
+        def __init__(self):
+            super().__init__(extracted=[])
+            self.prompts: list[str] = []
+
+        def extract_evidence(
+            self, query: str, raw_text: str, source_type: str
+        ) -> list[ExtractedEvidence]:
+            self.prompts.append(query)
+            return [
+                ExtractedEvidence(
+                    content="Officials said sanctions were not the reason talks failed.",
+                    relevance=0.88,
+                    variables=["sanctions_pressure", "talks_failed"],
+                    confidence=0.8,
+                    stance="refuting",
+                )
+            ]
+
+    source = _NamedFakeSourceAdapter(
+        "web",
+        [
+            SearchResult(
+                title="Officials deny sanctions caused failure",
+                content="Officials said sanctions were not the reason talks failed.",
+                url="https://example.com/deny",
+                source_type=EvidenceType.NEWS,
+                metadata={"content_quality": "trusted_fulltext"},
+            )
+        ],
+    )
+
+    new_evidence, checks = collector.collect_refutations(
+        query="Why did the Islamabad talks fail?",
+        domain="geopolitics",
+        edges=[
+            CausalEdge(
+                source="sanctions_pressure",
+                target="talks_failed",
+                conditional_prob=0.7,
+                supporting_evidence_ids=["ev-existing"],
+            )
+        ],
+        llm_client=_ChallengeLLM(),
+        source_adapters=[source],
+    )
+
+    assert len(new_evidence) == 1
+    assert new_evidence[0].stance == "refuting"
+    assert new_evidence[0].stance_basis == "challenge_retrieval"
+    assert "evidence against" in source.calls[0]
+    assert "sanctions pressure" in source.calls[0]
+    assert checks[0]["status"] == "has_refutation"
+    assert checks[0]["refuting_count"] == 1

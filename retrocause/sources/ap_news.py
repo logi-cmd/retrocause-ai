@@ -43,7 +43,21 @@ def _url_rank(url: str, query_tokens: set[str]) -> tuple[int, str]:
     return score, lowered
 
 
-def _fetch_article(url: str) -> tuple[str, str] | None:
+def _extract_published_date(html_text: str) -> str:
+    patterns = [
+        r'<meta\s+property="article:published_time"\s+content="([^"]+)"',
+        r'<meta\s+name="article:published_time"\s+content="([^"]+)"',
+        r'<meta\s+property="og:updated_time"\s+content="([^"]+)"',
+        r'"datePublished"\s*:\s*"([^"]+)"',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, html_text, re.I)
+        if match:
+            return match.group(1).strip()[:10]
+    return ""
+
+
+def _fetch_article(url: str) -> tuple[str, str, str] | None:
     cached = _page_cache.get(url)
     if cached and time.time() - cached[0] <= _PAGE_CACHE_TTL:
         return cached[1]
@@ -71,7 +85,7 @@ def _fetch_article(url: str) -> tuple[str, str] | None:
     if len(content) < 280:
         return None
 
-    payload = (title, content)
+    payload = (title, content, _extract_published_date(response.text))
     _page_cache[url] = (time.time(), payload)
     return payload
 
@@ -126,7 +140,7 @@ class APNewsAdapter(BaseSourceAdapter):
             article = _fetch_article(url)
             if article is None:
                 continue
-            title, content = article
+            title, content, published = article
             lowered_title = f"{title} {content[:400]}".lower()
             if query_tokens:
                 overlap = sum(1 for token in query_tokens if token in lowered_title)
@@ -143,6 +157,7 @@ class APNewsAdapter(BaseSourceAdapter):
                         "trusted_domain": True,
                         "page_content": content[:12000],
                         "content_quality": "trusted_fulltext",
+                        **({"published": published} if published else {}),
                     },
                 )
             )

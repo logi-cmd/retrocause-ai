@@ -55,6 +55,7 @@ def _apply_chain_quality_penalty(chain: HypothesisChain, evidence_lookup: dict[s
 def anchor_edge_to_evidence(
     edge: CausalEdge,
     evidence_by_var: dict[str, list[str]],
+    evidence_stance_by_id: dict[str, str] | None = None,
 ) -> tuple[int, int]:
     source_evidence = set(evidence_by_var.get(edge.source, []))
     target_evidence = set(evidence_by_var.get(edge.target, []))
@@ -63,13 +64,20 @@ def anchor_edge_to_evidence(
     if not relevant:
         return 0, 0
 
-    edge.supporting_evidence_ids = sorted(relevant)
-    return len(relevant), len(relevant)
+    stance_by_id = evidence_stance_by_id or {}
+    edge.supporting_evidence_ids = sorted(
+        ev_id for ev_id in relevant if stance_by_id.get(ev_id, "supporting") != "refuting"
+    )
+    edge.refuting_evidence_ids = sorted(
+        ev_id for ev_id in relevant if stance_by_id.get(ev_id, "supporting") == "refuting"
+    )
+    return len(edge.supporting_evidence_ids), len(relevant)
 
 
 def anchor_hypothesis(
     chain: HypothesisChain,
     evidence_by_var: dict[str, list[str]],
+    evidence_stance_by_id: dict[str, str] | None = None,
 ) -> None:
     if not chain.edges:
         chain.evidence_coverage = 0.0
@@ -78,8 +86,8 @@ def anchor_hypothesis(
     anchored = 0
     unanchored: list[str] = []
     for edge in chain.edges:
-        supporting, _ = anchor_edge_to_evidence(edge, evidence_by_var)
-        if supporting > 0 or edge.supporting_evidence_ids:
+        supporting, total = anchor_edge_to_evidence(edge, evidence_by_var, evidence_stance_by_id)
+        if total > 0 or edge.supporting_evidence_ids or edge.refuting_evidence_ids:
             anchored += 1
         else:
             unanchored.append(f"{edge.source}\u2192{edge.target}")
@@ -167,9 +175,12 @@ class EvidenceAnchoringStep(PipelineStep):
         for ev in self.collector.get_evidence():
             evidence_lookup[ev.id] = ev.content
             quality_lookup[ev.id] = ev
+        evidence_stance_by_id = {
+            ev.id: getattr(ev, "stance", "supporting") for ev in self.collector.get_evidence()
+        }
 
         for chain in ctx.hypotheses:
-            anchor_hypothesis(chain, evidence_by_var)
+            anchor_hypothesis(chain, evidence_by_var, evidence_stance_by_id)
             _apply_chain_quality_penalty(chain, quality_lookup)
 
             for edge in chain.edges:
@@ -188,3 +199,20 @@ class EvidenceAnchoringStep(PipelineStep):
             total_spans,
         )
         return ctx
+
+
+def reanchor_hypotheses(ctx: PipelineContext, collector: EvidenceCollector) -> None:
+    """Refresh evidence bindings after a retrieval step appends new evidence."""
+    evidence_by_var = build_evidence_index(collector)
+    evidence_lookup = {ev.id: ev.content for ev in collector.get_evidence()}
+    evidence_stance_by_id = {
+        ev.id: getattr(ev, "stance", "supporting") for ev in collector.get_evidence()
+    }
+    quality_lookup = {ev.id: ev for ev in collector.get_evidence()}
+
+    for chain in ctx.hypotheses:
+        anchor_hypothesis(chain, evidence_by_var, evidence_stance_by_id)
+        _apply_chain_quality_penalty(chain, quality_lookup)
+        for edge in chain.edges:
+            if edge.supporting_evidence_ids:
+                ground_citation_spans(edge, evidence_lookup)

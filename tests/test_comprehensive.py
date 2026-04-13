@@ -12,7 +12,10 @@ from retrocause.api.main import (
     GraphEdgeV2,
     HypothesisChainV2,
     PipelineEvaluationV2,
+    ProviderPreflightRequest,
     analyze_query_v2,
+    preflight_provider,
+    _build_product_harness,
     _result_to_v2,
 )
 from retrocause.app.demo_data import (
@@ -30,6 +33,8 @@ from retrocause.models import (
     AnalysisResult,
     CausalEdge,
     CausalVariable,
+    Evidence,
+    EvidenceType,
     HypothesisChain,
     HypothesisStatus,
 )
@@ -235,6 +240,167 @@ def test_result_to_v2_multiple_chains():
     )
     v2 = _result_to_v2(result, is_demo=False)
     assert v2.recommended_chain_id == "chain-high"
+
+
+def test_result_to_v2_surfaces_refutation_status_and_stance():
+    result = AnalysisResult(
+        query="why did talks fail",
+        domain="geopolitics",
+        variables=[
+            CausalVariable(name="hardline_demands", description="Hardline demands"),
+            CausalVariable(name="failed_talks", description="Failed talks"),
+        ],
+        edges=[
+            CausalEdge(
+                source="hardline_demands",
+                target="failed_talks",
+                conditional_prob=0.7,
+                supporting_evidence_ids=["ev-support"],
+                refuting_evidence_ids=["ev-refute"],
+            )
+        ],
+        hypotheses=[
+            HypothesisChain(
+                id="chain-refute",
+                name="Refuted chain",
+                description="A chain with a challenge",
+                variables=[
+                    CausalVariable(name="hardline_demands", description="Hardline demands"),
+                    CausalVariable(name="failed_talks", description="Failed talks"),
+                ],
+                edges=[
+                    CausalEdge(
+                        source="hardline_demands",
+                        target="failed_talks",
+                        conditional_prob=0.7,
+                        supporting_evidence_ids=["ev-support"],
+                        refuting_evidence_ids=["ev-refute"],
+                    )
+                ],
+                posterior_probability=0.6,
+            )
+        ],
+        evidences=[
+            Evidence(
+                id="ev-support",
+                content="Officials cited hardline demands as a cause.",
+                source_type=EvidenceType.NEWS,
+                stance="supporting",
+                stance_basis="llm_extraction",
+            ),
+            Evidence(
+                id="ev-refute",
+                content="Officials denied that hardline demands caused the failure.",
+                source_type=EvidenceType.NEWS,
+                stance="refuting",
+                stance_basis="llm_extraction",
+            ),
+        ],
+    )
+
+    v2 = _result_to_v2(result, is_demo=False)
+
+    assert v2.chains[0].refutation_status == "has_refutation"
+    assert v2.chains[0].edges[0].refutation_status == "has_refutation"
+    refuting = next(item for item in v2.evidences if item.id == "ev-refute")
+    assert refuting.is_supporting is False
+    assert refuting.stance == "refuting"
+    assert refuting.stance_basis == "llm_extraction"
+
+
+def test_result_to_v2_marks_missing_refutation_coverage_honestly():
+    result = _make_minimal_result()
+    result.evidences = [
+        Evidence(
+            id="ev-support",
+            content="A retrieved claim supports the explanation.",
+            source_type=EvidenceType.NEWS,
+            stance="supporting",
+            stance_basis="llm_extraction",
+        )
+    ]
+    result.hypotheses[0].edges[0].supporting_evidence_ids = ["ev-support"]
+
+    v2 = _result_to_v2(result, is_demo=False)
+
+    assert v2.chains[0].refutation_status == "no_refutation_in_retrieved_evidence"
+
+
+def test_result_to_v2_surfaces_challenge_checks_and_analysis_brief():
+    result = AnalysisResult(
+        query="why did talks fail",
+        domain="geopolitics",
+        variables=[
+            CausalVariable(name="sanctions_pressure", description="Sanctions pressure"),
+            CausalVariable(name="talks_failed", description="Talks failed"),
+        ],
+        edges=[
+            CausalEdge(
+                source="sanctions_pressure",
+                target="talks_failed",
+                conditional_prob=0.72,
+                supporting_evidence_ids=["ev-support"],
+                refuting_evidence_ids=["ev-refute"],
+            )
+        ],
+        hypotheses=[
+            HypothesisChain(
+                id="chain-1",
+                name="Sanctions explanation",
+                description="Sanctions pressure contributed to failure",
+                variables=[
+                    CausalVariable(name="sanctions_pressure", description="Sanctions pressure"),
+                    CausalVariable(name="talks_failed", description="Talks failed"),
+                ],
+                edges=[
+                    CausalEdge(
+                        source="sanctions_pressure",
+                        target="talks_failed",
+                        conditional_prob=0.72,
+                        supporting_evidence_ids=["ev-support"],
+                        refuting_evidence_ids=["ev-refute"],
+                    )
+                ],
+                posterior_probability=0.64,
+            )
+        ],
+        evidences=[
+            Evidence(
+                id="ev-support",
+                content="Diplomats linked sanctions pressure to the failed talks.",
+                source_type=EvidenceType.NEWS,
+                stance="supporting",
+                stance_basis="llm_extraction",
+            ),
+            Evidence(
+                id="ev-refute",
+                content="Officials denied sanctions pressure was the reason talks failed.",
+                source_type=EvidenceType.NEWS,
+                stance="refuting",
+                stance_basis="challenge_retrieval",
+            ),
+        ],
+        refutation_checks=[
+            {
+                "edge_id": "sanctions_pressure->talks_failed",
+                "source": "sanctions_pressure",
+                "target": "talks_failed",
+                "query": "why did talks fail evidence against sanctions pressure causing talks failed",
+                "result_count": 1,
+                "refuting_count": 1,
+                "status": "has_refutation",
+            }
+        ],
+    )
+
+    v2 = _result_to_v2(result, is_demo=False)
+
+    assert v2.challenge_checks[0].status == "has_refutation"
+    assert v2.analysis_brief is not None
+    assert "Sanctions explanation" in v2.analysis_brief.answer
+    assert v2.analysis_brief.top_reasons
+    assert v2.analysis_brief.challenge_summary.startswith("Found")
+    assert v2.analysis_brief.missing_evidence
 
 
 def test_result_to_v2_node_types():
@@ -636,3 +802,151 @@ def test_demo_result_hypothesis_variables_match_result_variables():
         assert hyp_var_names.issubset(result_var_names), (
             f"Chain {h.id} has variables not in result: {hyp_var_names - result_var_names}"
         )
+
+
+@pytest.mark.anyio
+async def test_provider_preflight_classifies_missing_api_key():
+    response = await preflight_provider(
+        ProviderPreflightRequest(model="openrouter", api_key=None, explicit_model=None)
+    )
+
+    assert response.status == "error"
+    assert response.can_run_analysis is False
+    assert response.failure_code == "missing_api_key"
+    assert any(check.id == "api_key_present" and check.status == "fail" for check in response.checks)
+    assert "API key" in response.user_action
+
+
+@pytest.mark.anyio
+async def test_provider_preflight_runs_model_health_check(monkeypatch):
+    class FakeLLM:
+        def __init__(self, api_key, model, base_url, timeout):
+            self.api_key = api_key
+            self.model = model
+            self.base_url = base_url
+            self.timeout = timeout
+
+        def preflight_model_access(self):
+            return False, "BadRequestError: invalid model ID"
+
+    monkeypatch.setattr("retrocause.llm.LLMClient", FakeLLM)
+
+    response = await preflight_provider(
+        ProviderPreflightRequest(
+            model="openrouter",
+            api_key="sk-test",
+            explicit_model="not-a-real-model",
+        )
+    )
+
+    assert response.status == "error"
+    assert response.can_run_analysis is False
+    assert response.failure_code == "invalid_model"
+    assert response.model_name == "not-a-real-model"
+    assert any(check.id == "model_access" and check.status == "fail" for check in response.checks)
+    assert "model" in response.user_action.lower()
+
+
+def test_product_harness_marks_model_blocked_empty_result_as_actionable():
+    response = AnalyzeResponseV2(
+        query="US Iran Islamabad talks ended without agreement",
+        is_demo=False,
+        demo_topic=None,
+        analysis_mode="partial_live",
+        freshness_status="unknown",
+        time_range=None,
+        partial_live_reasons=["LLM calls failed for deepseek/deepseek-chat-v3-0324 - empty result"],
+        recommended_chain_id=None,
+        chains=[],
+        evidences=[],
+        upstream_map={"entries": []},
+        retrieval_trace=[],
+        challenge_checks=[],
+        analysis_brief=None,
+        error="LLM calls failed for deepseek/deepseek-chat-v3-0324 - empty result",
+    )
+
+    report = _build_product_harness(response)
+
+    assert report.status == "blocked_by_model"
+    assert report.score < 0.5
+    assert any(check.id == "actionable_failure" and check.status == "pass" for check in report.checks)
+    assert any("preflight" in action.lower() for action in report.next_actions)
+
+
+def test_product_harness_rewards_useful_evidence_backed_result():
+    result = AnalysisResult(
+        query="US Iran Islamabad talks ended without agreement",
+        domain="geopolitics",
+        variables=[
+            CausalVariable(name="sanctions_dispute", description="Sanctions dispute"),
+            CausalVariable(name="failed_agreement", description="No agreement"),
+        ],
+        edges=[
+            CausalEdge(
+                source="sanctions_dispute",
+                target="failed_agreement",
+                conditional_prob=0.74,
+                supporting_evidence_ids=["ev-support"],
+            )
+        ],
+        hypotheses=[
+            HypothesisChain(
+                id="chain-1",
+                name="Sanctions and sequencing gap",
+                description="Disagreement over sanctions relief and sequencing blocked agreement.",
+                variables=[
+                    CausalVariable(name="sanctions_dispute", description="Sanctions dispute"),
+                    CausalVariable(name="failed_agreement", description="No agreement"),
+                ],
+                edges=[
+                    CausalEdge(
+                        source="sanctions_dispute",
+                        target="failed_agreement",
+                        conditional_prob=0.74,
+                        supporting_evidence_ids=["ev-support"],
+                    )
+                ],
+                posterior_probability=0.68,
+            )
+        ],
+        evidences=[
+            Evidence(
+                id="ev-support",
+                content="Officials said sanctions relief sequencing remained unresolved.",
+                source_type=EvidenceType.NEWS,
+                stance="supporting",
+                stance_basis="llm_extraction",
+                source_tier="fresh",
+                extraction_method="llm_fulltext",
+            )
+        ],
+        retrieval_trace=[
+            {
+                "source": "ap_news",
+                "query": "US Iran Islamabad talks no agreement sanctions sequencing",
+                "result_count": 2,
+                "cache_hit": False,
+            }
+        ],
+        refutation_checks=[
+            {
+                "edge_id": "sanctions_dispute->failed_agreement",
+                "source": "sanctions_dispute",
+                "target": "failed_agreement",
+                "query": "evidence against sanctions sequencing causing failed talks",
+                "result_count": 1,
+                "refuting_count": 0,
+                "status": "checked_no_refuting_claims",
+            }
+        ],
+    )
+    response = _result_to_v2(result, is_demo=False)
+
+    assert response.product_harness is not None
+    assert response.product_harness.status == "ready_for_review"
+    assert response.product_harness.score >= 0.7
+    assert any(
+        check.id == "analysis_summary" and check.status == "pass"
+        for check in response.product_harness.checks
+    )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from retrocause.sources.web import WebSearchAdapter
+from retrocause.sources.web import DEFAULT_TRUSTED_DOMAINS, WebSearchAdapter
 
 
 class _FakeResponse:
@@ -68,3 +68,9 @@ def test_web_search_uses_cached_results_when_live_search_fails(monkeypatch):
     assert len(first) == 1
     assert len(second) == 1
     assert second[0].url == first[0].url
+
+
+def test_default_trusted_domains_include_stable_diplomacy_sources():
+    assert "state.gov" in DEFAULT_TRUSTED_DOMAINS
+    assert "un.org" in DEFAULT_TRUSTED_DOMAINS
+    assert "reuters.com" in DEFAULT_TRUSTED_DOMAINS

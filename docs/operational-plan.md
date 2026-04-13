@@ -190,6 +190,7 @@ Expected effect:
 - relative windows such as `today`, `yesterday`, and `trading_day` must be converted into absolute calendar buckets before cache/store reuse
 - live retrieval queries for relative windows should carry concrete date context, so "yesterday" on different days cannot collapse into the same search/cache key
 - explicitly dated source results outside the inferred window must be filtered before LLM evidence extraction and graph construction
+- undated results for strong fresh-news and market windows must show a target-date signal in the title, URL, snippet, or fetched page text; otherwise they should be treated as insufficiently fresh rather than used as event evidence
 - stable background evidence may be reused across days or weeks
 - fresh event evidence must remain time-bucketed
 

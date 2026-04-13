@@ -23,6 +23,25 @@
 - homepage evidence filtering by source / stance / confidence
 - homepage chain comparison snapshot and richer right-panel rendering for live API evidence
 - Evidence Access Layer for query planning, source brokering, multi-source aggregation, evidence quality ordering, short-lived caching, source cooldown, and API/UI retrieval trace transparency
+- provider preflight harness that checks whether the selected provider key/model can return valid JSON before spending a full run
+- product value harness that tells users whether a result is reviewable, evidence-backed, challenged, or blocked by model/provider setup
+
+## Current OSS Completion Status
+
+The OSS version is **alpha-complete for local demonstration and inspection**, and now has one live golden-case validation:
+
+- it can be installed locally
+- it can start the backend and frontend together
+- it can show demo, partial-live, and live states honestly
+- it can run the evidence-board workflow end to end
+- it has automated coverage through the root `npm test` path
+- the 2026-04-13 US/Iran Islamabad talks golden case passed with OpenRouter DeepSeek V3 as a non-demo live result
+
+It is **not yet release-complete as a polished public OSS launch** until release packaging is done:
+
+- first-run onboarding should be reviewed once more as if the user has never seen the project
+- release notes, tag/commit, and known-limit messaging should be finalized
+- the output still needs report/share/export packaging before it has obvious direct monetization value for repeated client, market-intelligence, or strategy workflows
 
 ## Current Limitations
 
@@ -74,7 +93,29 @@ It is:
 - stronger team / report / stakeholder communication outputs
 - domain-specific higher-trust workflows where being wrong is costly
 
+### 8. Direct monetization needs a packaged workflow
+
+The current OSS product helps users inspect causal explanations, but direct monetization usually requires an output that can be reused in a business workflow.
+
+The most credible near-term paid wedge is not generic "why answers." It is a repeatable brief/report workflow for users who need to explain market, policy, geopolitical, or competitive events to other people.
+
+To support that, the product still needs:
+
+- a clear "decision brief" output format
+- export/share/report generation
+- saved comparison runs or reusable templates
+- stronger source reliability defaults for the chosen vertical
+- clear confidence, gaps, and counterpoint sections that a user can forward without rewriting
+
 ## Near-Term Roadmap
+
+### P0.5 - Finish public OSS release readiness
+
+- select a preflight-passing OpenRouter model for the default live demo path ✅
+- re-run the US/Iran Islamabad talks golden case through API and browser UI ✅
+- confirm the final output includes source trace, analysis brief, challenge coverage, and `product_harness` status ✅
+- refresh screenshots and public docs after that golden case ✅
+- document one "good output" example and one "blocked/degraded output" example so users know what the system can and cannot currently do
 
 ### P0 — Reach the minimum usable OSS release bar ✅
 

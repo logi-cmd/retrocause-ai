@@ -1,9 +1,34 @@
 {
   "schemaVersion": 3,
-  "task": "修复前端因果画布低高度视口下便签上下拖拽边界与底部遮挡问题，并同步文档与端到端测试",
+  "task": "Modify retrocause backend and frontend to stop misleadingly showing every chain as zero refuting evidence: add an evidence stance/refutation status derived from existing evidence fields, surface honest coverage in the API/UI, update tests, and keep changes scoped to retrocause/api/main.py, retrocause/anchoring.py or engine evidence logic, frontend/src/app/page.tsx, tests.",
   "preset": "generic",
-  "createdAt": "2026-04-12T15:54:11.432Z",
-  "allowedPaths": [],
+  "createdAt": "2026-04-12T20:27:08.681Z",
+  "allowedPaths": [
+    "tests/",
+    ".agent-guardrails/evidence/",
+    "README.md",
+    "docs/",
+    "frontend/src/app/",
+    "frontend/src/app/page.tsx",
+    "logs/",
+    "logs/backend-8001-err.log",
+    "logs/backend-8001.log",
+    "logs/qa-backend.err.log",
+    "logs/qa-backend.inline.log",
+    "logs/qa-backend.out.log",
+    "logs/qa-frontend.err.log",
+    "logs/qa-frontend.inline.log",
+    "logs/qa-frontend.out.log",
+    "logs/sse-test-err.log",
+    "logs/sse-test.log",
+    "retrocause/",
+    "retrocause/anchoring.py",
+    "retrocause/api/",
+    "retrocause/api/main.py",
+    "tests/test_anchoring.py",
+    "uvicorn_stderr.log",
+    "uvicorn_stdout.log"
+  ],
   "requiredCommands": [
     "npm test"
   ],
@@ -13,8 +38,8 @@
   "intendedFiles": [],
   "protectedPaths": [],
   "allowedChangeTypes": [],
-  "riskLevel": "high",
-  "requiresReviewNotes": true,
+  "riskLevel": "low",
+  "requiresReviewNotes": false,
   "validationProfile": "standard",
   "securityRequirements": [],
   "dependencyRequirements": [],
@@ -41,19 +66,19 @@
   "rollbackNotes": "",
   "riskJustification": "",
   "guardRules": [
-    "保留原有行为",
-    "添加回归测试",
-    "记录修复原因"
+    "不修改源代码逻辑",
+    "保持向后兼容",
+    "更新 API 文档"
   ],
   "roughIntent": {
     "detected": true,
-    "taskType": "bugfix",
+    "taskType": "test",
     "confidence": 0.68,
     "sources": {
       "taskType": "关键词匹配 (68% 置信度)",
-      "paths": "任务类型默认",
-      "testCommand": "default",
-      "riskLevel": "基于任务类型: bugfix"
+      "paths": "关键词+文件树",
+      "testCommand": "package.json",
+      "riskLevel": "基于任务类型: test"
     }
   },
   "autoFilledFields": [

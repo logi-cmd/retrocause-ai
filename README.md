@@ -37,8 +37,9 @@ This makes it useful for developers, researchers, and early users exploring a ne
 
 ## Current status
 
-RetroCause is currently a **research-grade alpha**:
+RetroCause is currently a **research-grade alpha / OSS release candidate**:
 
+- OSS status: the app is runnable, test-covered, and demoable locally. The 2026-04-13 OpenRouter DeepSeek golden case for the US/Iran Islamabad talks query passed API and browser validation; the remaining release work is packaging/commit/tag cleanup and first-time visitor review.
 - end-to-end pipeline is working
 - browser-based evidence-board UI (FastAPI + Next.js)
 - Streamlit demo is available as a fallback
@@ -72,11 +73,15 @@ RetroCause is currently a **research-grade alpha**:
 - live retrieval now runs through a dedicated Evidence Access Layer for query planning, scenario-aware source brokering, multi-source aggregation, quality-first result ordering, short-lived search caching, source pacing, source cooldown, and retrieval trace metadata
 - the API and homepage can now expose source-level retrieval trace rows so users can see which source was queried, how many results were found, whether cache was used, and which source failed or cooled down
 - graph evidence anchoring now handles snake_case vs natural-language variable names, reducing unnecessary follow-up retrieval and improving complete evidence-chain coverage
+- live analysis now runs a targeted challenge pass for key causal edges and exposes an analysis brief, challenge coverage, and missing-evidence notes so users see reasons, counterpoints, and gaps instead of only evidence lists
+- provider preflight now exposes whether the selected key/model can return valid JSON before a full live run, turning invalid model IDs, auth/quota issues, timeouts, and empty payloads into actionable diagnostics
+- v2 analysis responses now include a lightweight `product_harness` report that scores whether the result is reviewable, evidence-backed, challenged, or blocked by model/provider setup
 - interactive environment-based runs keep expensive debate refinement off by default; set `RETROCAUSE_DEBATE_MAX_ROUNDS=1` for deeper/offline debate passes
 - repeated queries can reuse a local high-quality evidence store to widen coverage
 - web retrieval now prefers trusted domains, fetches a small number of page bodies, and reuses short-lived query caches during source throttling
 - time-sensitive queries now infer a time window and use time-aware cache keys plus in-process request coalescing
 - relative time-sensitive queries now materialize `today`, `yesterday`, and `trading_day` into absolute calendar buckets, append concrete date context to live searches, and reject explicitly stale dated results before LLM extraction or graph construction
+- undated results for strong fresh-news/market windows must contain a target-date signal in title, URL, snippet, or fetched page text before they can enter extraction, reducing stale generic explanations for queries like `昨天比特币价格跳水`
 - the operational policy for cost control, caching, rate-limit resilience, and OSS vs Pro source strategy now lives in `docs/operational-plan.md`
 - the mature product strategy for quality, cost, rate limits, and OSS/Pro scope now lives in `docs/mature-product-plan.md`
 - the architecture planning docs now also cover current live bottlenecks, scenario-aware routing, stop-loss budgets, and where RetroCause must be meaningfully better than generic chat
@@ -124,6 +129,10 @@ Still evolving:
 **Chinese locale — toggle between English and Chinese**
 
 ![Evidence Board Chinese](docs/images/evidence-board-zh.png)
+
+**Live golden case — US/Iran Islamabad talks query with source trace, challenge coverage, and value harness**
+
+![Live US Iran Golden Case](docs/images/golden-us-iran-live-ui.png)
 
 ---
 
@@ -342,6 +351,11 @@ The open-source repo is intended to be:
 - useful for experimentation
 - good enough to demonstrate the product idea clearly
 
+Current OSS readiness:
+
+- **Done for local alpha / release-candidate use**: unified startup, browser evidence board, explicit demo/partial/live labeling, provider preflight, value harness, source trace visibility, analysis brief, challenge coverage, automated test coverage, and a live US/Iran golden-case browser/API run.
+- **Still needed before calling it shipped**: clean commit/release packaging, final first-time GitHub visitor review, and a short release note that states known limits honestly.
+
 The open-source version focuses on the causal reasoning workflow itself.
 
 The OSS release is **not** intended to be a watered-down teaser. It should stand on its own as a useful, honest, inspectable product for:
@@ -495,6 +509,7 @@ Current OSS runtime architecture (high level):
 |---|---|
 | launcher | `start.py` starts FastAPI (`:8000`) + Next.js (`:3005`) |
 | API contract | `retrocause/api/main.py` exposes `/api/analyze/v2`, `/api/analyze/v2/stream` (SSE), `/api/providers`, demo/real metadata |
+| provider harness | `/api/providers/preflight` checks provider config, API key presence, selected model access, and tiny JSON output before a full run |
 | inference runtime | `retrocause/engine.py` staged pipeline: evidence -> graph -> hypotheses -> anchoring -> counterfactual -> debate -> evaluation |
 | evidence access | `retrocause/evidence_access.py` plans queries, brokers sources, aggregates adapter results, sorts by evidence quality, caches short-lived searches, applies source pacing/cooldown, and emits retrieval traces |
 | evidence sources | `retrocause/sources/*` adapters for DuckDuckGo/web fulltext, AP News, Federal Register, GDELT, ArXiv, Semantic Scholar |
@@ -536,8 +551,10 @@ Rule of thumb:
 
 Current local validation includes:
 
+- live golden API/browser validation for `美国和伊朗在伊斯兰堡谈判结束 未达成协议的原因是什么` with OpenRouter DeepSeek V3 on 2026-04-13: provider preflight passed, `/api/analyze/v2` returned `analysis_mode=live`, `freshness_status=fresh`, 7 chains, 19 API evidence items, 7 retrieval trace rows, 3 challenge checks, analysis brief present, and `product_harness.status=ready_for_review` with score 1.0; browser run showed Live coverage 100%, source trace rows, challenge coverage, value harness, no console errors, and a screenshot in `docs/images/golden-us-iran-live-ui.png`
 - `pytest tests/` passing locally (191 tests: unit, integration, comprehensive boundary, CausalRAG, uncertainty, citation, evidence-store, evidence-access, query-routing, web-source, AP News source, Federal Register source)
 - `ruff check` on all source and test files
+- provider preflight harness tests cover missing-key and invalid-model diagnostics; product harness tests cover model-blocked empty results and useful evidence-backed results
 - diagnostics clean on source files (39 Python files + frontend)
 - frontend build (`npm run build`) passing in `frontend/`
 - real data sources (AP News, Federal Register, ArXiv, Semantic Scholar, DuckDuckGo where available) confirmed through source-level or end-to-end checks

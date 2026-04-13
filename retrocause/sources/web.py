@@ -32,7 +32,7 @@ _USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/124.0.0.0 Safari/537.36"
 )
-_DEFAULT_TRUSTED_DOMAINS = {
+DEFAULT_TRUSTED_DOMAINS = {
     "arxiv.org",
     "nature.com",
     "science.org",
@@ -46,6 +46,11 @@ _DEFAULT_TRUSTED_DOMAINS = {
     "reuters.com",
     "apnews.com",
     "bbc.com",
+    "state.gov",
+    "whitehouse.gov",
+    "un.org",
+    "iaea.org",
+    "mofa.gov.pk",
 }
 
 
@@ -162,7 +167,7 @@ def _trusted_domains() -> set[str]:
         for item in os.environ.get("RETROCAUSE_TRUSTED_DOMAINS", "").split(",")
         if item.strip()
     }
-    return _DEFAULT_TRUSTED_DOMAINS | configured
+    return DEFAULT_TRUSTED_DOMAINS | configured
 
 
 def _normalized_host(url: str) -> str:

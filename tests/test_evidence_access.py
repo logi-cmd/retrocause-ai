@@ -4,6 +4,7 @@ from retrocause.evidence_access import (
     EvidenceAccessLayer,
     EvidenceAccessPolicy,
     broker_source_names,
+    describe_source_name,
     enrich_query_with_time_context,
     plan_query,
     reset_evidence_access_state,
@@ -192,6 +193,26 @@ def test_result_time_matching_rejects_stale_published_dates():
     )
 
 
+def test_result_time_matching_requires_date_signal_when_metadata_missing():
+    undated_old = SearchResult(
+        title="Bitcoin price drop explained",
+        content="A generic old market explanation without a date.",
+        url="https://example.com/bitcoin-drop",
+        source_type=EvidenceType.NEWS,
+        metadata={"content_quality": "trusted_fulltext"},
+    )
+    undated_target = SearchResult(
+        title="Bitcoin price drop April 12, 2026",
+        content="Market coverage for the target session.",
+        url="https://example.com/bitcoin-drop-april-12-2026",
+        source_type=EvidenceType.NEWS,
+        metadata={"content_quality": "trusted_fulltext"},
+    )
+
+    assert not result_matches_time_range(undated_old, "yesterday", today=date(2026, 4, 13))
+    assert result_matches_time_range(undated_target, "yesterday", today=date(2026, 4, 13))
+
+
 def test_source_broker_routes_market_and_policy_queries_to_scenario_fit_sources():
     market_plan = plan_query("比特币今日价格为何跳水")
     policy_plan = plan_query("美国为什么会推出新的半导体出口管制？")
@@ -209,3 +230,22 @@ def test_source_broker_respects_explicit_source_override():
     plan = plan_query("Why did dinosaurs go extinct?")
 
     assert broker_source_names("web,arxiv", plan) == ["web", "arxiv"]
+
+
+def test_source_descriptions_explain_reliability_for_ui_trace():
+    ap = describe_source_name("ap_news")
+    web = describe_source_name("web")
+    official = describe_source_name("federal_register")
+
+    assert ap == {
+        "source_label": "AP News",
+        "source_kind": "wire_news",
+        "stability": "high",
+    }
+    assert web == {
+        "source_label": "Trusted web search",
+        "source_kind": "web_search",
+        "stability": "medium",
+    }
+    assert official["source_kind"] == "official_record"
+    assert official["stability"] == "high"

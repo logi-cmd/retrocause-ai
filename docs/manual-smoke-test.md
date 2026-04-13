@@ -89,15 +89,48 @@ Expected:
 1. Open the homepage left panel.
 2. Enter a supported provider mode.
 3. Paste a valid API key.
-4. Submit a query.
+4. Open provider settings and run model preflight.
+5. Submit a query.
 
 Expected:
 
 - request body includes `query`, `model`, and `api_key`
 - homepage does not claim hosted/SaaS-grade credential handling
+- provider preflight explains whether the key/model can return JSON before a full run
+- invalid model IDs, missing keys, auth/quota failures, timeouts, or empty JSON are surfaced as concrete next actions
 - if the backend succeeds, the board is labeled as live analysis
 - after completion, the status panel can show source trace rows with source name, query text, hit count, cache marker, or source error/cooldown
-- if the backend fails, the board falls back to explicitly labeled demo data
+- if the backend fails, the board returns explicit `partial_live` failure detail or falls back to explicitly labeled demo data
+- the left panel shows a value harness card that says whether the result is reviewable, needs more evidence, or is blocked by provider/model setup
+
+---
+
+## Scenario 3.5c - Golden value check for US/Iran talks
+
+1. Run provider preflight with the selected live model.
+2. Submit: `美国和伊朗在伊斯兰堡谈判结束 未达成协议的原因是什么`.
+3. Inspect the analysis brief, source trace, challenge coverage, and value harness card.
+
+Expected:
+
+- model/provider problems are caught before a full run or returned as `blocked_by_model`
+- if analysis succeeds, the result includes causal reasons, not only evidence rows
+- each top reason is tied to evidence, source trace, or a missing-evidence note
+- challenge coverage shows checked edges and refuting/context result counts
+- the value harness is at least `needs_more_evidence`; it should be `ready_for_review` only when chains, summary, source trace, evidence stance, and challenge coverage are present
+- Chinese/English toggling keeps the evidence and harness state visible
+
+---
+
+Observed 2026-04-13 result with OpenRouter DeepSeek V3:
+
+- provider preflight passed for `deepseek/deepseek-chat-v3-0324`
+- `/api/analyze/v2` returned `analysis_mode=live`, `freshness_status=fresh`, and `is_demo=false`
+- API response included 7 chains, 19 evidence items, 7 retrieval trace rows, 3 challenge checks, an analysis brief, and `product_harness.status=ready_for_review`
+- browser UI showed Live coverage 100%, 12 source rows, challenge coverage with 5 refuting items across 3 checked edges, and no console errors
+- screenshot: `docs/images/golden-us-iran-live-ui.png`
+- PowerShell API tests must send UTF-8 JSON bytes, not the default string body, otherwise Chinese queries may arrive at FastAPI as `????????`
+- Chinese localization should not replace the `ear` substring inside words such as `nuclear`; this was fixed by bounding the EAR abbreviation replacement to whole words
 
 ---
 
@@ -211,6 +244,7 @@ Expected:
 ## Known environment caveats
 
 - On Windows consoles, direct Python stdout may display UTF-8 Chinese text as garbled if the console encoding is GBK. This does **not** necessarily mean the FastAPI JSON response is wrong.
+- On Windows PowerShell, direct `Invoke-RestMethod` string bodies can corrupt Chinese JSON unless the body is sent as UTF-8 bytes with `application/json; charset=utf-8`.
 - Browser automation may fail if Chrome/Playwright browser binaries are not installed locally.
 
 ---
@@ -294,7 +328,7 @@ Latest clean browser validation on 2026-04-12 also covered a time-sensitive cryp
 
 - `比特币今日价格为何跳水`
 
-For relative market/news queries such as `昨天比特币价格跳水`, confirm that retrieval traces include concrete date context and that dated evidence outside the inferred calendar window is not used to build the graph.
+For relative market/news queries such as `昨天比特币价格跳水`, confirm that retrieval traces include concrete date context, dated evidence outside the inferred calendar window is not used to build the graph, and undated results only survive when their title, URL, snippet, or fetched page text contains the target date.
 
 Observed browser result:
 

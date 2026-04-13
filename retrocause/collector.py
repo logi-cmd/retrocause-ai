@@ -223,6 +223,8 @@ class EvidenceCollector:
         source_tier: str | None = None,
         freshness: str | None = None,
         captured_at: str | None = None,
+        stance: str = "supporting",
+        stance_basis: str = "legacy_or_manual",
     ) -> Evidence | None:
         content_key = content.strip().lower()
         if content_key in self._seen_contents:
@@ -243,6 +245,8 @@ class EvidenceCollector:
             freshness=freshness or _infer_freshness(source_type, timestamp),
             captured_at=captured_at or _today().isoformat(),
             extraction_method=extraction_method,
+            stance=stance if stance in {"supporting", "refuting", "context"} else "supporting",
+            stance_basis=stance_basis,
         )
         self.evidence_store.append(evidence)
         return evidence
@@ -339,6 +343,8 @@ class EvidenceCollector:
                     reliability=_reliability_from_extraction(item.confidence, matched_method),
                     timestamp=matched_metadata.get("published"),
                     extraction_method=matched_method or extraction_method,
+                    stance=getattr(item, "stance", "supporting"),
+                    stance_basis=getattr(item, "stance_basis", "llm_extraction"),
                 )
                 if evidence is not None:
                     new_evidence.append(evidence)
@@ -359,6 +365,8 @@ class EvidenceCollector:
                     reliability=reliability,
                     timestamp=(getattr(all_results[0], "metadata", {}) or {}).get("published"),
                     extraction_method="fallback_summary",
+                    stance="supporting",
+                    stance_basis="fallback_summary",
                 )
                 if evidence is not None:
                     new_evidence.append(evidence)
@@ -402,6 +410,133 @@ class EvidenceCollector:
             max_results_per_source,
             time_range=time_range if time_range is not None else parse_input(query).time_range,
         )
+
+    def collect_refutations(
+        self,
+        query: str,
+        domain: str,
+        edges: list[CausalEdge],
+        llm_client: object | None = None,
+        source_adapters: list[object] | None = None,
+        max_edges: int = 3,
+        max_results_per_source: int = 3,
+        time_range: str | None = None,
+    ) -> tuple[list[Evidence], list[dict]]:
+        if llm_client is None or source_adapters is None:
+            logger.info("collect_refutations: missing llm_client or source_adapters, skipping")
+            return [], []
+
+        candidate_edges = self._select_refutation_edges(edges, max_edges=max_edges)
+        if not candidate_edges:
+            return [], []
+
+        new_evidence: list[Evidence] = []
+        checks: list[dict] = []
+        effective_time_range = time_range if time_range is not None else parse_input(query).time_range
+
+        for edge in candidate_edges:
+            src_label = edge.source.replace("_", " ")
+            tgt_label = edge.target.replace("_", " ")
+            challenge_query = f"{query} evidence against {src_label} causing {tgt_label}"
+            access_batch = _parallel_search(
+                challenge_query,
+                source_adapters,
+                max_results_per_source,
+                time_range=effective_time_range,
+            )
+            self.access_trace.extend(access_batch.attempts)
+            all_results = access_batch.results
+            check = {
+                "edge_id": f"{edge.source}->{edge.target}",
+                "source": edge.source,
+                "target": edge.target,
+                "query": challenge_query,
+                "result_count": len(all_results),
+                "refuting_count": 0,
+                "context_count": 0,
+                "status": "checked_no_results" if not all_results else "checked_no_refuting_claims",
+            }
+
+            if not all_results:
+                checks.append(check)
+                continue
+
+            merged_text = _merged_result_text(all_results)
+            first_source = all_results[0].source_type
+            extraction_prompt = (
+                f"{query}\n"
+                f"Challenge causal edge: {src_label} -> {tgt_label}.\n"
+                "Extract only claims that weaken, contradict, or provide alternative "
+                "explanations for this edge; use stance='context' for relevant background."
+            )
+            extracted = llm_client.extract_evidence(
+                extraction_prompt,
+                merged_text,
+                first_source.value,
+            )
+            for item in extracted:
+                stance = getattr(item, "stance", "context")
+                if stance not in {"refuting", "context"}:
+                    stance = "context"
+                matched_result = _best_result_for_evidence(item.content, all_results)
+                matched_metadata = (getattr(matched_result, "metadata", {}) or {})
+                matched_method = _extraction_method_from_results([matched_result])
+                evidence = self.add_evidence(
+                    content=item.content,
+                    source_type=matched_result.source_type,
+                    source_url=matched_result.url,
+                    linked_variables=item.variables or [edge.source, edge.target],
+                    reliability=_reliability_from_extraction(item.confidence, matched_method),
+                    timestamp=matched_metadata.get("published"),
+                    extraction_method=matched_method,
+                    stance=stance,
+                    stance_basis="challenge_retrieval",
+                )
+                if evidence is None:
+                    continue
+                new_evidence.append(evidence)
+                if stance == "refuting":
+                    check["refuting_count"] += 1
+                else:
+                    check["context_count"] += 1
+
+            if check["refuting_count"] > 0:
+                check["status"] = "has_refutation"
+            elif check["context_count"] > 0:
+                check["status"] = "checked_context_only"
+            checks.append(check)
+
+        logger.info(
+            "collect_refutations: added %d challenge evidence items across %d checks",
+            len(new_evidence),
+            len(checks),
+        )
+        return new_evidence, checks
+
+    def _select_refutation_edges(
+        self,
+        edges: list[CausalEdge],
+        max_edges: int,
+    ) -> list[CausalEdge]:
+        seen: set[tuple[str, str]] = set()
+        ranked = sorted(
+            edges,
+            key=lambda edge: (
+                0 if not edge.refuting_evidence_ids else 1,
+                -len(edge.supporting_evidence_ids),
+                -edge.conditional_prob,
+            ),
+        )
+        selected: list[CausalEdge] = []
+        for edge in ranked:
+            key = (edge.source, edge.target)
+            if key in seen:
+                continue
+            seen.add(key)
+            selected.append(edge)
+            if len(selected) >= max_edges:
+                break
+        return selected
 
     def search_by_causal_path(
         self,
@@ -491,6 +626,8 @@ class EvidenceCollector:
                     reliability=_reliability_from_extraction(item.confidence, extraction_method),
                     timestamp=(getattr(all_results[0], "metadata", {}) or {}).get("published"),
                     extraction_method=extraction_method,
+                    stance=getattr(item, "stance", "supporting"),
+                    stance_basis=getattr(item, "stance_basis", "llm_extraction"),
                 )
                 if evidence is not None:
                     new_evidence.append(evidence)
@@ -511,6 +648,8 @@ class EvidenceCollector:
                     reliability=reliability,
                     timestamp=(getattr(all_results[0], "metadata", {}) or {}).get("published"),
                     extraction_method="fallback_summary",
+                    stance="supporting",
+                    stance_basis="fallback_summary",
                 )
                 if evidence is not None:
                     new_evidence.append(evidence)

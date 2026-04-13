@@ -25,6 +25,18 @@ def test_anchor_edge_with_evidence():
     assert edge.supporting_evidence_ids == ["ev-0001", "ev-0002"]
 
 
+def test_anchor_edge_splits_refuting_evidence():
+    edge = CausalEdge(source="claim_a", target="outcome_b", conditional_prob=0.8)
+    evidence_by_var = {"claim_a": ["ev-0001"], "outcome_b": ["ev-0002"]}
+    anchor_edge_to_evidence(
+        edge,
+        evidence_by_var,
+        evidence_stance_by_id={"ev-0002": "refuting"},
+    )
+    assert edge.supporting_evidence_ids == ["ev-0001"]
+    assert edge.refuting_evidence_ids == ["ev-0002"]
+
+
 def test_anchor_edge_no_match():
     edge = CausalEdge(source="a", target="b", conditional_prob=0.5)
     anchor_edge_to_evidence(edge, {})
@@ -114,6 +126,41 @@ def test_evidence_anchoring_step():
     assert chain.evidence_coverage == 1.0
     assert chain.unanchored_edges == []
     assert chain.edges[0].supporting_evidence_ids == ["ev-0001"]
+
+
+def test_evidence_anchoring_step_preserves_refuting_stance():
+    collector = EvidenceCollector()
+    collector.add_evidence(
+        "Claim A evidence supports the path",
+        EvidenceType.DATA,
+        linked_variables=["claim_a"],
+        stance="supporting",
+        stance_basis="llm_extraction",
+    )
+    collector.add_evidence(
+        "Outcome B was not caused by claim A according to the source",
+        EvidenceType.DATA,
+        linked_variables=["outcome_b"],
+        stance="refuting",
+        stance_basis="llm_extraction",
+    )
+    step = EvidenceAnchoringStep(collector)
+    ctx = PipelineContext()
+    ctx.hypotheses = [
+        HypothesisChain(
+            id="h1",
+            name="test",
+            description="test",
+            edges=[CausalEdge(source="claim_a", target="outcome_b", conditional_prob=0.8)],
+        ),
+    ]
+
+    ctx = step.execute(ctx)
+
+    edge = ctx.hypotheses[0].edges[0]
+    assert edge.supporting_evidence_ids == ["ev-0001"]
+    assert edge.refuting_evidence_ids == ["ev-0002"]
+    assert ctx.hypotheses[0].evidence_coverage == 1.0
 
 
 def test_evidence_coverage_rule_pass():

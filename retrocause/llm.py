@@ -102,6 +102,8 @@ class ExtractedEvidence:
     relevance: float
     variables: list[str] = field(default_factory=list)
     confidence: float = 0.5
+    stance: str = "supporting"
+    stance_basis: str = "llm_extraction"
 
 
 def _safe_parse_json(content: str | None) -> dict | None:
@@ -576,9 +578,13 @@ class LLMClient:
             "1) 'content': the factual claim as a concise statement, "
             "2) 'relevance': float 0-1 indicating how relevant this claim is to the query, "
             "3) 'variables': list of causal variables mentioned (e.g. 'temperature', 'CO2 levels'), "
-            "4) 'confidence': float 0-1 indicating your confidence in the extraction accuracy. "
+            "4) 'confidence': float 0-1 indicating your confidence in the extraction accuracy, "
+            "5) 'stance': one of 'supporting', 'refuting', or 'context'. Use 'refuting' only "
+            "when the claim explicitly weakens, disputes, or contradicts a proposed causal "
+            "explanation for the query; use 'context' for background facts that do not support "
+            "or weaken a cause. "
             "Return a JSON object with key 'evidence' containing a list of objects, each with "
-            "keys: content, relevance, variables, confidence."
+            "keys: content, relevance, variables, confidence, stance."
         )
         user_prompt = (
             f"Query: {query}\n"
@@ -631,12 +637,16 @@ class LLMClient:
                 if not isinstance(variables, list):
                     variables = []
                 variables = [str(v) for v in variables if isinstance(v, str)]
+                stance = str(item.get("stance", "supporting")).strip().lower()
+                if stance not in {"supporting", "refuting", "context"}:
+                    stance = "supporting"
                 results.append(
                     ExtractedEvidence(
                         content=content.strip(),
                         relevance=max(0.0, min(1.0, relevance)),
                         variables=variables,
                         confidence=max(0.0, min(1.0, confidence)),
+                        stance=stance,
                     )
                 )
             return results

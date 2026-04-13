@@ -50,6 +50,7 @@ type ApiEdge = {
     relevance_score: number;
   }>;
   evidence_conflict?: string;
+  refutation_status?: string;
 };
 
 type ApiEvidence = {
@@ -62,6 +63,8 @@ type ApiEvidence = {
   freshness?: string;
   timestamp?: string | null;
   extraction_method?: string;
+  stance?: "supporting" | "refuting" | "context";
+  stance_basis?: string;
 };
 
 type ApiChain = {
@@ -74,14 +77,65 @@ type ApiChain = {
   edges: ApiEdge[];
   supporting_evidence_ids: string[];
   refuting_evidence_ids: string[];
+  refutation_status?: string;
 };
 
 type ApiRetrievalTrace = {
   source: string;
+  source_label?: string;
+  source_kind?: string;
+  stability?: string;
   query: string;
   result_count: number;
   cache_hit?: boolean;
   error?: string | null;
+};
+
+type ApiChallengeCheck = {
+  edge_id: string;
+  source: string;
+  target: string;
+  query: string;
+  result_count: number;
+  refuting_count: number;
+  context_count: number;
+  status: string;
+};
+
+type ApiAnalysisBrief = {
+  answer: string;
+  confidence: number;
+  top_reasons: string[];
+  challenge_summary: string;
+  missing_evidence: string[];
+  source_coverage: string;
+};
+
+type ApiHarnessCheck = {
+  id: string;
+  label: string;
+  status: "pass" | "warn" | "fail" | string;
+  detail: string;
+};
+
+type ApiProductHarness = {
+  name: string;
+  score: number;
+  status: string;
+  user_value_summary: string;
+  checks: ApiHarnessCheck[];
+  next_actions: string[];
+};
+
+type ApiProviderPreflight = {
+  provider: string;
+  model_name: string;
+  status: string;
+  can_run_analysis: boolean;
+  failure_code?: string | null;
+  diagnosis: string;
+  user_action: string;
+  checks: ApiHarnessCheck[];
 };
 
 type AnalyzeResponseV2 = {
@@ -96,6 +150,9 @@ type AnalyzeResponseV2 = {
   evidences: ApiEvidence[];
   chains: ApiChain[];
   retrieval_trace?: ApiRetrievalTrace[];
+  challenge_checks?: ApiChallengeCheck[];
+  analysis_brief?: ApiAnalysisBrief | null;
+  product_harness?: ApiProductHarness | null;
   evaluation?: {
     evidence_sufficiency: number;
     probability_coherence: number;
@@ -262,12 +319,93 @@ function formatAnalysisBadge(mode: AnalysisUiState["mode"], locale: "zh" | "en")
   return locale === "en" ? "Live" : "Live";
 }
 
+function formatSourceKindLabel(kind: string | null | undefined, locale: "zh" | "en"): string {
+  const labels: Record<string, { en: string; zh: string }> = {
+    wire_news: { en: "wire news", zh: "通讯社新闻" },
+    news_index: { en: "news index", zh: "新闻索引" },
+    web_search: { en: "web search", zh: "网页检索" },
+    official_record: { en: "official record", zh: "官方记录" },
+    academic_index: { en: "academic index", zh: "学术索引" },
+    unknown: { en: "unknown source", zh: "未知来源" },
+  };
+  const label = labels[kind ?? "unknown"] ?? labels.unknown;
+  return locale === "en" ? label.en : label.zh;
+}
+
+function formatSourceStabilityLabel(
+  stability: string | null | undefined,
+  locale: "zh" | "en"
+): string {
+  switch (stability) {
+    case "high":
+      return locale === "en" ? "stable" : "稳定";
+    case "medium":
+      return locale === "en" ? "best-effort" : "尽力稳定";
+    case "low":
+      return locale === "en" ? "fragile" : "不稳定";
+    default:
+      return locale === "en" ? "unknown" : "未知";
+  }
+}
+
+function formatRefutationStatusLabel(
+  status: string | null | undefined,
+  locale: "zh" | "en"
+): string {
+  switch (status) {
+    case "has_refutation":
+      return locale === "en" ? "challenge found" : "发现反证";
+    case "checked_no_refuting_claims":
+      return locale === "en" ? "checked, no explicit challenge" : "已检查，未见明确反证";
+    case "checked_context_only":
+      return locale === "en" ? "checked, context only" : "已检查，仅有背景证据";
+    case "checked_no_results":
+      return locale === "en" ? "checked, no source results" : "已检查，但未取回来源结果";
+    case "no_refutation_in_retrieved_evidence":
+      return locale === "en"
+        ? "no challenge in retrieved evidence"
+        : "已检索证据中未见反证";
+    default:
+      return locale === "en" ? "challenge coverage not checked" : "反证覆盖未检验";
+  }
+}
+
+function localizeBriefText(text: string, locale: "zh" | "en"): string {
+  if (locale === "en") return text;
+  return localizeCausalText(text, locale)
+    .replace(/Most likely explanation:/gi, "最可能解释：")
+    .replace(/confidence signal/gi, "置信信号")
+    .replace(/Found/gi, "发现")
+    .replace(/challenge evidence item\(s\)/gi, "条反证证据")
+    .replace(/Checked/gi, "已检查")
+    .replace(/key edge\(s\)/gi, "条关键因果边")
+    .replace(/source type\(s\)/gi, "类来源")
+    .replace(/high-quality evidence item\(s\)/gi, "条高质量证据")
+    .replace(/total evidence item\(s\)/gi, "条总证据");
+}
+
+function formatEvidenceStanceLabel(item: ApiEvidence, locale: "zh" | "en"): string {
+  if (item.stance === "context") {
+    return locale === "en" ? "Context" : "背景";
+  }
+  if (item.stance === "refuting" || !item.is_supporting) {
+    return locale === "en" ? "Challenges" : "反证";
+  }
+  return locale === "en" ? "Supports" : "支持";
+}
+
+function localizeEvidenceContent(content: string, locale: "zh" | "en"): string {
+  if (locale === "en") return content;
+  return localizeCausalText(content, locale);
+}
+
 const progressStageOrder = [
   "EvidenceCollectionStep",
   "GraphBuildingStep",
   "HypothesisGenerationStep",
   "EvidenceAnchoringStep",
   "CausalRAGStep",
+  "RefutationCoverageStep",
   "CounterfactualVerificationStep",
   "UncertaintyAssessmentStep",
   "EvaluationStep",
@@ -280,6 +418,7 @@ function progressStageLabel(step: string, locale: "zh" | "en"): string {
     HypothesisGenerationStep: { en: "Comparing explanation chains", zh: "生成解释链" },
     EvidenceAnchoringStep: { en: "Linking evidence to edges", zh: "绑定证据链" },
     CausalRAGStep: { en: "Filling weak coverage", zh: "补充薄弱证据" },
+    RefutationCoverageStep: { en: "Searching for challenges", zh: "检索反证与替代解释" },
     CounterfactualVerificationStep: { en: "Checking what-if signals", zh: "校验反事实信号" },
     DebateRefinementStep: { en: "Refining claims", zh: "精炼结论" },
     UncertaintyAssessmentStep: { en: "Estimating uncertainty", zh: "评估不确定性" },
@@ -414,7 +553,7 @@ const ZH_CAUSAL_LABELS: Array<[RegExp, string]> = [
   [/futures open interest|open interest/gi, "期货未平仓合约"],
   [/funding rates?/gi, "资金费率"],
   [/bureau of industry and security|bis/gi, "美国工业与安全局"],
-  [/export administration regulations|ear/gi, "出口管理条例"],
+  [/\b(?:export administration regulations|ear)\b/gi, "出口管理条例"],
   [/export controls?/gi, "出口管制"],
   [/export restrictions?/gi, "出口限制"],
   [/semiconductor manufacturing items?/gi, "半导体制造项目"],
@@ -1058,6 +1197,11 @@ export default function Home() {
   const [selectedChainId, setSelectedChainId] = useState<string | null>(null);
   const [evidencePool, setEvidencePool] = useState<AnalyzeResponseV2["evidences"]>([]);
   const [retrievalTrace, setRetrievalTrace] = useState<ApiRetrievalTrace[]>([]);
+  const [challengeChecks, setChallengeChecks] = useState<ApiChallengeCheck[]>([]);
+  const [analysisBrief, setAnalysisBrief] = useState<ApiAnalysisBrief | null>(null);
+  const [productHarness, setProductHarness] = useState<ApiProductHarness | null>(null);
+  const [providerPreflight, setProviderPreflight] = useState<ApiProviderPreflight | null>(null);
+  const [providerPreflightLoading, setProviderPreflightLoading] = useState(false);
   const [pipelineEval, setPipelineEval] = useState<AnalyzeResponseV2["evaluation"]>(null);
   const [uncertaintyReport, setUncertaintyReport] = useState<AnalyzeResponseV2["uncertainty_report"]>(null);
   const [evidenceSourceFilter, setEvidenceSourceFilter] = useState<string>("all");
@@ -1258,7 +1402,7 @@ export default function Home() {
     return next;
   }, [mockPrimaryChain.edges, selectedEvidenceEdgeIds, selectedFocusEdgeId, selectedNodeId]);
   const chainProbabilityItems = availableChains.slice(0, 3);
-  const activeChainId = selectedChainId ?? mockPrimaryChain.metadata.id;
+  const activeChainId = mockPrimaryChain.metadata.id;
   const activeChainIsRecommended = !recommendedChainId || activeChainId === recommendedChainId;
   const activeChainConfidence = Math.round(mockPrimaryChain.metadata.confidence * 100);
   const hasLowConfidence = activeChainConfidence < 50;
@@ -1396,11 +1540,48 @@ export default function Home() {
         probability: Math.round(chain.probability * 100),
         supportCount: chain.supporting_evidence_ids.length,
         refuteCount: chain.refuting_evidence_ids.length,
+        refutationStatus: chain.refutation_status,
         edgeCount: chain.edges.length,
         nodeCount: chain.nodes.length,
       })),
     [availableChains, locale]
   );
+  const causalReasonSummaries = useMemo(() => {
+    const chainEdges = activeApiChain?.edges ?? [];
+    return chainEdges.slice(0, 4).map((edge) => {
+      const evidenceIds = [...edge.supporting_evidence_ids, ...edge.refuting_evidence_ids];
+      const firstEvidence = evidencePool.find((item) => evidenceIds.includes(item.id));
+      return {
+        id: edge.id,
+        source: localizeCausalText(edge.source, locale),
+        target: localizeCausalText(edge.target, locale),
+        evidenceCount: evidenceIds.length,
+        evidenceSource: firstEvidence?.source ?? "",
+        evidenceExcerpt: firstEvidence ? localizeEvidenceContent(firstEvidence.content, locale) : "",
+        refutationStatus: edge.refutation_status,
+        strength: Math.round(edge.strength * 100),
+      };
+    });
+  }, [activeApiChain, evidencePool, locale]);
+  const localizedAnalysisBrief = useMemo(() => {
+    if (!analysisBrief) return null;
+    return {
+      answer: localizeBriefText(analysisBrief.answer, locale),
+      confidence: Math.round(analysisBrief.confidence * 100),
+      topReasons: analysisBrief.top_reasons.map((item) => localizeBriefText(item, locale)),
+      challengeSummary: localizeBriefText(analysisBrief.challenge_summary, locale),
+      missingEvidence: analysisBrief.missing_evidence.map((item) =>
+        localizeBriefText(item, locale)
+      ),
+      sourceCoverage: localizeBriefText(analysisBrief.source_coverage, locale),
+    };
+  }, [analysisBrief, locale]);
+  const challengeCheckSummary = useMemo(() => {
+    const checked = challengeChecks.length;
+    const refuting = challengeChecks.reduce((sum, item) => sum + item.refuting_count, 0);
+    const contextOnly = challengeChecks.filter((item) => item.status === "checked_context_only").length;
+    return { checked, refuting, contextOnly };
+  }, [challengeChecks]);
   const analysisBadgeLabel = formatAnalysisBadge(analysisMode.mode, locale);
   const freshnessLabel = formatFreshnessLabel(analysisMode.freshnessStatus, locale);
   const timeRangeLabel = formatTimeRangeLabel(analysisMode.timeRange, locale);
@@ -1562,7 +1743,58 @@ export default function Home() {
     setSelectedNodeId(matchingEdge?.target ?? null);
   }, [activeApiChain, mockPrimaryChain.edges]);
 
+  const selectChain = useCallback((chainId: string) => {
+    const nextChain = availableChains.find((candidate) => candidate.chain_id === chainId);
+    if (!nextChain) return;
+
+    setSelectedNodeId(null);
+    setSelectedFocusEdgeId(null);
+    setSelectedEvidenceId(null);
+    setPanOffset({ x: 0, y: 0 });
+    setSelectedChainId(nextChain.chain_id);
+    setActiveChain(toLocalChain(nextChain, locale, evidencePool));
+  }, [availableChains, evidencePool, locale]);
+
   const selectedNote = notes.find((n) => n.id === selectedNodeId);
+
+  const runProviderPreflight = useCallback(async () => {
+    setProviderPreflightLoading(true);
+    setProviderPreflight(null);
+    try {
+      const body: Record<string, unknown> = {
+        model: selectedModel,
+        api_key: apiKey,
+      };
+      if (selectedExplicitModel) body.explicit_model = selectedExplicitModel;
+
+      const response = await fetch(`${API_BASE}/api/providers/preflight`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        throw new Error(`Preflight failed (${response.status})`);
+      }
+      const payload = (await response.json()) as ApiProviderPreflight;
+      setProviderPreflight(payload);
+    } catch (error) {
+      setProviderPreflight({
+        provider: selectedModel,
+        model_name: selectedExplicitModel || selectedModel,
+        status: "error",
+        can_run_analysis: false,
+        failure_code: "request_failed",
+        diagnosis: error instanceof Error ? error.message : "Preflight request failed.",
+        user_action:
+          locale === "en"
+            ? "Check that the backend is running, then retry preflight."
+            : "请确认后端正在运行，然后重新预检。",
+        checks: [],
+      });
+    } finally {
+      setProviderPreflightLoading(false);
+    }
+  }, [apiKey, locale, selectedExplicitModel, selectedModel]);
 
   const runAnalysis = useCallback(async () => {
     const query = currentQuery.trim();
@@ -1576,6 +1808,9 @@ export default function Home() {
     setSelectedChainId(null);
     setEvidencePool([]);
     setRetrievalTrace([]);
+    setChallengeChecks([]);
+    setAnalysisBrief(null);
+    setProductHarness(null);
     setPipelineEval(null);
     setUncertaintyReport(null);
     setSelectedNodeId(null);
@@ -1607,6 +1842,9 @@ export default function Home() {
         setSelectedChainId(null);
         setEvidencePool(payload.evidences);
         setRetrievalTrace(payload.retrieval_trace ?? []);
+        setChallengeChecks(payload.challenge_checks ?? []);
+        setAnalysisBrief(payload.analysis_brief ?? null);
+        setProductHarness(payload.product_harness ?? null);
         setPipelineEval(payload.evaluation ?? null);
         setUncertaintyReport(payload.uncertainty_report ?? null);
         setActiveChain(makePlaceholderChain(payload.query, locale));
@@ -1640,6 +1878,9 @@ export default function Home() {
       setSelectedChainId(recommended.chain_id);
       setEvidencePool(payload.evidences);
       setRetrievalTrace(payload.retrieval_trace ?? []);
+      setChallengeChecks(payload.challenge_checks ?? []);
+      setAnalysisBrief(payload.analysis_brief ?? null);
+      setProductHarness(payload.product_harness ?? null);
       setPipelineEval(payload.evaluation ?? null);
       setUncertaintyReport(payload.uncertainty_report ?? null);
       setActiveChain(toLocalChain(recommended, locale, payload.evidences));
@@ -1693,6 +1934,9 @@ export default function Home() {
       setSelectedChainId(null);
       setEvidencePool([]);
       setRetrievalTrace([]);
+      setChallengeChecks([]);
+      setAnalysisBrief(null);
+      setProductHarness(null);
       setPipelineEval(null);
       setUncertaintyReport(null);
       setEvidenceQualityFilter("all");
@@ -2153,6 +2397,55 @@ export default function Home() {
               ? "Stored in this browser session and sent only to the selected model provider."
               : "\u4ec5\u4fdd\u5b58\u5728\u5f53\u524d\u6d4f\u89c8\u5668\u4f1a\u8bdd\u4e2d\uff0c\u5e76\u53ea\u53d1\u9001\u7ed9\u4f60\u9009\u62e9\u7684\u6a21\u578b\u63d0\u4f9b\u5546\u3002"}
           </div>
+          <button
+            type="button"
+            onClick={runProviderPreflight}
+            disabled={providerPreflightLoading || !apiKey.trim()}
+            style={{
+              marginTop: "8px",
+              width: "100%",
+              padding: "8px 10px",
+              borderRadius: "8px",
+              border: "1px solid rgba(49, 95, 131, 0.24)",
+              background: providerPreflightLoading ? "rgba(49,95,131,0.08)" : "rgba(255,255,255,0.66)",
+              color: "var(--analyst-blue)",
+              fontSize: "0.64rem",
+              fontWeight: 800,
+              cursor: providerPreflightLoading || !apiKey.trim() ? "not-allowed" : "pointer",
+            }}
+          >
+            {providerPreflightLoading
+              ? locale === "en" ? "Checking model..." : "正在预检模型..."
+              : locale === "en" ? "Run model preflight" : "运行模型预检"}
+          </button>
+          {providerPreflight && (
+            <div
+              style={{
+                marginTop: "8px",
+                padding: "8px 9px",
+                borderRadius: "8px",
+                border: providerPreflight.can_run_analysis
+                  ? "1px solid rgba(92,130,84,0.22)"
+                  : "1px solid rgba(160,80,60,0.22)",
+                background: providerPreflight.can_run_analysis
+                  ? "rgba(92,130,84,0.08)"
+                  : "rgba(160,80,60,0.08)",
+                color: providerPreflight.can_run_analysis ? "#526f44" : "#9a4635",
+                fontSize: "0.58rem",
+                lineHeight: 1.45,
+              }}
+            >
+              <strong>
+                {providerPreflight.can_run_analysis
+                  ? locale === "en" ? "Preflight passed" : "预检通过"
+                  : locale === "en" ? "Preflight blocked" : "预检未通过"}
+              </strong>
+              {` · ${providerPreflight.model_name}`}
+              <div style={{ marginTop: "4px", color: "#6b5a42" }}>
+                {providerPreflight.user_action || providerPreflight.diagnosis}
+              </div>
+            </div>
+          )}
             </div>
           )}
           <button
@@ -2182,6 +2475,66 @@ export default function Home() {
 
         <h2 className="panel-title">{t("panel.hypotheses")}</h2>
 
+        {localizedAnalysisBrief && (
+          <div className="compact-item" style={{ background: "rgba(255,255,255,0.78)" }}>
+            <div className="compact-label">{locale === "en" ? "Analysis brief" : "分析结论"}</div>
+            <div style={{ fontSize: "0.7rem", color: "#4d3c28", lineHeight: 1.5, fontWeight: 700 }}>
+              {localizedAnalysisBrief.answer}
+            </div>
+            <div style={{ marginTop: "5px", fontSize: "0.58rem", color: "#7a6b55" }}>
+              {locale === "en" ? "Confidence signal" : "置信信号"} {localizedAnalysisBrief.confidence}%
+            </div>
+            {localizedAnalysisBrief.topReasons.slice(0, 2).map((reason, index) => (
+              <div
+                key={`brief-reason-${index}`}
+                style={{ marginTop: "7px", fontSize: "0.6rem", color: "#5c4a32", lineHeight: 1.45 }}
+              >
+                {locale === "en" ? "- " : "· "}{reason.length > 150 ? `${reason.slice(0, 150)}...` : reason}
+              </div>
+            ))}
+            <div style={{ marginTop: "8px", fontSize: "0.58rem", color: challengeCheckSummary.refuting > 0 ? "#a0503c" : "#6b5a42", lineHeight: 1.45 }}>
+              {localizedAnalysisBrief.challengeSummary}
+            </div>
+            {localizedAnalysisBrief.missingEvidence[0] && (
+              <div style={{ marginTop: "6px", fontSize: "0.56rem", color: "#8b7355", lineHeight: 1.45 }}>
+                {locale === "en" ? "Missing: " : "仍缺："}{localizedAnalysisBrief.missingEvidence[0]}
+              </div>
+            )}
+          </div>
+        )}
+
+        {productHarness && (
+          <div className="compact-item" style={{ background: "rgba(255,255,255,0.76)" }}>
+            <div className="compact-label">{locale === "en" ? "Value harness" : "Value Harness"}</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+              <strong style={{ fontSize: "0.68rem", color: "#4d3c28" }}>
+                {Math.round(productHarness.score * 100)}%
+              </strong>
+              <span style={{ fontSize: "0.56rem", color: productHarness.status === "ready_for_review" ? "#526f44" : "#a0503c", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {productHarness.status.replaceAll("_", " ")}
+              </span>
+            </div>
+            <div style={{ marginTop: "6px", fontSize: "0.6rem", color: "#5c4a32", lineHeight: 1.45 }}>
+              {locale === "en"
+                ? productHarness.user_value_summary
+                : localizeBriefText(productHarness.user_value_summary, locale)}
+            </div>
+            {productHarness.checks.slice(0, 3).map((check) => (
+              <div key={check.id} style={{ marginTop: "6px", fontSize: "0.56rem", color: check.status === "pass" ? "#526f44" : check.status === "warn" ? "#8a6a40" : "#a0503c", lineHeight: 1.35 }}>
+                {check.status.toUpperCase()} · {check.label}
+              </div>
+            ))}
+            {productHarness.next_actions[0] && (
+              <div style={{ marginTop: "6px", fontSize: "0.56rem", color: "#8b7355", lineHeight: 1.45 }}>
+                {locale === "en" ? "Next: " : "下一步："}
+                {locale === "en"
+                  ? productHarness.next_actions[0]
+                  : localizeBriefText(productHarness.next_actions[0], locale)}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="compact-item">
           <div className="compact-label">{t("home.chain.primary")}</div>
           <div>{primaryChainTitle}</div>
@@ -2205,20 +2558,65 @@ export default function Home() {
           )}
         </div>
 
+        {causalReasonSummaries.length > 0 && (
+          <div className="compact-item">
+            <div className="compact-label">{locale === "en" ? "Reason summary" : "原因摘要"}</div>
+            {causalReasonSummaries.map((reason) => (
+              <button
+                type="button"
+                key={`${reason.id}-reason`}
+                onClick={() => {
+                  const edge = activeApiChain?.edges.find((item) => item.id === reason.id);
+                  if (edge) focusEdge(edge);
+                }}
+                style={{
+                  width: "100%",
+                  marginTop: "7px",
+                  padding: "7px 8px",
+                  borderRadius: "6px",
+                  border: selectedFocusEdgeId === reason.id
+                    ? "1px solid rgba(59,110,165,0.30)"
+                    : "1px solid rgba(160,140,110,0.14)",
+                  background: selectedFocusEdgeId === reason.id
+                    ? "rgba(59,110,165,0.08)"
+                    : "rgba(255,255,255,0.50)",
+                  color: "#5c4a32",
+                  cursor: "pointer",
+                  textAlign: "left",
+                }}
+              >
+                <div style={{ fontSize: "0.62rem", lineHeight: 1.45 }}>
+                  <strong>{reason.source}</strong> {locale === "en" ? "helped lead to" : "导致"} <strong>{reason.target}</strong>
+                </div>
+                <div style={{ marginTop: "3px", fontSize: "0.54rem", color: "#8b7355", lineHeight: 1.4 }}>
+                  {locale === "en"
+                    ? `${reason.strength}% edge strength · ${reason.evidenceCount} evidence item(s)`
+                    : `${reason.strength}% 边强度 · ${reason.evidenceCount} 条证据`}
+                  {reason.evidenceSource ? ` · ${reason.evidenceSource}` : ""}
+                </div>
+                {reason.evidenceExcerpt && (
+                  <div style={{ marginTop: "5px", fontSize: "0.58rem", color: "#6b5a42", lineHeight: 1.45 }}>
+                    {reason.evidenceExcerpt.length > 120
+                      ? `${reason.evidenceExcerpt.slice(0, 120)}...`
+                      : reason.evidenceExcerpt}
+                  </div>
+                )}
+                <div style={{ marginTop: "4px", fontSize: "0.52rem", color: "#8b7355", lineHeight: 1.35 }}>
+                  {formatRefutationStatusLabel(reason.refutationStatus, locale)}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
         {chainProbabilityItems.length > 0 && (
           <div className="compact-item">
             <div className="compact-label">{t("home.chain.alternative")}</div>
             {chainProbabilityItems.map((chain) => (
               <button
+                type="button"
                 key={chain.chain_id}
-                onClick={() => {
-                  setSelectedNodeId(null);
-                  setSelectedFocusEdgeId(null);
-                  setSelectedEvidenceId(null);
-                  setPanOffset({ x: 0, y: 0 });
-                  setSelectedChainId(chain.chain_id);
-                  setActiveChain(toLocalChain(chain, locale, evidencePool));
-                }}
+                onClick={() => selectChain(chain.chain_id)}
                 style={{
                   display: "block",
                   width: "100%",
@@ -2254,16 +2652,7 @@ export default function Home() {
               <button
                 type="button"
                 key={`${chain.chain_id}-compare`}
-                onClick={() => {
-                  const nextChain = availableChains.find((candidate) => candidate.chain_id === chain.chain_id);
-                  if (!nextChain) return;
-                  setSelectedNodeId(null);
-                  setSelectedFocusEdgeId(null);
-                  setSelectedEvidenceId(null);
-                  setPanOffset({ x: 0, y: 0 });
-                  setSelectedChainId(nextChain.chain_id);
-                  setActiveChain(toLocalChain(nextChain, locale, evidencePool));
-                }}
+                onClick={() => selectChain(chain.chain_id)}
                 aria-pressed={chain.chain_id === activeChainId}
                 data-testid={`chain-compare-${chain.chain_id}`}
                 style={{
@@ -2295,8 +2684,12 @@ export default function Home() {
                 </div>
                 <div>
                   {locale === "en"
-                    ? `${chain.supportCount} support / ${chain.refuteCount} refute / ${chain.nodeCount} nodes`
-                    : `${chain.supportCount} \u652f\u6301 / ${chain.refuteCount} \u53cd\u9a73 / ${chain.nodeCount} \u8282\u70b9`}
+                    ? `${chain.supportCount} support / ${
+                        chain.refuteCount > 0 ? `${chain.refuteCount} challenge` : formatRefutationStatusLabel(chain.refutationStatus, locale)
+                      } / ${chain.nodeCount} nodes`
+                    : `${chain.supportCount} \u652f\u6301 / ${
+                        chain.refuteCount > 0 ? `${chain.refuteCount} \u53cd\u8bc1` : formatRefutationStatusLabel(chain.refutationStatus, locale)
+                      } / ${chain.nodeCount} \u8282\u70b9`}
                 </div>
               </button>
             ))}
@@ -2579,8 +2972,16 @@ export default function Home() {
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "6px", fontSize: "0.55rem", color: item.error ? "#a13b2f" : "#5c4a32" }}>
-                      <span>{item.source}{item.cache_hit ? (locale === "en" ? " cache" : " 缓存") : ""}</span>
+                      <span>
+                        {item.source_label || item.source}
+                        {item.cache_hit ? (locale === "en" ? " cache" : " 缓存") : ""}
+                      </span>
                       <span>{item.error ? item.error : `${item.result_count} ${locale === "en" ? "hits" : "条"}`}</span>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", fontSize: "0.5rem", color: "#8b7355", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      <span>{formatSourceKindLabel(item.source_kind, locale)}</span>
+                      <span>·</span>
+                      <span>{formatSourceStabilityLabel(item.stability, locale)}</span>
                     </div>
                     <div style={{ fontSize: "0.54rem", color: "#8b7355", lineHeight: 1.35 }}>
                       {item.query}
@@ -2618,6 +3019,46 @@ export default function Home() {
           </div>
         )}
 
+        {challengeChecks.length > 0 && (
+          <div className="compact-item" style={{ background: "rgba(255,255,255,0.72)" }}>
+            <div className="compact-label">{locale === "en" ? "Challenge coverage" : "反证覆盖"}</div>
+            <div style={{ fontSize: "0.6rem", color: "#6b5a42", lineHeight: 1.45, marginBottom: "8px" }}>
+              {locale === "en"
+                ? `${challengeCheckSummary.checked} edge(s) checked · ${challengeCheckSummary.refuting} challenge item(s)`
+                : `已检查 ${challengeCheckSummary.checked} 条边 · ${challengeCheckSummary.refuting} 条反证`}
+            </div>
+            {challengeChecks.slice(0, 3).map((check) => (
+              <button
+                type="button"
+                key={`${check.edge_id}-challenge`}
+                onClick={() => {
+                  const edge = activeApiChain?.edges.find((item) => item.source === check.source && item.target === check.target);
+                  if (edge) focusEdge(edge);
+                }}
+                style={{
+                  width: "100%",
+                  marginBottom: "8px",
+                  padding: "7px 8px",
+                  borderRadius: "6px",
+                  border: "1px solid rgba(160,140,110,0.14)",
+                  background: check.refuting_count > 0 ? "rgba(160,80,60,0.08)" : "rgba(255,255,255,0.50)",
+                  color: "#5c4a32",
+                  cursor: "pointer",
+                  textAlign: "left",
+                }}
+              >
+                <div style={{ fontSize: "0.58rem", lineHeight: 1.4 }}>
+                  <strong>{localizeCausalText(check.source, locale)}</strong>{" -> "}<strong>{localizeCausalText(check.target, locale)}</strong>
+                </div>
+                <div style={{ marginTop: "3px", fontSize: "0.52rem", color: check.refuting_count > 0 ? "#a0503c" : "#8b7355", lineHeight: 1.35 }}>
+                  {formatRefutationStatusLabel(check.status, locale)}
+                  {` · ${check.result_count} ${locale === "en" ? "result(s)" : "条结果"}`}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
         {selectedApiEdges.length > 0 && (
           <div className="compact-item" style={{ background: "rgba(255,255,255,0.72)" }}>
             <div className="compact-label">{locale === "en" ? "Connected edges" : "关联边"}</div>
@@ -2643,6 +3084,9 @@ export default function Home() {
                 </div>
                 <div style={{ fontSize: "0.56rem", color: edge.evidence_conflict && edge.evidence_conflict !== "none" ? "#a0503c" : "#8b7355", marginTop: "3px" }}>
                   {locale === "en" ? "Conflict" : "冲突"}: {edge.evidence_conflict ?? "none"}
+                </div>
+                <div style={{ fontSize: "0.54rem", color: edge.refuting_evidence_ids.length > 0 ? "#a0503c" : "#8b7355", marginTop: "3px" }}>
+                  {formatRefutationStatusLabel(edge.refutation_status, locale)}
                 </div>
                 {(edge.citation_spans?.[0]?.quoted_text) && (
                   <div style={{ fontSize: "0.58rem", color: "#6b5a42", marginTop: "6px", lineHeight: 1.5, fontStyle: "italic" }}>
@@ -2768,8 +3212,8 @@ export default function Home() {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", fontSize: "0.56rem", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                  <span style={{ color: item.is_supporting ? "#5a7a52" : "#a0503c" }}>
-                    {item.is_supporting ? t("home.evidence.supporting") : t("home.evidence.refuting")}
+                  <span style={{ color: item.stance === "refuting" || !item.is_supporting ? "#a0503c" : item.stance === "context" ? "#8b7355" : "#5a7a52" }}>
+                    {formatEvidenceStanceLabel(item, locale)}
                   </span>
                   <span style={{ color: "#8b7355" }}>{getReliabilityLabel(item.reliability)}</span>
                 </div>
@@ -2783,14 +3227,16 @@ export default function Home() {
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: "0.65rem", color: "#5c4a32", lineHeight: 1.45 }}>{item.content}</div>
+                <div style={{ fontSize: "0.65rem", color: "#5c4a32", lineHeight: 1.45 }}>
+                  {localizeEvidenceContent(item.content, locale)}
+                </div>
                 {selectedNodeCitationByEvidenceId.get(item.id)?.quoted_text && (
                   <div style={{ fontSize: "0.58rem", color: "#6b5a42", lineHeight: 1.45, marginTop: "4px", fontStyle: "italic" }}>
                     “{selectedNodeCitationByEvidenceId.get(item.id)?.quoted_text}”
                   </div>
                 )}
                 <div style={{ fontSize: "0.56rem", color: "#8b7355", marginTop: "2px" }}>
-                  {item.source}
+                  {locale === "en" ? "Source" : "来源"}: {item.source}
                   {item.timestamp ? ` · ${item.timestamp}` : ""}
                 </div>
               </button>

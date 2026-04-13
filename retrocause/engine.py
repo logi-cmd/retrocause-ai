@@ -19,7 +19,7 @@ from retrocause.debate import DebateOrchestrator
 from retrocause.formatter import ReportFormatter
 from retrocause.config import RetroCauseConfig
 from retrocause.pipeline import Pipeline, PipelineContext, PipelineStep, ProgressCallback
-from retrocause.anchoring import EvidenceAnchoringStep
+from retrocause.anchoring import EvidenceAnchoringStep, reanchor_hypotheses
 from retrocause.counterfactual import CounterfactualVerificationStep
 from retrocause.evaluation import EvaluationStep
 from retrocause.uncertainty import UncertaintyAssessmentStep
@@ -458,6 +458,51 @@ class CausalRAGStep(PipelineStep):
             time_range=ctx.extra.get("time_range"),
         )
         ctx.total_evidence_count = len(self.collector.get_evidence())
+        ctx.extra["evidences"] = self.collector.get_evidence()
+        reanchor_hypotheses(ctx, self.collector)
+        return ctx
+
+
+class RefutationCoverageStep(PipelineStep):
+    """Challenge the strongest causal edges with targeted counter-evidence retrieval."""
+
+    def __init__(
+        self,
+        collector: EvidenceCollector,
+        llm_client: LLMProvider | None = None,
+        source_adapters: list[SourceAdapter] | None = None,
+    ):
+        self.collector = collector
+        self._llm_client = llm_client
+        self._source_adapters = source_adapters
+
+    def execute(self, ctx: PipelineContext) -> PipelineContext:
+        if self._llm_client is None or self._source_adapters is None:
+            return ctx
+        if not ctx.hypotheses:
+            return ctx
+
+        candidate_edges: list[CausalEdge] = []
+        for chain in ctx.hypotheses[:3]:
+            candidate_edges.extend(chain.edges)
+        if not candidate_edges:
+            return ctx
+
+        new_evidence, checks = self.collector.collect_refutations(
+            query=ctx.query,
+            domain=ctx.domain,
+            edges=candidate_edges,
+            llm_client=self._llm_client,
+            source_adapters=self._source_adapters,
+            max_edges=3,
+            max_results_per_source=2,
+            time_range=ctx.extra.get("time_range"),
+        )
+        ctx.extra["refutation_checks"] = checks
+        if new_evidence:
+            ctx.total_evidence_count = len(self.collector.get_evidence())
+            ctx.extra["evidences"] = self.collector.get_evidence()
+            reanchor_hypotheses(ctx, self.collector)
         return ctx
 
 
@@ -519,6 +564,11 @@ class RetroCauseEngine:
                     self._llm_client,
                     self._source_adapters,
                 ),
+                RefutationCoverageStep(
+                    self.collector,
+                    self._llm_client,
+                    self._source_adapters,
+                ),
                 CounterfactualVerificationStep(self.graph, self._config),
                 DebateRefinementStep(
                     DebateOrchestrator(
@@ -555,7 +605,17 @@ class RetroCauseEngine:
             uncertainty_report=ctx.extra.get("uncertainty_report"),
         )
         result.total_uncertainty = ctx.total_uncertainty
-        result.retrieval_trace = ctx.extra.get("evidence_access_trace", [])
+        result.retrieval_trace = [
+            {
+                "source": item.name,
+                "query": item.query,
+                "result_count": item.result_count,
+                "cache_hit": item.cache_hit,
+                "error": item.error,
+            }
+            for item in self.collector.access_trace
+        ]
+        result.refutation_checks = ctx.extra.get("refutation_checks", [])
         result.analysis_mode = _infer_analysis_mode(result.evidences)
         result.freshness_status = _summarize_freshness(result.evidences)
         if not _time_quality_ok(self.parsed, result.evidences):

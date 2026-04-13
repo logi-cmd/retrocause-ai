@@ -13,6 +13,7 @@ from retrocause.app.demo_data import (
     detect_demo_topic,
     topic_aware_demo_result,
 )
+from retrocause.evidence_access import describe_source_name
 from retrocause.models import AnalysisResult
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,39 @@ class AnalyzeRequest(BaseModel):
     model: str = "openrouter"
     api_key: Optional[str] = None
     explicit_model: Optional[str] = None
+
+
+class ProviderPreflightRequest(BaseModel):
+    model: str = "openrouter"
+    api_key: Optional[str] = None
+    explicit_model: Optional[str] = None
+
+
+class HarnessCheckV2(BaseModel):
+    id: str
+    label: str
+    status: str
+    detail: str = ""
+
+
+class ProviderPreflightResponse(BaseModel):
+    provider: str
+    model_name: str
+    status: str
+    can_run_analysis: bool
+    failure_code: Optional[str] = None
+    diagnosis: str = ""
+    user_action: str = ""
+    checks: List[HarnessCheckV2] = []
+
+
+class ProductHarnessReportV2(BaseModel):
+    name: str = "result_value_harness"
+    score: float = 0.0
+    status: str = "unknown"
+    user_value_summary: str = ""
+    checks: List[HarnessCheckV2] = []
+    next_actions: List[str] = []
 
 
 class _TimeoutError(Exception):
@@ -113,6 +147,8 @@ class EvidenceBindingV2(BaseModel):
     freshness: str = "unknown"
     timestamp: Optional[str] = None
     extraction_method: str = "manual"
+    stance: str = "supporting"
+    stance_basis: str = "legacy_or_manual"
 
 
 class NodeEvidenceV2(BaseModel):
@@ -189,6 +225,7 @@ class GraphEdgeV2(BaseModel):
     refuting_evidence_ids: List[str]
     citation_spans: List[CitationSpanV2] = []
     evidence_conflict: str = "none"
+    refutation_status: str = "not_checked"
 
 
 class CounterfactualItemV2(BaseModel):
@@ -221,6 +258,7 @@ class HypothesisChainV2(BaseModel):
     edges: List[GraphEdgeV2]
     supporting_evidence_ids: List[str]
     refuting_evidence_ids: List[str]
+    refutation_status: str = "not_checked"
     counterfactual: CounterfactualSummaryV2
     depth: int  # max depth of this chain (for sorting/filtering)
 
@@ -250,10 +288,33 @@ class PipelineEvaluationV2(BaseModel):
 
 class RetrievalTraceItemV2(BaseModel):
     source: str
+    source_label: str = ""
+    source_kind: str = "unknown"
+    stability: str = "unknown"
     query: str
     result_count: int
     cache_hit: bool = False
     error: Optional[str] = None
+
+
+class ChallengeCheckV2(BaseModel):
+    edge_id: str
+    source: str
+    target: str
+    query: str
+    result_count: int = 0
+    refuting_count: int = 0
+    context_count: int = 0
+    status: str = "not_checked"
+
+
+class AnalysisBriefV2(BaseModel):
+    answer: str
+    confidence: float = 0.0
+    top_reasons: List[str] = []
+    challenge_summary: str = ""
+    missing_evidence: List[str] = []
+    source_coverage: str = ""
 
 
 class AnalyzeResponseV2(BaseModel):
@@ -282,6 +343,12 @@ class AnalyzeResponseV2(BaseModel):
     evaluation: Optional[PipelineEvaluationV2] = None
     # Source-level retrieval trace for UI transparency.
     retrieval_trace: List[RetrievalTraceItemV2] = []
+    # Targeted attempts to find counter-evidence or alternative explanations.
+    challenge_checks: List[ChallengeCheckV2] = []
+    # User-facing synthesis of the current result.
+    analysis_brief: Optional[AnalysisBriefV2] = None
+    # Harness-level verdict for whether the run produced user-reviewable value.
+    product_harness: Optional[ProductHarnessReportV2] = None
     # Uncertainty report
     uncertainty_report: Optional[UncertaintyReportV2] = None
     # Error message when real analysis fails (non-empty = something went wrong)
@@ -340,11 +407,52 @@ def _is_live_failure(error_msg: str | None) -> bool:
     )
 
 
+def _resolve_provider_model(provider_key: str, explicit_model: str | None) -> tuple[dict | None, str]:
+    provider_cfg = PROVIDERS.get(provider_key)
+    if explicit_model:
+        return provider_cfg, explicit_model
+    if provider_cfg and provider_cfg.get("models"):
+        return provider_cfg, list(provider_cfg["models"].keys())[0]
+    return provider_cfg, provider_key
+
+
+def _preflight_failure_code(error_msg: str | None) -> str:
+    lowered = (error_msg or "").lower()
+    if "invalid model" in lowered or ("model" in lowered and "not found" in lowered):
+        return "invalid_model"
+    if any(token in lowered for token in ["401", "authentication", "permission", "user not found"]):
+        return "auth_or_permission"
+    if any(token in lowered for token in ["balance", "quota", "insufficient", "credits"]):
+        return "billing_or_quota"
+    if "timeout" in lowered or "timed out" in lowered:
+        return "timeout"
+    if "unexpected payload" in lowered or "empty" in lowered or "json" in lowered:
+        return "invalid_or_empty_payload"
+    return "provider_error"
+
+
+def _preflight_user_action(failure_code: str | None) -> str:
+    actions = {
+        "missing_api_key": "Enter an API key before running live analysis.",
+        "unknown_provider": "Choose a configured provider or add provider settings first.",
+        "invalid_model": "Pick a model listed by the provider, then run preflight again.",
+        "auth_or_permission": "Check that the API key is valid and has access to this provider/model.",
+        "billing_or_quota": "Check provider balance, quota, or account limits before retrying.",
+        "timeout": "Try a faster model or retry when the provider is responsive.",
+        "invalid_or_empty_payload": "Try a model with reliable JSON output before running the full analysis.",
+    }
+    return actions.get(failure_code or "", "Inspect the provider error, then retry preflight.")
+
+
+def _harness_check(check_id: str, label: str, status: str, detail: str = "") -> HarnessCheckV2:
+    return HarnessCheckV2(id=check_id, label=label, status=status, detail=detail)
+
+
 def _empty_live_failure_response(query: str, error_msg: str) -> AnalyzeResponseV2:
     from retrocause.parser import parse_input
 
     parsed_query = parse_input(query)
-    return AnalyzeResponseV2(
+    response = AnalyzeResponseV2(
         query=query,
         is_demo=False,
         demo_topic=None,
@@ -361,6 +469,8 @@ def _empty_live_failure_response(query: str, error_msg: str) -> AnalyzeResponseV
         uncertainty_report=None,
         error=error_msg,
     )
+    response.product_harness = _build_product_harness(response)
+    return response
 
 
 def _classify_node_type(name: str, upstream_ids: List[str], downstream_ids: List[str]) -> str:
@@ -382,6 +492,24 @@ def _build_upstream_map(nodes_v2: List[GraphNodeV2]) -> UpstreamMapV2:
             for n in nodes_v2
         ]
     )
+
+
+def _refutation_status(
+    refuting_ids: set[str] | list[str],
+    evidence_pool: list | None = None,
+    check_status: str | None = None,
+) -> str:
+    if refuting_ids:
+        return "has_refutation"
+    if check_status:
+        return check_status
+    if not evidence_pool:
+        return "not_checked"
+    for evidence in evidence_pool:
+        basis = getattr(evidence, "stance_basis", "legacy_or_manual")
+        if basis not in {"legacy_or_manual", ""}:
+            return "no_refutation_in_retrieved_evidence"
+    return "not_checked"
 
 
 def _collect_evidence_bindings(
@@ -413,6 +541,10 @@ def _collect_evidence_bindings(
                         freshness=getattr(demo_ev, "freshness", "unknown"),
                         timestamp=getattr(demo_ev, "timestamp", None),
                         extraction_method=getattr(demo_ev, "extraction_method", "manual"),
+                        stance="refuting"
+                        if eid in chain.refuting_evidence_ids
+                        else getattr(demo_ev, "stance", "supporting"),
+                        stance_basis=getattr(demo_ev, "stance_basis", "legacy_or_manual"),
                     )
                 )
             else:
@@ -427,9 +559,278 @@ def _collect_evidence_bindings(
                         freshness="unknown",
                         timestamp=None,
                         extraction_method="manual",
+                        stance="refuting" if eid in chain.refuting_evidence_ids else "supporting",
+                        stance_basis="edge_binding",
                     )
                 )
     return bindings
+
+
+def _challenge_check_v2(item: dict) -> ChallengeCheckV2:
+    return ChallengeCheckV2(
+        edge_id=str(item.get("edge_id", "")),
+        source=str(item.get("source", "")),
+        target=str(item.get("target", "")),
+        query=str(item.get("query", "")),
+        result_count=int(item.get("result_count", 0)),
+        refuting_count=int(item.get("refuting_count", 0)),
+        context_count=int(item.get("context_count", 0)),
+        status=str(item.get("status", "not_checked")),
+    )
+
+
+def _build_analysis_brief(
+    result: AnalysisResult,
+    chains: List[HypothesisChainV2],
+    checks: List[ChallengeCheckV2],
+) -> AnalysisBriefV2:
+    if not chains:
+        return AnalysisBriefV2(
+            answer="No usable causal chain was produced for this run.",
+            confidence=0.0,
+            top_reasons=[],
+            challenge_summary="Challenge retrieval could not run without a causal chain.",
+            missing_evidence=["A usable causal graph is needed before evidence can be challenged."],
+            source_coverage="No chain-level evidence coverage.",
+        )
+
+    top_chain = max(chains, key=lambda chain: chain.probability)
+    top_reasons: List[str] = []
+    evidence_by_id = {ev.id: ev for ev in result.evidences}
+    for edge in top_chain.edges[:3]:
+        excerpt = ""
+        if edge.supporting_evidence_ids:
+            evidence = evidence_by_id.get(edge.supporting_evidence_ids[0])
+            if evidence is not None:
+                excerpt = f" Evidence: {evidence.content[:120]}"
+        top_reasons.append(
+            f"{edge.source.replace('_', ' ')} -> {edge.target.replace('_', ' ')} "
+            f"({edge.strength:.0%} edge strength, "
+            f"{len(edge.supporting_evidence_ids)} support, "
+            f"{len(edge.refuting_evidence_ids)} challenge).{excerpt}"
+        )
+
+    refuting_total = sum(check.refuting_count for check in checks)
+    checked_total = len(checks)
+    if refuting_total:
+        challenge_summary = f"Found {refuting_total} challenge evidence item(s) across {checked_total} checked edge(s)."
+    elif checked_total:
+        challenge_summary = f"Checked {checked_total} key edge(s) and found no explicit refuting claim in retrieved evidence."
+    else:
+        challenge_summary = "Challenge retrieval has not checked this result yet."
+
+    missing: List[str] = []
+    if not checks:
+        missing.append("Targeted challenge retrieval did not run for this result.")
+    if any(edge.refutation_status == "checked_no_results" for edge in top_chain.edges):
+        missing.append("At least one challenge query returned no source results.")
+    if any(not edge.supporting_evidence_ids for edge in top_chain.edges):
+        missing.append("At least one causal edge still lacks direct supporting evidence.")
+    source_values = {str(ev.source_type) for ev in result.evidences}
+    high_quality_count = sum(
+        1
+        for ev in result.evidences
+        if getattr(ev, "extraction_method", "")
+        in {"llm_fulltext_trusted", "llm_fulltext", "llm_trusted", "store_cache"}
+    )
+    if high_quality_count == 0:
+        missing.append("No trusted full-text or cached high-quality evidence is attached.")
+    if not missing:
+        missing.append("Primary-source confirmation may still be needed for high-stakes use.")
+
+    source_coverage = (
+        f"{len(source_values)} source type(s), {high_quality_count} high-quality evidence item(s), "
+        f"{len(result.evidences)} total evidence item(s)."
+    )
+
+    return AnalysisBriefV2(
+        answer=(
+            f"Most likely explanation: {top_chain.label} "
+            f"({top_chain.probability:.0%} confidence signal)."
+        ),
+        confidence=top_chain.probability,
+        top_reasons=top_reasons,
+        challenge_summary=challenge_summary,
+        missing_evidence=missing[:4],
+        source_coverage=source_coverage,
+    )
+
+
+def _build_product_harness(response: AnalyzeResponseV2) -> ProductHarnessReportV2:
+    """Score whether a result gives the user reviewable causal value."""
+
+    checks: list[HarnessCheckV2] = []
+
+    has_actionable_failure = bool(
+        response.error or response.partial_live_reasons or response.analysis_mode == "demo"
+    )
+    if response.chains:
+        checks.append(
+            _harness_check(
+                "causal_chain",
+                "Causal chain present",
+                "pass",
+                f"{len(response.chains)} chain(s), {sum(len(c.edges) for c in response.chains)} edge(s).",
+            )
+        )
+    else:
+        checks.append(
+            _harness_check(
+                "causal_chain",
+                "Causal chain present",
+                "fail",
+                "No causal chain is available for review.",
+            )
+        )
+
+    if response.analysis_brief and (
+        response.analysis_brief.answer or response.analysis_brief.top_reasons
+    ):
+        checks.append(
+            _harness_check(
+                "analysis_summary",
+                "Analysis summary present",
+                "pass",
+                "The response includes a synthesized answer and reason list.",
+            )
+        )
+    else:
+        checks.append(
+            _harness_check(
+                "analysis_summary",
+                "Analysis summary present",
+                "fail",
+                "No synthesized answer is attached.",
+            )
+        )
+
+    if response.retrieval_trace:
+        source_hits = sum(max(0, item.result_count) for item in response.retrieval_trace)
+        status = "pass" if source_hits > 0 else "warn"
+        checks.append(
+            _harness_check(
+                "source_trace",
+                "Source trace visible",
+                status,
+                f"{len(response.retrieval_trace)} source query row(s), {source_hits} result hit(s).",
+            )
+        )
+    else:
+        checks.append(
+            _harness_check(
+                "source_trace",
+                "Source trace visible",
+                "fail",
+                "No source-level retrieval trace is visible.",
+            )
+        )
+
+    if response.evidences:
+        stances = {item.stance or ("supporting" if item.is_supporting else "refuting") for item in response.evidences}
+        checks.append(
+            _harness_check(
+                "evidence_stance",
+                "Evidence stance visible",
+                "pass",
+                f"{len(response.evidences)} evidence item(s), stance(s): {', '.join(sorted(stances))}.",
+            )
+        )
+    else:
+        checks.append(
+            _harness_check(
+                "evidence_stance",
+                "Evidence stance visible",
+                "fail",
+                "No evidence items are attached.",
+            )
+        )
+
+    if response.challenge_checks:
+        checked = len(response.challenge_checks)
+        refuting = sum(item.refuting_count for item in response.challenge_checks)
+        checks.append(
+            _harness_check(
+                "challenge_coverage",
+                "Challenge coverage checked",
+                "pass",
+                f"{checked} edge(s) checked, {refuting} challenge item(s).",
+            )
+        )
+    else:
+        checks.append(
+            _harness_check(
+                "challenge_coverage",
+                "Challenge coverage checked",
+                "warn" if response.chains else "fail",
+                "No targeted challenge retrieval is attached.",
+            )
+        )
+
+    if has_actionable_failure:
+        checks.append(
+            _harness_check(
+                "actionable_failure",
+                "Failure state actionable",
+                "pass",
+                response.error or "; ".join(response.partial_live_reasons) or response.analysis_mode,
+            )
+        )
+    elif response.analysis_mode == "live":
+        checks.append(
+            _harness_check(
+                "actionable_failure",
+                "Failure state actionable",
+                "pass",
+                "No failure state is present.",
+            )
+        )
+    else:
+        checks.append(
+            _harness_check(
+                "actionable_failure",
+                "Failure state actionable",
+                "warn",
+                "The run is degraded but has no explicit reason.",
+            )
+        )
+
+    score_map = {"pass": 1.0, "warn": 0.5, "fail": 0.0}
+    score = sum(score_map.get(check.status, 0.0) for check in checks) / max(1, len(checks))
+    score = max(0.0, min(1.0, score))
+
+    next_actions: list[str] = []
+    if not response.chains and response.error:
+        status = "blocked_by_model"
+        summary = "The run did not produce a causal answer; the useful output is the failure diagnosis."
+        next_actions.append("Run provider preflight before starting another full analysis.")
+    elif score >= 0.75 and response.chains:
+        status = "ready_for_review"
+        summary = "The result has enough structure for a user to review reasons, sources, and gaps."
+    elif response.chains:
+        status = "needs_more_evidence"
+        summary = "The result has a causal shape, but evidence or challenge coverage is still thin."
+    else:
+        status = "not_reviewable"
+        summary = "The result is not yet reviewable as a causal explanation."
+
+    if not response.retrieval_trace:
+        next_actions.append("Expose source trace rows so the user can see where evidence came from.")
+    if not response.challenge_checks:
+        next_actions.append("Run targeted challenge retrieval for the strongest causal edges.")
+    if not response.analysis_brief:
+        next_actions.append("Generate an analysis brief with top reasons and missing evidence.")
+    if not response.evidences:
+        next_actions.append("Collect or attach evidence before presenting causal conclusions.")
+    if not next_actions:
+        next_actions.append("Review the top reasons and inspect the cited evidence before trusting the conclusion.")
+
+    return ProductHarnessReportV2(
+        score=score,
+        status=status,
+        user_value_summary=summary,
+        checks=checks,
+        next_actions=next_actions[:4],
+    )
 
 
 def _result_to_v2(
@@ -453,6 +854,10 @@ def _result_to_v2(
         all_edges_by_chain[hyp.id] = [(e.source, e.target) for e in hyp.edges]
 
     chains_v2: List[HypothesisChainV2] = []
+    check_status_by_edge = {
+        str(item.get("edge_id", "")): str(item.get("status", "not_checked"))
+        for item in getattr(result, "refutation_checks", [])
+    }
 
     for hyp in result.hypotheses:
         var_names_in_order = [v.name for v in hyp.variables]
@@ -526,6 +931,11 @@ def _result_to_v2(
                     refuting_evidence_ids=edge.refuting_evidence_ids,
                     citation_spans=spans_v2,
                     evidence_conflict=edge.evidence_conflict.value,
+                    refutation_status=_refutation_status(
+                        edge.refuting_evidence_ids,
+                        result.evidences,
+                        check_status_by_edge.get(f"{edge.source}->{edge.target}"),
+                    ),
                 )
             )
 
@@ -564,6 +974,7 @@ def _result_to_v2(
                 edges=edges_v2,
                 supporting_evidence_ids=sorted(chain_supp),
                 refuting_evidence_ids=sorted(chain_ref),
+                refutation_status=_refutation_status(chain_ref, result.evidences),
                 counterfactual=cf_summary,
                 depth=max_depth,
             )
@@ -625,7 +1036,11 @@ def _result_to_v2(
             summary=ur.summary,
         )
 
-    return AnalyzeResponseV2(
+    challenge_checks = [
+        _challenge_check_v2(item) for item in getattr(result, "refutation_checks", [])
+    ]
+
+    response = AnalyzeResponseV2(
         query=result.query,
         is_demo=is_demo,
         demo_topic=demo_topic,
@@ -641,6 +1056,7 @@ def _result_to_v2(
         retrieval_trace=[
             RetrievalTraceItemV2(
                 source=str(item.get("source", "")),
+                **describe_source_name(str(item.get("source", ""))),
                 query=str(item.get("query", "")),
                 result_count=int(item.get("result_count", 0)),
                 cache_hit=bool(item.get("cache_hit", False)),
@@ -648,8 +1064,12 @@ def _result_to_v2(
             )
             for item in getattr(result, "retrieval_trace", [])
         ],
+        challenge_checks=challenge_checks,
+        analysis_brief=_build_analysis_brief(result, chains_v2, challenge_checks),
         uncertainty_report=uncertainty_v2,
     )
+    response.product_harness = _build_product_harness(response)
+    return response
 
 
 @app.get("/")
@@ -668,6 +1088,135 @@ async def list_providers():
             for key, cfg in PROVIDERS.items()
         }
     }
+
+
+@app.post("/api/providers/preflight", response_model=ProviderPreflightResponse)
+async def preflight_provider(request: ProviderPreflightRequest):
+    provider_cfg, model_name = _resolve_provider_model(request.model, request.explicit_model)
+    checks: list[HarnessCheckV2] = []
+
+    if provider_cfg is None:
+        checks.append(
+            _harness_check(
+                "provider_config",
+                "Provider configured",
+                "fail",
+                f"Provider {request.model!r} is not configured.",
+            )
+        )
+        return ProviderPreflightResponse(
+            provider=request.model,
+            model_name=model_name,
+            status="error",
+            can_run_analysis=False,
+            failure_code="unknown_provider",
+            diagnosis="Provider is not configured in this RetroCause instance.",
+            user_action=_preflight_user_action("unknown_provider"),
+            checks=checks,
+        )
+
+    checks.append(
+        _harness_check(
+            "provider_config",
+            "Provider configured",
+            "pass",
+            f"{request.model} resolves to {provider_cfg.get('base_url') or 'default OpenAI endpoint'}.",
+        )
+    )
+
+    if not request.api_key:
+        checks.append(
+            _harness_check(
+                "api_key_present",
+                "API key present",
+                "fail",
+                "No API key was provided.",
+            )
+        )
+        return ProviderPreflightResponse(
+            provider=request.model,
+            model_name=model_name,
+            status="error",
+            can_run_analysis=False,
+            failure_code="missing_api_key",
+            diagnosis="Live analysis needs a provider API key.",
+            user_action=_preflight_user_action("missing_api_key"),
+            checks=checks,
+        )
+
+    checks.append(
+        _harness_check("api_key_present", "API key present", "pass", "API key was provided.")
+    )
+
+    configured_models = provider_cfg.get("models", {})
+    catalog_status = "pass" if model_name in configured_models else "warn"
+    catalog_detail = (
+        "Model is listed in the configured provider catalog."
+        if catalog_status == "pass"
+        else "Model is not in the local catalog; preflight will still test provider access."
+    )
+    checks.append(
+        _harness_check("model_catalog", "Model listed locally", catalog_status, catalog_detail)
+    )
+
+    try:
+        from retrocause.config import RetroCauseConfig
+        from retrocause.llm import LLMClient
+
+        cfg = RetroCauseConfig.from_env()
+        llm = LLMClient(
+            api_key=request.api_key,
+            model=model_name,
+            base_url=provider_cfg.get("base_url"),
+            timeout=min(cfg.request_timeout_seconds, 45),
+        )
+        ok, error_msg = _run_with_timeout(llm.preflight_model_access, 50)
+    except _TimeoutError:
+        ok = False
+        error_msg = "Model preflight timed out."
+    except Exception as exc:
+        ok = False
+        error_msg = f"{type(exc).__name__}: {exc}"
+
+    if ok:
+        checks.append(
+            _harness_check(
+                "model_access",
+                "Model returns JSON",
+                "pass",
+                "Provider returned the expected tiny JSON payload.",
+            )
+        )
+        return ProviderPreflightResponse(
+            provider=request.model,
+            model_name=model_name,
+            status="ok",
+            can_run_analysis=True,
+            failure_code=None,
+            diagnosis="Provider, key, and model passed the lightweight JSON preflight.",
+            user_action="Run the full analysis.",
+            checks=checks,
+        )
+
+    failure_code = _preflight_failure_code(error_msg)
+    checks.append(
+        _harness_check(
+            "model_access",
+            "Model returns JSON",
+            "fail",
+            error_msg or "Model preflight failed.",
+        )
+    )
+    return ProviderPreflightResponse(
+        provider=request.model,
+        model_name=model_name,
+        status="error",
+        can_run_analysis=False,
+        failure_code=failure_code,
+        diagnosis=error_msg or "Model preflight failed.",
+        user_action=_preflight_user_action(failure_code),
+        checks=checks,
+    )
 
 
 @app.post("/api/analyze", response_model=AnalyzeResponse)

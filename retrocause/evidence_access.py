@@ -119,6 +119,39 @@ def _parse_date(value: object) -> date | None:
         return None
 
 
+def _target_date_signals(target_date: date) -> set[str]:
+    month = target_date.strftime("%B").lower()
+    short_month = target_date.strftime("%b").lower()
+    day = str(target_date.day)
+    year = str(target_date.year)
+    iso = target_date.isoformat()
+    compact = target_date.strftime("%Y%m%d")
+    return {
+        iso,
+        compact,
+        f"{month} {day} {year}",
+        f"{month} {day}, {year}",
+        f"{short_month} {day} {year}",
+        f"{short_month} {day}, {year}",
+        f"{day} {month} {year}",
+        f"{day} {short_month} {year}",
+    }
+
+
+def _result_has_target_date_signal(result: SearchResult, target_date: date) -> bool:
+    metadata = result.metadata or {}
+    text = " ".join(
+        [
+            result.title,
+            result.content,
+            result.url,
+            str(metadata.get("page_content", ""))[:4000],
+        ]
+    ).lower()
+    normalized = re.sub(r"[/_.-]+", " ", text)
+    return any(signal in text or signal in normalized for signal in _target_date_signals(target_date))
+
+
 def _target_date_for_range(time_range: str | None, today: date | None = None) -> date | None:
     resolved_today = today or _today()
     if time_range in {"today", "trading_day"}:
@@ -172,17 +205,24 @@ def result_matches_time_range(
         return True
     metadata = result.metadata or {}
     published = _parse_date(metadata.get("published") or metadata.get("date") or metadata.get("year"))
-    if published is None:
-        return True
 
     resolved_today = today or _today()
+    target_date = _target_date_for_range(time_range, resolved_today)
     if time_range in {"today", "trading_day"}:
+        if published is None:
+            return target_date is not None and _result_has_target_date_signal(result, target_date)
         return published == resolved_today
     if time_range == "yesterday":
+        if published is None:
+            return target_date is not None and _result_has_target_date_signal(result, target_date)
         return published == resolved_today - timedelta(days=1)
     if time_range == "last_24h":
+        if published is None:
+            return target_date is not None and _result_has_target_date_signal(result, target_date)
         return resolved_today - timedelta(days=1) <= published <= resolved_today
     if time_range == "last_7d":
+        if published is None:
+            return True
         return resolved_today - timedelta(days=7) <= published <= resolved_today
     return True
 
@@ -261,6 +301,57 @@ def broker_source_names(configured_sources: str | None, plan: QueryPlan) -> list
     if plan.scenario == "academic":
         return ["arxiv", "semantic_scholar", "web"]
     return ["arxiv", "semantic_scholar", "web"]
+
+
+def describe_source_name(source_name: str) -> dict[str, str]:
+    """Return stable UI-facing metadata for a retrieval source adapter."""
+
+    normalized = source_name.strip().lower()
+    descriptions = {
+        "ap_news": {
+            "source_label": "AP News",
+            "source_kind": "wire_news",
+            "stability": "high",
+        },
+        "gdelt": {
+            "source_label": "GDELT Global Knowledge Graph",
+            "source_kind": "news_index",
+            "stability": "medium",
+        },
+        "gdelt_news": {
+            "source_label": "GDELT Global Knowledge Graph",
+            "source_kind": "news_index",
+            "stability": "medium",
+        },
+        "web": {
+            "source_label": "Trusted web search",
+            "source_kind": "web_search",
+            "stability": "medium",
+        },
+        "federal_register": {
+            "source_label": "Federal Register",
+            "source_kind": "official_record",
+            "stability": "high",
+        },
+        "arxiv": {
+            "source_label": "arXiv",
+            "source_kind": "academic_index",
+            "stability": "high",
+        },
+        "semantic_scholar": {
+            "source_label": "Semantic Scholar",
+            "source_kind": "academic_index",
+            "stability": "medium",
+        },
+    }
+    return descriptions.get(
+        normalized,
+        {
+            "source_label": source_name or "Unknown source",
+            "source_kind": "unknown",
+            "stability": "unknown",
+        },
+    )
 
 
 def _result_quality(result: SearchResult) -> str:

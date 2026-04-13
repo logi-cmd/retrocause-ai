@@ -83,6 +83,8 @@ class Evidence:
     freshness: str = "unknown"
     captured_at: Optional[str] = None
     extraction_method: str = "manual"
+    stance: str = "supporting"
+    stance_basis: str = "legacy_or_manual"
 
 
 @dataclass
@@ -197,3 +199,5 @@ class AnalysisResult:
     analysis_mode: str = "live"
     freshness_status: str = "unknown"
     retrieval_trace: list[dict] = field(default_factory=list)
+    refutation_checks: list[dict] = field(default_factory=list)
+    analysis_brief: dict = field(default_factory=dict)
