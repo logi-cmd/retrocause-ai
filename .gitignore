@@ -1,0 +1,38 @@
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+.venv/
+.pytest_cache/
+.pytest-tmp/
+.superpowers/
+.ruff_cache/
+.pip-tmp/
+.tmp-tests/
+.retrocause/
+
+# Node / frontend dependencies
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Local logs
+*.log
+logs/
+uvicorn_stdout.log
+uvicorn_stderr.log
+
+# Local environment config
+.env
+.env.*
+!.env.example
+
+# Local-only business / planning docs (must not be pushed)
+docs-private/
+docs/superpowers/
+.agent-guardrails/
+.codex/
+*.local.md
+.gstack/

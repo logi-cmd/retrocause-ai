@@ -1,0 +1,50 @@
+name: Feature Request
+description: Suggest an idea or improvement for RetroCause
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        RetroCause is still early-stage. Feature requests help us understand what people want to use it for. Keep it specific and we'll have a better chance of prioritizing it.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to do that RetroCause doesn't support well right now?
+      placeholder: "e.g. I want to compare two competing hypothesis chains side-by-side, but the current UI only shows one at a time."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like to see happen instead?
+      placeholder: "e.g. A split-view toggle that renders two chains next to each other with shared nodes highlighted."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of RetroCause would this affect?
+      options:
+        - Browser UI (frontend)
+        - Backend API
+        - Causal reasoning pipeline
+        - CLI
+        - Streamlit demo
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, references, screenshots, or anything else that helps explain the request.
+    validations:
+      required: false
