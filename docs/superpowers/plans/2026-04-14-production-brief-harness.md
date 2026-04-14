@@ -321,7 +321,7 @@ git commit -m "feat: build scenario production briefs"
 - Modify: `retrocause/api/main.py`
 - Test: `tests/test_comprehensive.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Add:
 
@@ -350,7 +350,7 @@ def test_postmortem_without_internal_evidence_is_not_actionable():
     assert any(check.name == "internal_evidence" and not check.passed for check in response.production_harness.checks)
 ```
 
-- [ ] **Step 2: Run focused tests and confirm red**
+- [x] **Step 2: Run focused tests and confirm red**
 
 ```bash
 pytest tests/test_comprehensive.py::test_recent_market_result_needs_fresh_evidence_before_ready tests/test_comprehensive.py::test_policy_result_with_weak_source_trace_surfaces_source_risk tests/test_comprehensive.py::test_postmortem_without_internal_evidence_is_not_actionable -q
@@ -358,7 +358,7 @@ pytest tests/test_comprehensive.py::test_recent_market_result_needs_fresh_eviden
 
 Expected: failures because `production_harness` and new checks do not exist.
 
-- [ ] **Step 3: Add production harness schemas**
+- [x] **Step 3: Add production harness schemas**
 
 ```python
 class ProductionHarnessCheckV2(BaseModel):
@@ -382,7 +382,7 @@ Add to `AnalyzeResponseV2`:
 production_harness: Optional[ProductionHarnessReportV2] = None
 ```
 
-- [ ] **Step 4: Implement `_build_production_harness` without replacing the existing value harness**
+- [x] **Step 4: Implement `_build_production_harness` without replacing the existing value harness**
 
 Keep the existing `product_harness` field intact. Add a separate `_build_production_harness(response)` that checks:
 
@@ -415,7 +415,7 @@ Score rule:
 score = sum(1 for check in checks if check.passed) / max(1, len(checks))
 ```
 
-- [ ] **Step 5: Wire into `_result_to_v2`, run tests, commit**
+- [x] **Step 5: Wire into `_result_to_v2`, run tests, commit**
 
 ```python
 response.production_harness = _build_production_harness(response)

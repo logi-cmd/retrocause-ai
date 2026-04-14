@@ -379,6 +379,49 @@ def test_postmortem_production_brief_has_expected_sections():
     assert "Operational Causes" in [section.title for section in response.production_brief.sections]
 
 
+def test_recent_market_result_needs_fresh_evidence_before_ready():
+    result = _sample_result_with_one_supported_chain("Why did bitcoin fall today?")
+    result.freshness_status = "stale"
+    response = _result_to_v2(result, is_demo=False)
+
+    assert response.production_harness is not None
+    assert response.production_harness.status == "needs_more_evidence"
+    assert any(
+        check.name == "freshness_gate" and not check.passed
+        for check in response.production_harness.checks
+    )
+
+
+def test_policy_result_with_weak_source_trace_surfaces_source_risk():
+    result = _sample_result_with_one_supported_chain("Why did sanctions talks fail today?")
+    result.retrieval_trace = [
+        {
+            "source": "web_search",
+            "query": "sanctions talks failed",
+            "result_count": 1,
+            "cache_hit": False,
+        }
+    ]
+    response = _result_to_v2(result, is_demo=False)
+
+    assert response.production_harness is not None
+    assert any(check.name == "source_risk" for check in response.production_harness.checks)
+
+
+def test_postmortem_without_internal_evidence_is_not_actionable():
+    result = _sample_result_with_one_supported_chain(
+        "Why did our checkout conversion drop after the release incident?"
+    )
+    response = _result_to_v2(result, is_demo=False)
+
+    assert response.production_harness is not None
+    assert response.production_harness.status in {"needs_more_evidence", "not_actionable"}
+    assert any(
+        check.name == "internal_evidence" and not check.passed
+        for check in response.production_harness.checks
+    )
+
+
 def test_result_to_v2_surfaces_refutation_status_and_stance():
     result = AnalysisResult(
         query="why did talks fail",
