@@ -1014,12 +1014,16 @@ def _verification_items(
     if response.challenge_checks:
         checked = len(response.challenge_checks)
         refuting = sum(check.refuting_count for check in response.challenge_checks)
+        challenge_summary = (
+            f"{refuting} challenge evidence item(s) were attached in this run."
+            if refuting
+            else "no explicit challenge evidence was attached in this run."
+        )
         items.append(
             ProductionBriefItemV2(
                 title="Challenge coverage",
                 summary=(
-                    f"Review {checked} checked edge(s); {refuting} challenge evidence "
-                    "item(s) were attached in this run."
+                    f"Review {checked} checked edge(s); {challenge_summary}"
                 ),
                 confidence=1.0 if checked else 0.0,
             )
