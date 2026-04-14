@@ -38,6 +38,8 @@ Stabilize quality-first live evidence retrieval, especially for time-sensitive m
 
 Current UX focus: move from single-question polish to a general Production Brief Harness. OSS should support scenario-aware market, policy/geopolitics, and postmortem briefs with freshness/source-quality gating; Pro workflow depth remains hosted reports, schedules, source policies, saved comparisons, and team sharing.
 
+Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md`; next work should execute it task-by-task with tests and documentation sync.
+
 ## Working Rules
 
 - Keep project documentation synchronized with every behavior, API, UI, or pipeline change. At minimum, update the current task evidence note; when user-visible behavior changes, also update README or the relevant docs page.
@@ -65,6 +67,7 @@ Current UX focus: move from single-question polish to a general Production Brief
 - Added a manual-copy fallback for blocked clipboard permissions, a source-health summary inside the readable brief, and targeted Chinese localization for the US/Iran golden-case graph labels.
 - Published `v0.1.0-alpha.4` with readable-brief UX polish, copy fallback, source-health summary, Markdown challenge wording, and graph-label fixes.
 - Designed the next OSS direction as a general Production Brief Harness for market, policy/geopolitics, and postmortem workflows, explicitly moving single-case US/Iran optimizations into regression-test territory rather than product logic.
+- Wrote the implementation plan for the Production Brief Harness, covering scenario detection, scenario override, evidence-anchored production sections, freshness/actionability gates, frontend rendering, Markdown export, single-case cleanup, docs, tests, and guardrails verification.
 
 ## Blockers
 
@@ -73,7 +76,7 @@ Current UX focus: move from single-question polish to a general Production Brief
 
 ## Next Step
 
-Post-release polish for the alpha: implement the Production Brief Harness so the product produces scenario-aware, evidence-anchored, freshness-gated outputs for market, policy/geopolitics, and postmortem workflows.
+Post-release polish for the alpha: execute the Production Brief Harness implementation plan so the product produces scenario-aware, evidence-anchored, freshness-gated outputs for market, policy/geopolitics, and postmortem workflows.
 
 Release-readiness pass from the user journey:
 

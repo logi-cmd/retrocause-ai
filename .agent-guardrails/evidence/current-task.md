@@ -646,3 +646,42 @@ Respond to the product concern that optimizing around a single US/Iran question 
 
 - This is a design-only checkpoint; implementation still needs a separate plan and tests.
 - The existing frontend still contains targeted US/Iran label mappings until the implementation pass replaces them with general scenario/role labeling.
+
+## 2026-04-14 Production Brief Harness Implementation Plan
+
+### Task
+
+After user approval of the Production Brief Harness design, create a task-by-task implementation plan using the `writing-plans` workflow.
+
+### Files Touched
+
+- `docs/superpowers/plans/2026-04-14-production-brief-harness.md`
+- `docs/PROJECT_STATE.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, and the `writing-plans` skill before writing the plan.
+- Inspected current API, frontend, and test anchors for scenario additions, readable brief rendering, Markdown export, and product harness behavior.
+- `Select-String -Path docs\superpowers\plans\2026-04-14-production-brief-harness.md -Pattern "TBD|TODO|implement later|fill in details|Similar to Task|appropriate error handling|Write tests for the above"`
+  - Result: no placeholder markers found after self-review cleanup.
+- `npm test`
+  - Result: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, full pytest, and Playwright E2E script.
+  - Pytest result: 219 passed.
+  - E2E result: 604 passed, 0 failed, 0 skipped.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: `safe-to-deploy`, 95/100.
+  - Non-blocking warning: intentional `docs/PROJECT_STATE.md` continuity update.
+
+### Behavior Notes
+
+- No feature implementation was performed in this pass.
+- The plan decomposes the approved spec into TDD tasks with commit checkpoints.
+- The plan covers scenario detection, scenario override, production brief sections, production harness gates, freshness and source-risk checks, frontend rendering, Markdown export, single-case product-logic cleanup, docs, tests, and guardrails verification.
+- `rg` was unavailable in this Windows session because `rg.exe` returned `Access is denied`; PowerShell `Select-String` was used as the read-only fallback.
+
+### Residual Risks
+
+- This pass creates an implementation plan only; user-visible product behavior is unchanged until the plan is executed.
+- The plan intentionally keeps the first implementation inside existing API/frontend files to minimize review scope, so follow-up refactoring may be warranted if the production brief code grows large.
