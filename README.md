@@ -15,7 +15,9 @@ RetroCause 是一个开源的因果解释工作台，适合研究复杂事件的
 - **Evidence-backed causal chains / 带证据的因果链**: competing explanations with probabilities and linked evidence.
 - **Readable brief / 阅读版简报**: a structured in-app report with the likely explanation, top reasons, challenge coverage, gaps, and evidence coverage.
 - **Markdown research brief / Markdown 研究简报**: copy a portable report with question, likely explanation, reasons, challenge coverage, evidence, and source trace.
+- **Copy fallback / 复制降级**: if browser clipboard permissions block one-click copy, the app opens a manual-copy report text area so the result is still portable.
 - **Specific live graph labels / 具体的 Live 图谱标签**: live causal-map notes keep the model's specific reason labels instead of collapsing untranslated nodes into generic factor names.
+- **Source health summary / 来源健康摘要**: the readable brief summarizes checked sources, stable-source coverage, failed sources, and result hits before users trust the answer.
 - **Challenge coverage / 反证覆盖**: checked edges show whether refuting or context evidence was found; if a checked edge has no attached refuting evidence, the brief says that directly instead of showing ambiguous `0 challenge` wording. 已检查的因果边会说明是否找到反证或上下文证据；如果某条边没有附着反证证据，简报会直接说明，而不是显示容易误读的 `0 challenge`。
 - **Source trace / 来源轨迹**: each live run shows which sources were queried and how many results were found.
 - **Provider preflight / 模型预检**: test whether the selected model and API key can return valid JSON before running a full analysis.
@@ -85,7 +87,7 @@ Example questions / 示例问题：
 3. Click **Run model preflight**.
 4. If preflight passes, click **Start analysis**.
 5. Inspect the analysis brief, source trace, challenge coverage, and value harness before trusting the result.
-6. Click **Copy report** in the readable brief card to take the Markdown report into notes, docs, or research workflows.
+6. Click **Copy report** in the readable brief card to take the Markdown report into notes, docs, or research workflows. If the browser blocks clipboard access, use the manual-copy report box that appears.
 
 中文步骤：
 
@@ -94,7 +96,7 @@ Example questions / 示例问题：
 3. 点击 **运行模型预检**。
 4. 预检通过后点击 **开始分析**。
 5. 先检查分析简报、来源轨迹、反证覆盖和 Value Harness，再决定是否相信结果。
-6. 在分析结论卡片中点击 **复制 Markdown**，把结果带进笔记、文档或研究流程。
+6. 在分析结论卡片中点击 **复制报告**，把结果带进笔记、文档或研究流程。如果浏览器拦截剪贴板权限，请使用自动展开的手动复制文本框。
 
 API keys are only needed for real analysis. Without a key, the app remains usable in demo mode.
 

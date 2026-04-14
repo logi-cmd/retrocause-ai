@@ -482,6 +482,15 @@ function buildAnalysisStatusNote(
 }
 
 const ZH_CAUSAL_LABELS: Array<[RegExp, string]> = [
+  [/iran nuclear program/gi, "\u4f0a\u6717\u6838\u8ba1\u5212"],
+  [/nuclear program/gi, "\u6838\u8ba1\u5212"],
+  [/negotiation refusal/gi, "\u8c08\u5224\u62d2\u7edd"],
+  [/no deal reached/gi, "\u672a\u8fbe\u6210\u534f\u8bae"],
+  [/deal reached/gi, "\u8fbe\u6210\u534f\u8bae"],
+  [/ceasefire/gi, "\u505c\u706b"],
+  [/agreement/gi, "\u534f\u8bae"],
+  [/iranian|iran'?s|iran/gi, "\u4f0a\u6717"],
+  [/united states|u\.s\.|us\b/gi, "\u7f8e\u56fd"],
   [/evidence-wide causal map/gi, "证据全图"],
   [/supported dag context/gi, "证据支撑的 DAG 上下文"],
   [/single root-to-outcome path/gi, "单条根因到结果路径"],
@@ -1194,6 +1203,7 @@ export default function Home() {
   const [analysisBrief, setAnalysisBrief] = useState<ApiAnalysisBrief | null>(null);
   const [markdownBrief, setMarkdownBrief] = useState<string | null>(null);
   const [markdownCopyStatus, setMarkdownCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const [showManualCopyReport, setShowManualCopyReport] = useState(false);
   const [productHarness, setProductHarness] = useState<ApiProductHarness | null>(null);
   const [providerPreflight, setProviderPreflight] = useState<ApiProviderPreflight | null>(null);
   const [providerPreflightLoading, setProviderPreflightLoading] = useState(false);
@@ -1222,6 +1232,7 @@ export default function Home() {
     message: string;
   } | null>(null);
   const activeRequestIdRef = useRef(0);
+  const manualCopyReportRef = useRef<HTMLTextAreaElement>(null);
 
   const mockPrimaryChain = activeChain;
   
@@ -1589,6 +1600,23 @@ export default function Home() {
     : -1;
   const sourceHitCount = retrievalTrace.reduce((sum, item) => sum + Math.max(0, item.result_count), 0);
   const traceFailureCount = retrievalTrace.filter((item) => Boolean(item.error)).length;
+  const sourceTransparencySummary = useMemo(() => {
+    const uniqueLabels = Array.from(
+      new Set(
+        retrievalTrace.map((item) =>
+          item.source_label || item.source || formatSourceKindLabel(item.source_kind, locale)
+        )
+      )
+    ).filter(Boolean);
+    const stableCount = retrievalTrace.filter((item) => item.stability === "high").length;
+    return {
+      labels: uniqueLabels.slice(0, 3),
+      checked: retrievalTrace.length,
+      stable: stableCount,
+      failed: traceFailureCount,
+      hits: sourceHitCount,
+    };
+  }, [locale, retrievalTrace, sourceHitCount, traceFailureCount]);
   const evidenceCoverageScore = Math.min(
     100,
     Math.round(
@@ -1759,12 +1787,18 @@ export default function Home() {
     try {
       await navigator.clipboard.writeText(localizedMarkdownBrief);
       setMarkdownCopyStatus("copied");
+      setShowManualCopyReport(false);
       window.setTimeout(() => setMarkdownCopyStatus("idle"), 1600);
     } catch {
       setMarkdownCopyStatus("failed");
-      window.setTimeout(() => setMarkdownCopyStatus("idle"), 2200);
+      setShowManualCopyReport(true);
     }
   }, [localizedMarkdownBrief]);
+
+  const selectManualCopyReport = useCallback(() => {
+    manualCopyReportRef.current?.focus();
+    manualCopyReportRef.current?.select();
+  }, []);
 
   const selectedNote = notes.find((n) => n.id === selectedNodeId);
 
@@ -1823,6 +1857,7 @@ export default function Home() {
     setAnalysisBrief(null);
     setMarkdownBrief(null);
     setMarkdownCopyStatus("idle");
+    setShowManualCopyReport(false);
     setProductHarness(null);
     setPipelineEval(null);
     setUncertaintyReport(null);
@@ -1859,6 +1894,7 @@ export default function Home() {
         setAnalysisBrief(payload.analysis_brief ?? null);
         setMarkdownBrief(payload.markdown_brief ?? null);
         setMarkdownCopyStatus("idle");
+        setShowManualCopyReport(false);
         setProductHarness(payload.product_harness ?? null);
         setPipelineEval(payload.evaluation ?? null);
         setUncertaintyReport(payload.uncertainty_report ?? null);
@@ -1897,6 +1933,7 @@ export default function Home() {
       setAnalysisBrief(payload.analysis_brief ?? null);
       setMarkdownBrief(payload.markdown_brief ?? null);
       setMarkdownCopyStatus("idle");
+      setShowManualCopyReport(false);
       setProductHarness(payload.product_harness ?? null);
       setPipelineEval(payload.evaluation ?? null);
       setUncertaintyReport(payload.uncertainty_report ?? null);
@@ -1955,6 +1992,7 @@ export default function Home() {
       setAnalysisBrief(null);
       setMarkdownBrief(null);
       setMarkdownCopyStatus("idle");
+      setShowManualCopyReport(false);
       setProductHarness(null);
       setPipelineEval(null);
       setUncertaintyReport(null);
@@ -2586,6 +2624,88 @@ export default function Home() {
               {locale === "en" ? "Evidence coverage: " : "\u8bc1\u636e\u8986\u76d6\uff1a"}
               {localizedAnalysisBrief.sourceCoverage}
             </div>
+            {sourceTransparencySummary.checked > 0 && (
+              <div
+                data-testid="source-health-summary"
+                style={{
+                  marginTop: "9px",
+                  padding: "7px 8px",
+                  border: "1px solid rgba(49, 95, 131, 0.14)",
+                  borderRadius: "8px",
+                  background: "rgba(255,255,255,0.56)",
+                  fontSize: "0.55rem",
+                  color: "#6b5a42",
+                  lineHeight: 1.45,
+                }}
+              >
+                <div style={{ color: "#315f83", fontWeight: 800 }}>
+                  {locale === "en" ? "Sources checked" : "\u5df2\u68c0\u7d22\u6765\u6e90"}:{" "}
+                  {sourceTransparencySummary.labels.join(", ") ||
+                    (locale === "en" ? "source trace available" : "\u5df2\u8fd4\u56de\u6765\u6e90\u8f68\u8ff9")}
+                </div>
+                <div style={{ marginTop: "3px" }}>
+                  {locale === "en" ? "Stable sources" : "\u7a33\u5b9a\u6765\u6e90"}:{" "}
+                  {sourceTransparencySummary.stable}/{sourceTransparencySummary.checked}
+                  {" · "}
+                  {locale === "en" ? "Failed sources" : "\u5931\u8d25\u6765\u6e90"}:{" "}
+                  {sourceTransparencySummary.failed}
+                  {" · "}
+                  {locale === "en" ? "Hits" : "\u547d\u4e2d"}: {sourceTransparencySummary.hits}
+                </div>
+              </div>
+            )}
+            {localizedMarkdownBrief && showManualCopyReport && (
+              <div style={{ marginTop: "10px" }}>
+                <div style={{ fontSize: "0.58rem", color: "#a0503c", fontWeight: 800 }}>
+                  {locale === "en" ? "Manual copy" : "\u624b\u52a8\u590d\u5236"}
+                </div>
+                <div style={{ marginTop: "4px", fontSize: "0.55rem", color: "#7a6b55", lineHeight: 1.45 }}>
+                  {locale === "en"
+                    ? "Clipboard permission was blocked. Select the report text below and copy it manually."
+                    : "\u6d4f\u89c8\u5668\u62e6\u622a\u4e86\u526a\u8d34\u677f\u6743\u9650\u3002\u9009\u4e2d\u4e0b\u65b9\u62a5\u544a\u6587\u672c\u540e\u624b\u52a8\u590d\u5236\u3002"}
+                </div>
+                <button
+                  type="button"
+                  onClick={selectManualCopyReport}
+                  style={{
+                    marginTop: "6px",
+                    border: "1px solid rgba(49, 95, 131, 0.22)",
+                    borderRadius: "8px",
+                    padding: "5px 8px",
+                    background: "rgba(255,255,255,0.66)",
+                    color: "#315f83",
+                    cursor: "pointer",
+                    fontSize: "0.54rem",
+                    fontWeight: 800,
+                  }}
+                >
+                  {locale === "en" ? "Select report text" : "\u9009\u4e2d\u62a5\u544a\u6587\u672c"}
+                </button>
+                <textarea
+                  ref={manualCopyReportRef}
+                  data-testid="manual-copy-report"
+                  readOnly
+                  value={localizedMarkdownBrief}
+                  onFocus={selectManualCopyReport}
+                  style={{
+                    marginTop: "6px",
+                    width: "100%",
+                    minHeight: "132px",
+                    maxHeight: "220px",
+                    resize: "vertical",
+                    border: "1px solid rgba(160, 80, 60, 0.20)",
+                    borderRadius: "8px",
+                    padding: "8px",
+                    background: "rgba(255,255,255,0.72)",
+                    color: "#4d3c28",
+                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                    fontSize: "0.56rem",
+                    lineHeight: 1.5,
+                    whiteSpace: "pre-wrap",
+                  }}
+                />
+              </div>
+            )}
           </div>
         )}
 

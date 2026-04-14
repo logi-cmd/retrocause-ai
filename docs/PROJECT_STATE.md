@@ -62,6 +62,7 @@ Current UX focus: polish the portable Markdown research brief so reviewable anal
 - Polished the Markdown research brief so top reasons use human-readable source/edge labels and checked edges with no attached refuting evidence explain that state directly.
 - Upgraded the browser analysis card into a structured readable brief with top reasons, what-to-check, evidence coverage, and a `Copy report` action that still exports Markdown.
 - Dogfooded the readable brief live path and removed the Chinese-mode fallback that collapsed specific live causal-map node labels into generic `市场影响因素` notes.
+- Added a manual-copy fallback for blocked clipboard permissions, a source-health summary inside the readable brief, and targeted Chinese localization for the US/Iran golden-case graph labels.
 
 ## Blockers
 

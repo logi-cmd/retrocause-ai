@@ -523,3 +523,63 @@ Use the invoked `using-superpowers` and `gstack` flow to dogfood the readable br
 
 - Full Chinese localization of arbitrary model-generated geopolitical labels remains future work.
 - Headless clipboard writes can fail in browser automation, so the live dogfood observed `复制失败` after clicking `Copy report`; existing E2E and source behavior still keep the copy action visible, and manual browsers should support the Clipboard API under normal permissions.
+
+## 2026-04-14 Alpha.4 UX Polish And Release Sync
+
+### Task
+
+Execute the next 1/2/3/4 sequence:
+
+1. Sync the live graph label fix into the public OSS release path.
+2. Add a reliable `Copy report` fallback when clipboard permissions are blocked.
+3. Improve Chinese readability and source transparency for the readable brief.
+4. Verify with gstack/tests and publish alpha.4 if the release candidate is ready.
+
+### Files Touched
+
+- `frontend/src/app/page.tsx`
+- `tests/test_comprehensive.py`
+- `README.md`
+- `docs/PROJECT_STATE.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- gstack preamble via WSL bash
+  - Result: preamble ran through stdin after an initial PowerShell quoting failure; WSL bash is usable, telemetry is off, and `LAKE_INTRO=yes`.
+- `pytest tests\test_comprehensive.py::test_frontend_offers_manual_report_copy_fallback -q`
+  - TDD red result: failed because no `data-testid="manual-copy-report"` fallback existed.
+- `pytest tests\test_comprehensive.py::test_frontend_offers_manual_report_copy_fallback tests\test_comprehensive.py::test_frontend_renders_readable_brief_instead_of_raw_markdown_copy -q`
+  - Result after implementation: passed, 2 tests.
+- `pytest tests\test_comprehensive.py::test_frontend_summarizes_source_transparency_in_readable_brief -q`
+  - TDD red result: failed because no `data-testid="source-health-summary"` source summary existed in the readable brief.
+- `pytest tests\test_comprehensive.py::test_frontend_summarizes_source_transparency_in_readable_brief tests\test_comprehensive.py::test_frontend_offers_manual_report_copy_fallback -q`
+  - Result after implementation: passed, 2 tests.
+- `pytest tests\test_comprehensive.py::test_frontend_localizes_us_iran_golden_case_labels -q`
+  - TDD red result: failed because the frontend localization table did not cover `nuclear program`, `negotiation refusal`, or `no deal reached`.
+- `pytest tests\test_comprehensive.py::test_frontend_localizes_us_iran_golden_case_labels tests\test_comprehensive.py::test_frontend_summarizes_source_transparency_in_readable_brief -q`
+  - Result after implementation: passed, 2 tests.
+- `pytest tests\test_comprehensive.py::test_frontend_offers_manual_report_copy_fallback tests\test_comprehensive.py::test_frontend_summarizes_source_transparency_in_readable_brief tests\test_comprehensive.py::test_frontend_localizes_us_iran_golden_case_labels tests\test_comprehensive.py::test_frontend_keeps_specific_live_node_labels -q`
+  - Result: passed, 4 tests.
+- Playwright browser replay with saved live response and forced clipboard rejection
+  - Result: `Copy report` changed to `复制失败`, `data-testid="manual-copy-report"` became visible, the textarea contained Markdown, `data-testid="source-health-summary"` was visible, source summary showed `AP News, web_search`, `stable=5/7`, `failed=0`, `hits=18`, and there were no console errors.
+  - Screenshot: `logs/manual-copy-fallback.png`.
+- `npm test`
+  - Result: passed.
+  - Included frontend lint, frontend build, `ruff check retrocause/`, full pytest, and Playwright E2E script.
+  - Pytest result: 219 passed.
+  - E2E result: 604 passed, 0 failed, 0 skipped.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: `safe-to-deploy`, 90/100.
+  - Non-blocking warnings: this task spans implementation, tests, README, project state, and evidence; `docs/PROJECT_STATE.md` changed by the project documentation-sync rule.
+
+### Behavior Notes
+
+- If the Clipboard API rejects `Copy report`, the readable brief now opens a manual-copy Markdown textarea and a `Select report text` action.
+- The readable brief now includes a source-health summary: checked sources, stable-source count, failed-source count, and hit count.
+- The US/Iran golden-case labels now have targeted Chinese replacements for terms such as `nuclear program`, `negotiation refusal`, `no deal reached`, `Iran`, and `United States`.
+
+### Residual Risks
+
+- Manual-copy fallback is intentionally a browser-side UX fallback; it does not replace the one-click clipboard path.
+- The Chinese localization table remains targeted phrase substitution, not a full translation layer for arbitrary model-generated labels.

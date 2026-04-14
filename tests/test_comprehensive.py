@@ -589,6 +589,41 @@ def test_frontend_renders_readable_brief_instead_of_raw_markdown_copy():
     assert "Copy Markdown" not in page_source
 
 
+def test_frontend_offers_manual_report_copy_fallback():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'data-testid="manual-copy-report"' in page_source
+    assert "Manual copy" in page_source
+    assert "select()" in page_source
+    assert "readOnly" in page_source
+
+
+def test_frontend_summarizes_source_transparency_in_readable_brief():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'data-testid="source-health-summary"' in page_source
+    assert "Sources checked" in page_source
+    assert "Stable sources" in page_source
+    assert "Failed sources" in page_source
+
+
+def test_frontend_localizes_us_iran_golden_case_labels():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert "nuclear program" in page_source
+    assert "\\u6838\\u8ba1\\u5212" in page_source
+    assert "negotiation refusal" in page_source
+    assert "\\u8c08\\u5224\\u62d2\\u7edd" in page_source
+    assert "no deal reached" in page_source
+    assert "\\u672a\\u8fbe\\u6210\\u534f\\u8bae" in page_source
+
+
 def test_frontend_keeps_specific_live_node_labels():
     page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
         encoding="utf-8"
