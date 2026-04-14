@@ -877,6 +877,20 @@ async def test_analyze_query_v2_returns_partial_live_instead_of_demo_on_live_fai
     assert response.chains == []
 
 
+@pytest.mark.anyio
+async def test_analyze_v2_accepts_scenario_override_without_live_key():
+    response = await analyze_query_v2(
+        AnalyzeRequest(
+            query="Why did bitcoin fall today?",
+            scenario_override="postmortem",
+        )
+    )
+
+    assert response.scenario is not None
+    assert response.scenario.key == "postmortem"
+    assert response.scenario.detection_method == "override"
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # 3. Pydantic Schema 验证 — 确保 API 模型能正确序列化
 # ═══════════════════════════════════════════════════════════════════════════════

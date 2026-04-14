@@ -585,7 +585,11 @@ def _harness_check(check_id: str, label: str, status: str, detail: str = "") -> 
     return HarnessCheckV2(id=check_id, label=label, status=status, detail=detail)
 
 
-def _empty_live_failure_response(query: str, error_msg: str) -> AnalyzeResponseV2:
+def _empty_live_failure_response(
+    query: str,
+    error_msg: str,
+    scenario_override: Optional[str] = None,
+) -> AnalyzeResponseV2:
     from retrocause.parser import parse_input
 
     parsed_query = parse_input(query)
@@ -606,6 +610,14 @@ def _empty_live_failure_response(query: str, error_msg: str) -> AnalyzeResponseV
         uncertainty_report=None,
         error=error_msg,
     )
+    scenario = _detect_production_scenario(
+        query,
+        domain="general",
+        override=scenario_override,
+    )
+    response.scenario = scenario
+    response.production_brief = _build_production_brief(response, scenario)
+    response.production_harness = _build_production_harness(response)
     response.markdown_brief = _build_markdown_research_brief(response)
     response.product_harness = _build_product_harness(response)
     return response
@@ -1408,7 +1420,11 @@ def _build_product_harness(response: AnalyzeResponseV2) -> ProductHarnessReportV
 
 
 def _result_to_v2(
-    result: AnalysisResult, *, is_demo: bool = False, demo_topic: Optional[str] = None
+    result: AnalysisResult,
+    *,
+    is_demo: bool = False,
+    demo_topic: Optional[str] = None,
+    scenario_override: Optional[str] = None,
 ) -> AnalyzeResponseV2:
     from retrocause.parser import parse_input
 
@@ -1642,7 +1658,11 @@ def _result_to_v2(
         analysis_brief=_build_analysis_brief(result, chains_v2, challenge_checks),
         uncertainty_report=uncertainty_v2,
     )
-    scenario = _detect_production_scenario(result.query, domain=result.domain)
+    scenario = _detect_production_scenario(
+        result.query,
+        domain=result.domain,
+        override=scenario_override,
+    )
     response.scenario = scenario
     response.production_brief = _build_production_brief(response, scenario)
     response.production_harness = _build_production_harness(response)
@@ -1935,7 +1955,11 @@ async def analyze_query_v2(request: AnalyzeRequest):
                 is_demo = False
 
         if result is None and request.api_key and _is_live_failure(error_msg):
-            return _empty_live_failure_response(request.query, error_msg or "Live analysis failed.")
+            return _empty_live_failure_response(
+                request.query,
+                error_msg or "Live analysis failed.",
+                scenario_override=request.scenario_override,
+            )
 
         if result is None:
             result = topic_aware_demo_result(request.query)
@@ -1945,7 +1969,12 @@ async def analyze_query_v2(request: AnalyzeRequest):
         result.is_demo = is_demo
         result.demo_topic = demo_topic
 
-        resp = _result_to_v2(result, is_demo=is_demo, demo_topic=demo_topic)
+        resp = _result_to_v2(
+            result,
+            is_demo=is_demo,
+            demo_topic=demo_topic,
+            scenario_override=request.scenario_override,
+        )
         resp.error = error_msg if is_demo and request.api_key else None
         return resp
 
@@ -2038,12 +2067,17 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
 
                 if result is not None:
                     result.is_demo = False
-                    resp = _result_to_v2(result, is_demo=False)
+                    resp = _result_to_v2(
+                        result,
+                        is_demo=False,
+                        scenario_override=request.scenario_override,
+                    )
                     eq.put({"type": "done", "is_demo": False, "data": resp.model_dump(mode="json")})
                 elif request.api_key and _is_live_failure(error_msg):
                     resp = _empty_live_failure_response(
                         request.query,
                         error_msg or "Live analysis failed.",
+                        scenario_override=request.scenario_override,
                     )
                     eq.put(
                         {
@@ -2057,7 +2091,12 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                     demo_topic = detect_demo_topic(request.query) or "default"
                     demo_result.is_demo = True
                     demo_result.demo_topic = demo_topic
-                    resp = _result_to_v2(demo_result, is_demo=True, demo_topic=demo_topic)
+                    resp = _result_to_v2(
+                        demo_result,
+                        is_demo=True,
+                        demo_topic=demo_topic,
+                        scenario_override=request.scenario_override,
+                    )
                     eq.put(
                         {
                             "type": "done",

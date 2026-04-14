@@ -440,7 +440,7 @@ git commit -m "feat: gate production briefs for freshness and evidence"
 - Modify: `retrocause/api/main.py`
 - Test: `tests/test_comprehensive.py`
 
-- [ ] **Step 1: Write failing API test**
+- [x] **Step 1: Write failing API test**
 
 Add an async test near provider/API tests:
 
@@ -459,7 +459,7 @@ async def test_analyze_v2_accepts_scenario_override_without_live_key(async_clien
     assert payload["scenario"]["detection_method"] == "override"
 ```
 
-- [ ] **Step 2: Run and confirm red**
+- [x] **Step 2: Run and confirm red**
 
 ```bash
 pytest tests/test_comprehensive.py::test_analyze_v2_accepts_scenario_override_without_live_key -q
@@ -467,7 +467,7 @@ pytest tests/test_comprehensive.py::test_analyze_v2_accepts_scenario_override_wi
 
 Expected: fail because `_result_to_v2` does not accept/pass override yet.
 
-- [ ] **Step 3: Pass override through V2 response and stream paths**
+- [x] **Step 3: Pass override through V2 response and stream paths**
 
 Change signature:
 
@@ -483,7 +483,7 @@ return _result_to_v2(result, is_demo=is_demo, demo_topic=demo_topic, scenario_ov
 
 In `/api/analyze/v2/stream`, pass the same override when converting final payloads.
 
-- [ ] **Step 4: Run focused test and commit**
+- [x] **Step 4: Run focused test and commit**
 
 ```bash
 pytest tests/test_comprehensive.py::test_analyze_v2_accepts_scenario_override_without_live_key -q
