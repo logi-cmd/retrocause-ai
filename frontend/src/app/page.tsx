@@ -607,16 +607,8 @@ function hasUnlocalizedEnglish(text: string): boolean {
   return tokens.length > 2;
 }
 
-function hasUnlocalizedEnglishLabel(text: string): boolean {
-  const tokens = text.match(/[A-Za-z]{4,}/g) ?? [];
-  return tokens.length > 1;
-}
-
 function localizeCausalLabel(text: string, locale: "zh" | "en"): string {
   const localized = localizeCausalText(text, locale);
-  if (locale === "zh" && hasUnlocalizedEnglishLabel(localized)) {
-    return "市场影响因素";
-  }
   return localized;
 }
 

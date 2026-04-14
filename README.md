@@ -15,6 +15,7 @@ RetroCause 是一个开源的因果解释工作台，适合研究复杂事件的
 - **Evidence-backed causal chains / 带证据的因果链**: competing explanations with probabilities and linked evidence.
 - **Readable brief / 阅读版简报**: a structured in-app report with the likely explanation, top reasons, challenge coverage, gaps, and evidence coverage.
 - **Markdown research brief / Markdown 研究简报**: copy a portable report with question, likely explanation, reasons, challenge coverage, evidence, and source trace.
+- **Specific live graph labels / 具体的 Live 图谱标签**: live causal-map notes keep the model's specific reason labels instead of collapsing untranslated nodes into generic factor names.
 - **Challenge coverage / 反证覆盖**: checked edges show whether refuting or context evidence was found; if a checked edge has no attached refuting evidence, the brief says that directly instead of showing ambiguous `0 challenge` wording. 已检查的因果边会说明是否找到反证或上下文证据；如果某条边没有附着反证证据，简报会直接说明，而不是显示容易误读的 `0 challenge`。
 - **Source trace / 来源轨迹**: each live run shows which sources were queried and how many results were found.
 - **Provider preflight / 模型预检**: test whether the selected model and API key can return valid JSON before running a full analysis.
@@ -31,13 +32,13 @@ Known limits / 已知限制：
 
 - Results are evidence-grounded explanations, not verified causal truth.
 - Live quality depends on source availability, model behavior, and API quota.
-- Some generated labels may remain partly English in Chinese mode.
+- Some generated labels may remain partly English in Chinese mode, but live graph nodes should keep their specific meaning instead of falling back to generic factor labels.
 - PDF/export/share/team workflows are not included yet.
 - OSS report output is a copyable Markdown research brief. Higher-end PDF, team, scheduled, and branded workflows belong in a future Pro tier.
 
 - 结果是“有证据锚定的解释”，不是已经被证明的因果真理。
 - Live 模式质量取决于来源可用性、模型行为和 API 额度。
-- 中文模式下，部分模型生成的长标签可能仍保留英文。
+- 中文模式下，部分模型生成的长标签可能仍保留英文，但 Live 因果图节点应保留具体含义，而不是退回成泛化的“因素”标签。
 - 当前还没有 PDF 导出、分享、团队工作流。
 - OSS 报告输出现在是可复制的 Markdown 研究简报。PDF、团队协作、定时生成、品牌模板等更适合未来 Pro 版本。
 

@@ -589,6 +589,15 @@ def test_frontend_renders_readable_brief_instead_of_raw_markdown_copy():
     assert "Copy Markdown" not in page_source
 
 
+def test_frontend_keeps_specific_live_node_labels():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'return "市场影响因素"' not in page_source
+    assert "hasUnlocalizedEnglishLabel(localized)" not in page_source
+
+
 def test_result_to_v2_node_types():
     result = _make_minimal_result()
     v2 = _result_to_v2(result)

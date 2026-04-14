@@ -463,3 +463,63 @@ Make the OSS report output friendlier for product reading: keep Markdown as the 
 
 - This pass improves the existing left-panel card rather than building a full long-form report view.
 - The readable brief still depends on current `analysis_brief` fields and does not add a new LLM-written narrative.
+
+## 2026-04-14 Live Graph Label Dogfood Polish
+
+### Task
+
+Use the invoked `using-superpowers` and `gstack` flow to dogfood the readable brief and identify what the user actually sees in the browser. Fix the biggest product-readability issue found during the live path.
+
+### Files Touched
+
+- `frontend/src/app/page.tsx`
+- `tests/test_comprehensive.py`
+- `README.md`
+- `docs/PROJECT_STATE.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- gstack preamble via WSL bash
+  - Result: gstack preamble ran after correcting shell quoting; WSL default distro is usable, telemetry is off, and the Boil the Lake intro was marked seen.
+- Started local FastAPI on `127.0.0.1:8000` and Next.js on `localhost:3005`.
+  - Result: API and browser app were reachable.
+- OpenRouter provider preflight and live `/api/analyze/v2` golden case for `美国和伊朗在伊斯兰堡谈判结束 未达成协议的原因是什么`
+  - Result: `status=ok`, `analysis_mode=live`, `freshness_status=fresh`, `is_demo=false`, 18 evidence items, 5 chains, 3 challenge checks, 7 retrieval trace rows, product harness `ready_for_review`, score 1.0, Markdown brief length 4303, and no `0 challenge` phrase.
+- `C:\Users\97504\.claude\skills\gstack\browse\dist\browse.exe goto http://localhost:3005`
+  - Result: navigated to the local app with HTTP 200.
+- `C:\Users\97504\.claude\skills\gstack\browse\dist\browse.exe text`
+  - Result: confirmed the app renders the evidence board, query panel, demo transparency, and evidence filters.
+- `C:\Users\97504\.claude\skills\gstack\browse\dist\browse.exe console --errors`
+  - Result: no console errors.
+- Playwright live UI dogfood using the same local app and OpenRouter key from process environment only
+  - Result: readable brief rendered with `关键原因`, `审阅重点`, `证据覆盖`, `复制报告`, live badge, ready-for-review signal, and no `0 challenge` phrase.
+  - Screenshot: `logs/gstack-readable-brief-live.png`.
+  - Finding: the central causal-map notes still showed generic `市场影响因素` labels for untranslated live nodes, hiding the specific causes users need to inspect.
+- `pytest tests\test_comprehensive.py::test_frontend_keeps_specific_live_node_labels tests\test_comprehensive.py::test_frontend_renders_readable_brief_instead_of_raw_markdown_copy -q`
+  - Result: passed, 2 tests.
+- Playwright UI replay using the saved live response at `logs/alpha4-us-iran-response.json`
+  - Result after implementation: graph note titles were `Iran Nuclear Program`, `Negotiation Refusal`, and `No Deal Reached`; `hasGenericMarketImpactFactor=false`, `hasSpecificGraphLabels=true`, readable brief present, no `0 challenge` phrase, and no console errors.
+  - Screenshot: `logs/gstack-readable-brief-replay-specific-labels.png`.
+- `npm test`
+  - First full result after label fix: passed, but frontend lint reported one warning because the removed generic-label fallback left `hasUnlocalizedEnglishLabel` unused.
+  - Cleanup: removed the now-unused helper so the UI change does not leave a lint warning behind.
+- `npm test`
+  - Final result after cleanup: passed.
+  - Included frontend lint with no warnings, frontend build, `ruff check retrocause/`, full pytest, and Playwright E2E script.
+  - Pytest result: 216 passed.
+  - E2E result: 604 passed, 0 failed, 0 skipped.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: `safe-to-deploy`, 90/100.
+  - Non-blocking warnings: this task spans 5 top-level areas because implementation, regression test, README, project state, and evidence were intentionally synchronized; `docs/PROJECT_STATE.md` changed by project documentation-sync rule.
+
+### Behavior Notes
+
+- Chinese-mode live graph notes now keep the specific model-provided labels after local phrase substitution instead of replacing remaining English labels with `市场影响因素`.
+- This may leave some graph labels partly English in Chinese mode, but it preserves user-visible causal meaning and matches the README's honest known-limits wording.
+- Added a regression test to keep the generic-label fallback from returning.
+
+### Residual Risks
+
+- Full Chinese localization of arbitrary model-generated geopolitical labels remains future work.
+- Headless clipboard writes can fail in browser automation, so the live dogfood observed `复制失败` after clicking `Copy report`; existing E2E and source behavior still keep the copy action visible, and manual browsers should support the Clipboard API under normal permissions.
