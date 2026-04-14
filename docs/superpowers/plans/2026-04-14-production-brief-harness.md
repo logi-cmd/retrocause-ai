@@ -706,7 +706,7 @@ git commit -m "feat: export scenario production briefs"
 - Modify: `frontend/src/app/page.tsx`
 - Test: `tests/test_comprehensive.py`
 
-- [ ] **Step 1: Replace the US/Iran localization test with a general regression**
+- [x] **Step 1: Replace the US/Iran localization test with a general regression**
 
 Remove `test_frontend_localizes_us_iran_golden_case_labels`. Add:
 
@@ -727,7 +727,7 @@ def test_frontend_does_not_hardcode_single_case_product_labels():
     assert "hasUnlocalizedEnglishLabel(localized)" not in page_source
 ```
 
-- [ ] **Step 2: Run and confirm red**
+- [x] **Step 2: Run and confirm red**
 
 ```bash
 pytest tests/test_comprehensive.py::test_frontend_does_not_hardcode_single_case_product_labels -q
@@ -735,7 +735,7 @@ pytest tests/test_comprehensive.py::test_frontend_does_not_hardcode_single_case_
 
 Expected: fail because `ZH_CAUSAL_LABELS` still contains single-case phrases.
 
-- [ ] **Step 3: Remove single-case entries from `ZH_CAUSAL_LABELS`**
+- [x] **Step 3: Remove single-case entries from `ZH_CAUSAL_LABELS`**
 
 Delete only entries matching:
 
@@ -749,7 +749,7 @@ Delete only entries matching:
 
 Keep general role/event labels such as sanctions, negotiation, market pressure, evidence, and talks only if they are not single-case entities.
 
-- [ ] **Step 4: Run test and commit**
+- [x] **Step 4: Run test and commit**
 
 ```bash
 pytest tests/test_comprehensive.py::test_frontend_does_not_hardcode_single_case_product_labels tests/test_comprehensive.py::test_frontend_keeps_specific_live_node_labels -q

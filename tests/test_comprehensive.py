@@ -826,17 +826,23 @@ def test_frontend_offers_three_production_use_cases():
     assert "Postmortem" in page_source
 
 
-def test_frontend_localizes_us_iran_golden_case_labels():
+def test_frontend_does_not_hardcode_single_case_product_labels():
     page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
         encoding="utf-8"
     )
 
-    assert "nuclear program" in page_source
-    assert "\\u6838\\u8ba1\\u5212" in page_source
-    assert "negotiation refusal" in page_source
-    assert "\\u8c08\\u5224\\u62d2\\u7edd" in page_source
-    assert "no deal reached" in page_source
-    assert "\\u672a\\u8fbe\\u6210\\u534f\\u8bae" in page_source
+    forbidden_terms = [
+        "nuclear program",
+        "negotiation refusal",
+        "no deal reached",
+        "iran",
+        "united states",
+    ]
+    lowered = page_source.lower()
+    for term in forbidden_terms:
+        assert term not in lowered
+    assert 'return "市场影响因素"' not in page_source
+    assert "hasUnlocalizedEnglishLabel(localized)" not in page_source
 
 
 def test_frontend_keeps_specific_live_node_labels():

@@ -528,15 +528,10 @@ function buildAnalysisStatusNote(
 }
 
 const ZH_CAUSAL_LABELS: Array<[RegExp, string]> = [
-  [/iran nuclear program/gi, "\u4f0a\u6717\u6838\u8ba1\u5212"],
-  [/nuclear program/gi, "\u6838\u8ba1\u5212"],
-  [/negotiation refusal/gi, "\u8c08\u5224\u62d2\u7edd"],
-  [/no deal reached/gi, "\u672a\u8fbe\u6210\u534f\u8bae"],
   [/deal reached/gi, "\u8fbe\u6210\u534f\u8bae"],
   [/ceasefire/gi, "\u505c\u706b"],
   [/agreement/gi, "\u534f\u8bae"],
-  [/iranian|iran'?s|iran/gi, "\u4f0a\u6717"],
-  [/united states|u\.s\.|us\b/gi, "\u7f8e\u56fd"],
+  [/u\.s\./gi, "\u7f8e\u56fd"],
   [/evidence-wide causal map/gi, "证据全图"],
   [/supported dag context/gi, "证据支撑的 DAG 上下文"],
   [/single root-to-outcome path/gi, "单条根因到结果路径"],
@@ -627,7 +622,7 @@ const ZH_CAUSAL_LABELS: Array<[RegExp, string]> = [
   [/huawei/gi, "华为"],
   [/smic/gi, "中芯国际"],
   [/nexperia/gi, "安世半导体"],
-  [/united states|u\.s\.|us\b/gi, "美国"],
+  [/u\.s\./gi, "美国"],
   [/china/gi, "中国"],
 ];
 
