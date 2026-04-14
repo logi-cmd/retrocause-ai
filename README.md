@@ -14,6 +14,7 @@ RetroCause 是一个开源的因果解释工作台，适合研究复杂事件的
 
 - **Evidence-backed causal chains / 带证据的因果链**: competing explanations with probabilities and linked evidence.
 - **Analysis brief / 分析简报**: a short summary of the most likely explanation and the strongest reasons.
+- **Markdown research brief / Markdown 研究简报**: copy a portable brief with question, likely explanation, reasons, challenge coverage, evidence, and source trace.
 - **Challenge coverage / 反证覆盖**: checked edges show whether refuting or context evidence was found.
 - **Source trace / 来源轨迹**: each live run shows which sources were queried and how many results were found.
 - **Provider preflight / 模型预检**: test whether the selected model and API key can return valid JSON before running a full analysis.
@@ -22,21 +23,23 @@ RetroCause 是一个开源的因果解释工作台，适合研究复杂事件的
 
 ## Current Status / 当前状态
 
-**English:** RetroCause is a research-grade alpha published as `v0.1.0-alpha.2` at [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai). The browser app, API, tests, provider preflight, challenge coverage, and value harness are working locally. A live golden-case run for the US/Iran Islamabad talks query passed on 2026-04-13 with OpenRouter DeepSeek V3.
+**English:** RetroCause is a research-grade alpha published as `v0.1.0-alpha.3` at [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai). The browser app, API, tests, provider preflight, challenge coverage, Markdown research brief, and value harness are working locally. A live golden-case run for the US/Iran Islamabad talks query passed on 2026-04-14 with OpenRouter DeepSeek V3.
 
-**中文：** RetroCause 当前是 research-grade alpha，已在 [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai) 发布 `v0.1.0-alpha.2`。本地浏览器应用、API、测试、模型预检、反证覆盖和结果价值检查已经可用。2026-04-13 使用 OpenRouter DeepSeek V3 跑通了“美国和伊朗在伊斯兰堡谈判结束，未达成协议的原因是什么”这个 live golden case。
+**中文：** RetroCause 当前是 research-grade alpha，已在 [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai) 发布 `v0.1.0-alpha.3`。本地浏览器应用、API、测试、模型预检、反证覆盖、Markdown 研究简报和结果价值检查已经可用。2026-04-14 使用 OpenRouter DeepSeek V3 跑通了“美国和伊朗在伊斯兰堡谈判结束，未达成协议的原因是什么”这个 live golden case。
 
 Known limits / 已知限制：
 
 - Results are evidence-grounded explanations, not verified causal truth.
 - Live quality depends on source availability, model behavior, and API quota.
 - Some generated labels may remain partly English in Chinese mode.
-- Report/export/share workflows are not included yet.
+- PDF/export/share/team workflows are not included yet.
+- OSS report output is a copyable Markdown research brief. Higher-end PDF, team, scheduled, and branded workflows belong in a future Pro tier.
 
 - 结果是“有证据锚定的解释”，不是已经被证明的因果真理。
 - Live 模式质量取决于来源可用性、模型行为和 API 额度。
 - 中文模式下，部分模型生成的长标签可能仍保留英文。
-- 当前还没有报告导出、分享、团队工作流。
+- 当前还没有 PDF 导出、分享、团队工作流。
+- OSS 报告输出现在是可复制的 Markdown 研究简报。PDF、团队协作、定时生成、品牌模板等更适合未来 Pro 版本。
 
 ## Quick Start / 快速开始
 
@@ -81,6 +84,7 @@ Example questions / 示例问题：
 3. Click **Run model preflight**.
 4. If preflight passes, click **Start analysis**.
 5. Inspect the analysis brief, source trace, challenge coverage, and value harness before trusting the result.
+6. Click **Copy Markdown** in the analysis brief card to take the result into notes, docs, or research workflows.
 
 中文步骤：
 
@@ -89,6 +93,7 @@ Example questions / 示例问题：
 3. 点击 **运行模型预检**。
 4. 预检通过后点击 **开始分析**。
 5. 先检查分析简报、来源轨迹、反证覆盖和 Value Harness，再决定是否相信结果。
+6. 在分析结论卡片中点击 **复制 Markdown**，把结果带进笔记、文档或研究流程。
 
 API keys are only needed for real analysis. Without a key, the app remains usable in demo mode.
 
@@ -157,6 +162,16 @@ RetroCause 适合需要“解释事件原因，并检查推理链”的场景：
 - 地缘政治 / 新闻因果简报
 - 公司或竞品复盘
 - 证据锚定解释界面的研究 demo
+
+## OSS vs Pro Boundary / OSS 与 Pro 边界
+
+**OSS:** local, inspectable analysis for individual researchers and builders. OSS should include the evidence board, source trace, challenge coverage, value harness, and a copyable Markdown research brief so users can take the result into their own notes or analysis workflow.
+
+**Pro:** repeatable delivery workflows. Pro should justify payment through hosted runs, PDF/DOCX reports, team sharing, scheduled briefings, saved comparisons, source policy controls, domain packs, branded templates, and higher-trust operating workflows.
+
+**中文：** OSS 版服务个人研究者和开发者，重点是本地可运行、可检查、可复制。OSS 应包含证据墙、来源轨迹、反证覆盖、结果价值检查，以及可复制的 Markdown 研究简报，方便用户放进自己的笔记、投研或政策分析流程。
+
+**Pro：** Pro 版应该服务可重复交付的工作流，包括托管运行、PDF/DOCX 报告、团队分享、定时简报、历史对比、来源策略控制、垂直领域包、品牌模板和更高可信的运营能力。
 
 ## License / 许可证
 

@@ -403,6 +403,104 @@ def test_result_to_v2_surfaces_challenge_checks_and_analysis_brief():
     assert v2.analysis_brief.missing_evidence
 
 
+def test_result_to_v2_builds_copyable_markdown_research_brief():
+    result = AnalysisResult(
+        query="why did talks fail",
+        domain="geopolitics",
+        variables=[
+            CausalVariable(name="sanctions_pressure", description="Sanctions pressure"),
+            CausalVariable(name="talks_failed", description="Talks failed"),
+        ],
+        edges=[
+            CausalEdge(
+                source="sanctions_pressure",
+                target="talks_failed",
+                conditional_prob=0.72,
+                supporting_evidence_ids=["ev-support"],
+                refuting_evidence_ids=["ev-refute"],
+            )
+        ],
+        hypotheses=[
+            HypothesisChain(
+                id="chain-1",
+                name="Sanctions explanation",
+                description="Sanctions pressure contributed to failure",
+                variables=[
+                    CausalVariable(name="sanctions_pressure", description="Sanctions pressure"),
+                    CausalVariable(name="talks_failed", description="Talks failed"),
+                ],
+                edges=[
+                    CausalEdge(
+                        source="sanctions_pressure",
+                        target="talks_failed",
+                        conditional_prob=0.72,
+                        supporting_evidence_ids=["ev-support"],
+                        refuting_evidence_ids=["ev-refute"],
+                    )
+                ],
+                posterior_probability=0.64,
+            )
+        ],
+        evidences=[
+            Evidence(
+                id="ev-support",
+                content="Diplomats linked sanctions pressure to the failed talks.",
+                source_type=EvidenceType.NEWS,
+                stance="supporting",
+                stance_basis="llm_extraction",
+                source_tier="fresh",
+                extraction_method="llm_fulltext",
+            ),
+            Evidence(
+                id="ev-refute",
+                content="Officials denied sanctions pressure was the reason talks failed.",
+                source_type=EvidenceType.NEWS,
+                stance="refuting",
+                stance_basis="challenge_retrieval",
+                source_tier="fresh",
+                extraction_method="llm_fulltext",
+            ),
+        ],
+        retrieval_trace=[
+            {
+                "source": "ap_news",
+                "query": "talks failed sanctions pressure",
+                "result_count": 2,
+                "cache_hit": False,
+            }
+        ],
+        refutation_checks=[
+            {
+                "edge_id": "sanctions_pressure->talks_failed",
+                "source": "sanctions_pressure",
+                "target": "talks_failed",
+                "query": "evidence against sanctions pressure causing talks failed",
+                "result_count": 1,
+                "refuting_count": 1,
+                "status": "has_refutation",
+            }
+        ],
+    )
+
+    v2 = _result_to_v2(result, is_demo=False)
+
+    assert v2.markdown_brief is not None
+    assert v2.markdown_brief.startswith("# RetroCause Research Brief")
+    assert "## Question" in v2.markdown_brief
+    assert "why did talks fail" in v2.markdown_brief
+    assert "## Likely Explanation" in v2.markdown_brief
+    assert "Sanctions explanation" in v2.markdown_brief
+    assert "## Top Reasons" in v2.markdown_brief
+    assert "sanctions pressure -> talks failed" in v2.markdown_brief
+    assert "## Challenge Coverage" in v2.markdown_brief
+    assert "Found 1 challenge evidence" in v2.markdown_brief
+    assert "## Evidence" in v2.markdown_brief
+    assert "[ev-support] Supports" in v2.markdown_brief
+    assert "[ev-refute] Challenges" in v2.markdown_brief
+    assert "## Source Trace" in v2.markdown_brief
+    assert "AP News" in v2.markdown_brief
+
+
 def test_result_to_v2_node_types():
     result = _make_minimal_result()
     v2 = _result_to_v2(result)

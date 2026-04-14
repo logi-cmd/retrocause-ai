@@ -152,6 +152,7 @@ type AnalyzeResponseV2 = {
   retrieval_trace?: ApiRetrievalTrace[];
   challenge_checks?: ApiChallengeCheck[];
   analysis_brief?: ApiAnalysisBrief | null;
+  markdown_brief?: string | null;
   product_harness?: ApiProductHarness | null;
   evaluation?: {
     evidence_sufficiency: number;
@@ -1199,6 +1200,8 @@ export default function Home() {
   const [retrievalTrace, setRetrievalTrace] = useState<ApiRetrievalTrace[]>([]);
   const [challengeChecks, setChallengeChecks] = useState<ApiChallengeCheck[]>([]);
   const [analysisBrief, setAnalysisBrief] = useState<ApiAnalysisBrief | null>(null);
+  const [markdownBrief, setMarkdownBrief] = useState<string | null>(null);
+  const [markdownCopyStatus, setMarkdownCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [productHarness, setProductHarness] = useState<ApiProductHarness | null>(null);
   const [providerPreflight, setProviderPreflight] = useState<ApiProviderPreflight | null>(null);
   const [providerPreflightLoading, setProviderPreflightLoading] = useState(false);
@@ -1576,6 +1579,10 @@ export default function Home() {
       sourceCoverage: localizeBriefText(analysisBrief.source_coverage, locale),
     };
   }, [analysisBrief, locale]);
+  const localizedMarkdownBrief = useMemo(() => {
+    if (!markdownBrief) return null;
+    return locale === "en" ? markdownBrief : localizeBriefText(markdownBrief, locale);
+  }, [locale, markdownBrief]);
   const challengeCheckSummary = useMemo(() => {
     const checked = challengeChecks.length;
     const refuting = challengeChecks.reduce((sum, item) => sum + item.refuting_count, 0);
@@ -1755,6 +1762,18 @@ export default function Home() {
     setActiveChain(toLocalChain(nextChain, locale, evidencePool));
   }, [availableChains, evidencePool, locale]);
 
+  const copyMarkdownBrief = useCallback(async () => {
+    if (!localizedMarkdownBrief) return;
+    try {
+      await navigator.clipboard.writeText(localizedMarkdownBrief);
+      setMarkdownCopyStatus("copied");
+      window.setTimeout(() => setMarkdownCopyStatus("idle"), 1600);
+    } catch {
+      setMarkdownCopyStatus("failed");
+      window.setTimeout(() => setMarkdownCopyStatus("idle"), 2200);
+    }
+  }, [localizedMarkdownBrief]);
+
   const selectedNote = notes.find((n) => n.id === selectedNodeId);
 
   const runProviderPreflight = useCallback(async () => {
@@ -1810,6 +1829,8 @@ export default function Home() {
     setRetrievalTrace([]);
     setChallengeChecks([]);
     setAnalysisBrief(null);
+    setMarkdownBrief(null);
+    setMarkdownCopyStatus("idle");
     setProductHarness(null);
     setPipelineEval(null);
     setUncertaintyReport(null);
@@ -1844,6 +1865,8 @@ export default function Home() {
         setRetrievalTrace(payload.retrieval_trace ?? []);
         setChallengeChecks(payload.challenge_checks ?? []);
         setAnalysisBrief(payload.analysis_brief ?? null);
+        setMarkdownBrief(payload.markdown_brief ?? null);
+        setMarkdownCopyStatus("idle");
         setProductHarness(payload.product_harness ?? null);
         setPipelineEval(payload.evaluation ?? null);
         setUncertaintyReport(payload.uncertainty_report ?? null);
@@ -1880,6 +1903,8 @@ export default function Home() {
       setRetrievalTrace(payload.retrieval_trace ?? []);
       setChallengeChecks(payload.challenge_checks ?? []);
       setAnalysisBrief(payload.analysis_brief ?? null);
+      setMarkdownBrief(payload.markdown_brief ?? null);
+      setMarkdownCopyStatus("idle");
       setProductHarness(payload.product_harness ?? null);
       setPipelineEval(payload.evaluation ?? null);
       setUncertaintyReport(payload.uncertainty_report ?? null);
@@ -1936,6 +1961,8 @@ export default function Home() {
       setRetrievalTrace([]);
       setChallengeChecks([]);
       setAnalysisBrief(null);
+      setMarkdownBrief(null);
+      setMarkdownCopyStatus("idle");
       setProductHarness(null);
       setPipelineEval(null);
       setUncertaintyReport(null);
@@ -2477,7 +2504,33 @@ export default function Home() {
 
         {localizedAnalysisBrief && (
           <div className="compact-item" style={{ background: "rgba(255,255,255,0.78)" }}>
-            <div className="compact-label">{locale === "en" ? "Analysis brief" : "分析结论"}</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+              <div className="compact-label" style={{ marginBottom: 0 }}>{locale === "en" ? "Analysis brief" : "分析结论"}</div>
+              {localizedMarkdownBrief && (
+                <button
+                  type="button"
+                  onClick={copyMarkdownBrief}
+                  style={{
+                    border: "1px solid rgba(49, 95, 131, 0.22)",
+                    borderRadius: "8px",
+                    padding: "4px 7px",
+                    background: markdownCopyStatus === "copied" ? "rgba(118, 166, 119, 0.18)" : "rgba(255,255,255,0.66)",
+                    color: markdownCopyStatus === "failed" ? "#a0503c" : "#315f83",
+                    cursor: "pointer",
+                    fontSize: "0.54rem",
+                    fontWeight: 800,
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {markdownCopyStatus === "copied"
+                    ? locale === "en" ? "Copied" : "已复制"
+                    : markdownCopyStatus === "failed"
+                      ? locale === "en" ? "Copy failed" : "复制失败"
+                      : locale === "en" ? "Copy Markdown" : "复制 Markdown"}
+                </button>
+              )}
+            </div>
             <div style={{ fontSize: "0.7rem", color: "#4d3c28", lineHeight: 1.5, fontWeight: 700 }}>
               {localizedAnalysisBrief.answer}
             </div>
