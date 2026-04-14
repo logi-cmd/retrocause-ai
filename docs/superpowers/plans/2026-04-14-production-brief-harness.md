@@ -176,7 +176,7 @@ git commit -m "feat: detect production brief scenarios"
 - Modify: `retrocause/api/main.py`
 - Test: `tests/test_comprehensive.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Add tests that call `_result_to_v2` with market, policy, and postmortem queries. Use existing helper patterns from `test_result_to_v2_builds_copyable_markdown_research_brief`.
 
@@ -216,7 +216,7 @@ def test_postmortem_production_brief_has_expected_sections():
 
 Implement `_sample_result_with_one_supported_chain` as a local test helper using existing `AnalysisResult`, `Evidence`, `CausalHypothesis`, and `CausalEdge` imports.
 
-- [ ] **Step 2: Run focused tests and confirm red**
+- [x] **Step 2: Run focused tests and confirm red**
 
 Run:
 
@@ -226,7 +226,7 @@ pytest tests/test_comprehensive.py::test_market_production_brief_has_expected_se
 
 Expected: failures because response fields and builders do not exist.
 
-- [ ] **Step 3: Add production brief schemas**
+- [x] **Step 3: Add production brief schemas**
 
 Add:
 
@@ -260,7 +260,7 @@ scenario: Optional[ScenarioV2] = None
 production_brief: Optional[ProductionBriefV2] = None
 ```
 
-- [ ] **Step 4: Implement deterministic section builder**
+- [x] **Step 4: Implement deterministic section builder**
 
 Add `_build_production_brief(response, scenario)`:
 
@@ -296,7 +296,7 @@ def _build_production_brief(
 
 Add helpers `_top_edge_items`, `_brief_item_from_edge`, `_verification_items`, and `_production_executive_summary`. These helpers must only use existing edge/evidence IDs and `analysis_brief`; no new LLM conclusions.
 
-- [ ] **Step 5: Wire into `_result_to_v2` and commit**
+- [x] **Step 5: Wire into `_result_to_v2` and commit**
 
 Inside `_result_to_v2`, after `analysis_brief` exists:
 

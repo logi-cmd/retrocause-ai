@@ -149,6 +149,56 @@ def _make_minimal_result() -> AnalysisResult:
     )
 
 
+def _sample_result_with_one_supported_chain(query: str) -> AnalysisResult:
+    return AnalysisResult(
+        query=query,
+        domain="general",
+        variables=[
+            CausalVariable(name="primary_driver", description="Primary driver"),
+            CausalVariable(name="observed_outcome", description="Observed outcome"),
+        ],
+        edges=[
+            CausalEdge(
+                source="primary_driver",
+                target="observed_outcome",
+                conditional_prob=0.72,
+                supporting_evidence_ids=["ev-support"],
+            )
+        ],
+        hypotheses=[
+            HypothesisChain(
+                id="chain-1",
+                name="Primary supported explanation",
+                description="A supported driver explains the observed outcome.",
+                variables=[
+                    CausalVariable(name="primary_driver", description="Primary driver"),
+                    CausalVariable(name="observed_outcome", description="Observed outcome"),
+                ],
+                edges=[
+                    CausalEdge(
+                        source="primary_driver",
+                        target="observed_outcome",
+                        conditional_prob=0.72,
+                        supporting_evidence_ids=["ev-support"],
+                    )
+                ],
+                posterior_probability=0.66,
+            )
+        ],
+        evidences=[
+            Evidence(
+                id="ev-support",
+                content="Source evidence links the primary driver to the observed outcome.",
+                source_type=EvidenceType.NEWS,
+                stance="supporting",
+                stance_basis="llm_extraction",
+                source_tier="fresh",
+                extraction_method="llm_fulltext",
+            )
+        ],
+    )
+
+
 def test_result_to_v2_minimal():
     result = _make_minimal_result()
     v2 = _result_to_v2(result, is_demo=True, demo_topic="test")
@@ -285,6 +335,48 @@ def test_scenario_override_wins_over_auto_detection():
 
     assert scenario.key == "postmortem"
     assert scenario.detection_method == "override"
+
+
+def test_market_production_brief_has_expected_sections():
+    result = _sample_result_with_one_supported_chain("Why did bitcoin fall today?")
+    response = _result_to_v2(result, is_demo=False)
+
+    assert response.scenario is not None
+    assert response.scenario.key == "market"
+    assert response.production_brief is not None
+    titles = [section.title for section in response.production_brief.sections]
+    assert "Market Drivers" in titles
+    assert "What Would Change The View" in titles
+    assert all(
+        item.evidence_ids
+        for section in response.production_brief.sections
+        for item in section.items
+        if section.kind not in {"limits", "verification"}
+    )
+
+
+def test_policy_production_brief_has_expected_sections():
+    result = _sample_result_with_one_supported_chain("Why did the ceasefire talks fail?")
+    response = _result_to_v2(result, is_demo=False)
+
+    assert response.scenario is not None
+    assert response.scenario.key == "policy_geopolitics"
+    assert response.production_brief is not None
+    assert "Negotiation Constraints" in [
+        section.title for section in response.production_brief.sections
+    ]
+
+
+def test_postmortem_production_brief_has_expected_sections():
+    result = _sample_result_with_one_supported_chain(
+        "Why did our checkout conversion drop after the release incident?"
+    )
+    response = _result_to_v2(result, is_demo=False)
+
+    assert response.scenario is not None
+    assert response.scenario.key == "postmortem"
+    assert response.production_brief is not None
+    assert "Operational Causes" in [section.title for section in response.production_brief.sections]
 
 
 def test_result_to_v2_surfaces_refutation_status_and_stance():
