@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from pathlib import Path
 
 from retrocause.api.main import (
     AnalyzeRequest,
@@ -39,6 +40,9 @@ from retrocause.models import (
     HypothesisStatus,
 )
 from retrocause.pipeline import Pipeline, PipelineContext
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
@@ -491,14 +495,142 @@ def test_result_to_v2_builds_copyable_markdown_research_brief():
     assert "## Likely Explanation" in v2.markdown_brief
     assert "Sanctions explanation" in v2.markdown_brief
     assert "## Top Reasons" in v2.markdown_brief
-    assert "sanctions pressure -> talks failed" in v2.markdown_brief
+    assert "Sanctions pressure -> Talks failed" in v2.markdown_brief
+    assert "Challenge evidence on this edge: 1" in v2.markdown_brief
     assert "## Challenge Coverage" in v2.markdown_brief
     assert "Found 1 challenge evidence" in v2.markdown_brief
     assert "## Evidence" in v2.markdown_brief
-    assert "[ev-support] Supports" in v2.markdown_brief
-    assert "[ev-refute] Challenges" in v2.markdown_brief
+    assert "[ev-support] Supports. Source: News." in v2.markdown_brief
+    assert "[ev-refute] Challenges. Source: News." in v2.markdown_brief
+    assert "EvidenceType.NEWS" not in v2.markdown_brief
     assert "## Source Trace" in v2.markdown_brief
     assert "AP News" in v2.markdown_brief
+
+
+def test_markdown_brief_explains_checked_edges_without_refuting_evidence():
+    result = AnalysisResult(
+        query="why did talks fail",
+        domain="geopolitics",
+        variables=[
+            CausalVariable(name="sanctions_dispute", description="Sanctions dispute"),
+            CausalVariable(name="failed_agreement", description="No agreement"),
+        ],
+        edges=[
+            CausalEdge(
+                source="sanctions_dispute",
+                target="failed_agreement",
+                conditional_prob=0.74,
+                supporting_evidence_ids=["ev-support"],
+            )
+        ],
+        hypotheses=[
+            HypothesisChain(
+                id="chain-1",
+                name="Sanctions and sequencing gap",
+                description="Disagreement over sanctions relief and sequencing blocked agreement.",
+                variables=[
+                    CausalVariable(name="sanctions_dispute", description="Sanctions dispute"),
+                    CausalVariable(name="failed_agreement", description="No agreement"),
+                ],
+                edges=[
+                    CausalEdge(
+                        source="sanctions_dispute",
+                        target="failed_agreement",
+                        conditional_prob=0.74,
+                        supporting_evidence_ids=["ev-support"],
+                    )
+                ],
+                posterior_probability=0.68,
+            )
+        ],
+        evidences=[
+            Evidence(
+                id="ev-support",
+                content="Officials said sanctions relief sequencing remained unresolved.",
+                source_type=EvidenceType.NEWS,
+                stance="supporting",
+                stance_basis="llm_extraction",
+                source_tier="fresh",
+                extraction_method="llm_fulltext",
+            )
+        ],
+        refutation_checks=[
+            {
+                "edge_id": "sanctions_dispute->failed_agreement",
+                "source": "sanctions_dispute",
+                "target": "failed_agreement",
+                "query": "evidence against sanctions sequencing causing failed talks",
+                "result_count": 2,
+                "refuting_count": 0,
+                "status": "checked_no_refuting_claims",
+            }
+        ],
+    )
+
+    v2 = _result_to_v2(result, is_demo=False)
+
+    assert v2.markdown_brief is not None
+    assert "No challenge evidence attached to this edge after targeted retrieval" in v2.markdown_brief
+    assert "Challenge evidence on this edge: 0" not in v2.markdown_brief
+    assert "0 challenge" not in v2.markdown_brief
+
+
+def test_frontend_renders_readable_brief_instead_of_raw_markdown_copy():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'data-testid="readable-brief"' in page_source
+    assert "Readable brief" in page_source
+    assert "Top reasons" in page_source
+    assert "What to check" in page_source
+    assert 'data-testid="copy-report-button"' in page_source
+    assert "Copy report" in page_source
+    assert "Copy Markdown" not in page_source
+
+
+def test_frontend_offers_manual_report_copy_fallback():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'data-testid="manual-copy-report"' in page_source
+    assert "Manual copy" in page_source
+    assert "select()" in page_source
+    assert "readOnly" in page_source
+
+
+def test_frontend_summarizes_source_transparency_in_readable_brief():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'data-testid="source-health-summary"' in page_source
+    assert "Sources checked" in page_source
+    assert "Stable sources" in page_source
+    assert "Failed sources" in page_source
+
+
+def test_frontend_localizes_us_iran_golden_case_labels():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert "nuclear program" in page_source
+    assert "\\u6838\\u8ba1\\u5212" in page_source
+    assert "negotiation refusal" in page_source
+    assert "\\u8c08\\u5224\\u62d2\\u7edd" in page_source
+    assert "no deal reached" in page_source
+    assert "\\u672a\\u8fbe\\u6210\\u534f\\u8bae" in page_source
+
+
+def test_frontend_keeps_specific_live_node_labels():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'return "市场影响因素"' not in page_source
+    assert "hasUnlocalizedEnglishLabel(localized)" not in page_source
 
 
 def test_result_to_v2_node_types():

@@ -582,6 +582,53 @@ def _challenge_check_v2(item: dict) -> ChallengeCheckV2:
     )
 
 
+def _humanize_identifier(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = text.replace("_", " ").replace("-", " ")
+    text = " ".join(text.split())
+    if not text:
+        return ""
+    return text[:1].upper() + text[1:]
+
+
+def _format_source_label(value: object) -> str:
+    raw = str(value or "").strip()
+    if raw.startswith("EvidenceType."):
+        raw = raw.split(".", 1)[1]
+    labels = {
+        "NEWS": "News",
+        "PAPER": "Paper",
+        "OFFICIAL": "Official",
+        "WEB": "Web",
+        "OTHER": "Other",
+    }
+    return labels.get(raw.upper(), _humanize_identifier(raw) or "Unknown")
+
+
+def _edge_challenge_phrase(edge: GraphEdgeV2) -> str:
+    refuting_count = len(edge.refuting_evidence_ids)
+    if refuting_count:
+        return f"Challenge evidence on this edge: {refuting_count}"
+    if edge.refutation_status in {
+        "checked_no_refuting_claims",
+        "no_refutation_in_retrieved_evidence",
+    }:
+        return "No challenge evidence attached to this edge after targeted retrieval"
+    if edge.refutation_status == "checked_no_results":
+        return "Challenge retrieval checked this edge but returned no source results"
+    if edge.refutation_status == "not_checked":
+        return "Challenge retrieval has not checked this edge"
+    return "No challenge evidence attached to this edge"
+
+
+def _challenge_check_phrase(refuting_count: int) -> str:
+    if refuting_count:
+        return f"challenge evidence found: {refuting_count}"
+    return "no challenge evidence found"
+
+
 def _build_analysis_brief(
     result: AnalysisResult,
     chains: List[HypothesisChainV2],
@@ -607,10 +654,10 @@ def _build_analysis_brief(
             if evidence is not None:
                 excerpt = f" Evidence: {evidence.content[:120]}"
         top_reasons.append(
-            f"{edge.source.replace('_', ' ')} -> {edge.target.replace('_', ' ')} "
+            f"{_humanize_identifier(edge.source)} -> {_humanize_identifier(edge.target)} "
             f"({edge.strength:.0%} edge strength, "
-            f"{len(edge.supporting_evidence_ids)} support, "
-            f"{len(edge.refuting_evidence_ids)} challenge).{excerpt}"
+            f"{len(edge.supporting_evidence_ids)} supporting evidence item(s), "
+            f"{_edge_challenge_phrase(edge)}).{excerpt}"
         )
 
     refuting_total = sum(check.refuting_count for check in checks)
@@ -701,8 +748,9 @@ def _build_markdown_research_brief(response: AnalyzeResponseV2) -> str:
         for check in response.challenge_checks[:5]:
             lines.append(
                 _markdown_bullet(
-                    f"{check.source.replace('_', ' ')} -> {check.target.replace('_', ' ')}: "
-                    f"{check.status}, {check.refuting_count} challenge, "
+                    f"{_humanize_identifier(check.source)} -> "
+                    f"{_humanize_identifier(check.target)}: "
+                    f"{check.status}, {_challenge_check_phrase(check.refuting_count)}, "
                     f"{check.context_count} context, {check.result_count} retrieved"
                 )
             )
@@ -722,7 +770,7 @@ def _build_markdown_research_brief(response: AnalyzeResponseV2) -> str:
             content = " ".join(item.content.split())
             lines.append(
                 _markdown_bullet(
-                    f"[{item.id}] {stance}. Source: {item.source}. "
+                    f"[{item.id}] {stance}. Source: {_format_source_label(item.source)}. "
                     f"Reliability: {item.reliability}. {content}"
                 )
             )

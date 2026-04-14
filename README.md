@@ -13,9 +13,12 @@ RetroCause 是一个开源的因果解释工作台，适合研究复杂事件的
 ## What You Get / 你会看到什么
 
 - **Evidence-backed causal chains / 带证据的因果链**: competing explanations with probabilities and linked evidence.
-- **Analysis brief / 分析简报**: a short summary of the most likely explanation and the strongest reasons.
-- **Markdown research brief / Markdown 研究简报**: copy a portable brief with question, likely explanation, reasons, challenge coverage, evidence, and source trace.
-- **Challenge coverage / 反证覆盖**: checked edges show whether refuting or context evidence was found.
+- **Readable brief / 阅读版简报**: a structured in-app report with the likely explanation, top reasons, challenge coverage, gaps, and evidence coverage.
+- **Markdown research brief / Markdown 研究简报**: copy a portable report with question, likely explanation, reasons, challenge coverage, evidence, and source trace.
+- **Copy fallback / 复制降级**: if browser clipboard permissions block one-click copy, the app opens a manual-copy report text area so the result is still portable.
+- **Specific live graph labels / 具体的 Live 图谱标签**: live causal-map notes keep the model's specific reason labels instead of collapsing untranslated nodes into generic factor names.
+- **Source health summary / 来源健康摘要**: the readable brief summarizes checked sources, stable-source coverage, failed sources, and result hits before users trust the answer.
+- **Challenge coverage / 反证覆盖**: checked edges show whether refuting or context evidence was found; if a checked edge has no attached refuting evidence, the brief says that directly instead of showing ambiguous `0 challenge` wording. 已检查的因果边会说明是否找到反证或上下文证据；如果某条边没有附着反证证据，简报会直接说明，而不是显示容易误读的 `0 challenge`。
 - **Source trace / 来源轨迹**: each live run shows which sources were queried and how many results were found.
 - **Provider preflight / 模型预检**: test whether the selected model and API key can return valid JSON before running a full analysis.
 - **Value harness / 结果价值检查**: the UI tells you whether a result is ready for review, needs more evidence, or is blocked by provider/model setup.
@@ -23,21 +26,21 @@ RetroCause 是一个开源的因果解释工作台，适合研究复杂事件的
 
 ## Current Status / 当前状态
 
-**English:** RetroCause is a research-grade alpha published as `v0.1.0-alpha.3` at [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai). The browser app, API, tests, provider preflight, challenge coverage, Markdown research brief, and value harness are working locally. A live golden-case run for the US/Iran Islamabad talks query passed on 2026-04-14 with OpenRouter DeepSeek V3.
+**English:** RetroCause is a research-grade alpha published as `v0.1.0-alpha.4` at [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai). The browser app, API, tests, provider preflight, challenge coverage, Markdown research brief, copy fallback, source-health summary, and value harness are working locally. A live golden-case run for the US/Iran Islamabad talks query passed on 2026-04-14 with OpenRouter DeepSeek V3.
 
-**中文：** RetroCause 当前是 research-grade alpha，已在 [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai) 发布 `v0.1.0-alpha.3`。本地浏览器应用、API、测试、模型预检、反证覆盖、Markdown 研究简报和结果价值检查已经可用。2026-04-14 使用 OpenRouter DeepSeek V3 跑通了“美国和伊朗在伊斯兰堡谈判结束，未达成协议的原因是什么”这个 live golden case。
+**中文：** RetroCause 当前是 research-grade alpha，已在 [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai) 发布 `v0.1.0-alpha.4`。本地浏览器应用、API、测试、模型预检、反证覆盖、Markdown 研究简报、复制降级、来源健康摘要和结果价值检查已经可用。2026-04-14 使用 OpenRouter DeepSeek V3 跑通了“美国和伊朗在伊斯兰堡谈判结束，未达成协议的原因是什么”这个 live golden case。
 
 Known limits / 已知限制：
 
 - Results are evidence-grounded explanations, not verified causal truth.
 - Live quality depends on source availability, model behavior, and API quota.
-- Some generated labels may remain partly English in Chinese mode.
+- Some generated labels may remain partly English in Chinese mode, but live graph nodes should keep their specific meaning instead of falling back to generic factor labels.
 - PDF/export/share/team workflows are not included yet.
 - OSS report output is a copyable Markdown research brief. Higher-end PDF, team, scheduled, and branded workflows belong in a future Pro tier.
 
 - 结果是“有证据锚定的解释”，不是已经被证明的因果真理。
 - Live 模式质量取决于来源可用性、模型行为和 API 额度。
-- 中文模式下，部分模型生成的长标签可能仍保留英文。
+- 中文模式下，部分模型生成的长标签可能仍保留英文，但 Live 因果图节点应保留具体含义，而不是退回成泛化的“因素”标签。
 - 当前还没有 PDF 导出、分享、团队工作流。
 - OSS 报告输出现在是可复制的 Markdown 研究简报。PDF、团队协作、定时生成、品牌模板等更适合未来 Pro 版本。
 
@@ -84,7 +87,7 @@ Example questions / 示例问题：
 3. Click **Run model preflight**.
 4. If preflight passes, click **Start analysis**.
 5. Inspect the analysis brief, source trace, challenge coverage, and value harness before trusting the result.
-6. Click **Copy Markdown** in the analysis brief card to take the result into notes, docs, or research workflows.
+6. Click **Copy report** in the readable brief card to take the Markdown report into notes, docs, or research workflows. If the browser blocks clipboard access, use the manual-copy report box that appears.
 
 中文步骤：
 
@@ -93,7 +96,7 @@ Example questions / 示例问题：
 3. 点击 **运行模型预检**。
 4. 预检通过后点击 **开始分析**。
 5. 先检查分析简报、来源轨迹、反证覆盖和 Value Harness，再决定是否相信结果。
-6. 在分析结论卡片中点击 **复制 Markdown**，把结果带进笔记、文档或研究流程。
+6. 在分析结论卡片中点击 **复制报告**，把结果带进笔记、文档或研究流程。如果浏览器拦截剪贴板权限，请使用自动展开的手动复制文本框。
 
 API keys are only needed for real analysis. Without a key, the app remains usable in demo mode.
 

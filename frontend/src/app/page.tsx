@@ -482,6 +482,15 @@ function buildAnalysisStatusNote(
 }
 
 const ZH_CAUSAL_LABELS: Array<[RegExp, string]> = [
+  [/iran nuclear program/gi, "\u4f0a\u6717\u6838\u8ba1\u5212"],
+  [/nuclear program/gi, "\u6838\u8ba1\u5212"],
+  [/negotiation refusal/gi, "\u8c08\u5224\u62d2\u7edd"],
+  [/no deal reached/gi, "\u672a\u8fbe\u6210\u534f\u8bae"],
+  [/deal reached/gi, "\u8fbe\u6210\u534f\u8bae"],
+  [/ceasefire/gi, "\u505c\u706b"],
+  [/agreement/gi, "\u534f\u8bae"],
+  [/iranian|iran'?s|iran/gi, "\u4f0a\u6717"],
+  [/united states|u\.s\.|us\b/gi, "\u7f8e\u56fd"],
   [/evidence-wide causal map/gi, "证据全图"],
   [/supported dag context/gi, "证据支撑的 DAG 上下文"],
   [/single root-to-outcome path/gi, "单条根因到结果路径"],
@@ -607,16 +616,8 @@ function hasUnlocalizedEnglish(text: string): boolean {
   return tokens.length > 2;
 }
 
-function hasUnlocalizedEnglishLabel(text: string): boolean {
-  const tokens = text.match(/[A-Za-z]{4,}/g) ?? [];
-  return tokens.length > 1;
-}
-
 function localizeCausalLabel(text: string, locale: "zh" | "en"): string {
   const localized = localizeCausalText(text, locale);
-  if (locale === "zh" && hasUnlocalizedEnglishLabel(localized)) {
-    return "市场影响因素";
-  }
   return localized;
 }
 
@@ -1202,6 +1203,7 @@ export default function Home() {
   const [analysisBrief, setAnalysisBrief] = useState<ApiAnalysisBrief | null>(null);
   const [markdownBrief, setMarkdownBrief] = useState<string | null>(null);
   const [markdownCopyStatus, setMarkdownCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const [showManualCopyReport, setShowManualCopyReport] = useState(false);
   const [productHarness, setProductHarness] = useState<ApiProductHarness | null>(null);
   const [providerPreflight, setProviderPreflight] = useState<ApiProviderPreflight | null>(null);
   const [providerPreflightLoading, setProviderPreflightLoading] = useState(false);
@@ -1230,6 +1232,7 @@ export default function Home() {
     message: string;
   } | null>(null);
   const activeRequestIdRef = useRef(0);
+  const manualCopyReportRef = useRef<HTMLTextAreaElement>(null);
 
   const mockPrimaryChain = activeChain;
   
@@ -1597,6 +1600,23 @@ export default function Home() {
     : -1;
   const sourceHitCount = retrievalTrace.reduce((sum, item) => sum + Math.max(0, item.result_count), 0);
   const traceFailureCount = retrievalTrace.filter((item) => Boolean(item.error)).length;
+  const sourceTransparencySummary = useMemo(() => {
+    const uniqueLabels = Array.from(
+      new Set(
+        retrievalTrace.map((item) =>
+          item.source_label || item.source || formatSourceKindLabel(item.source_kind, locale)
+        )
+      )
+    ).filter(Boolean);
+    const stableCount = retrievalTrace.filter((item) => item.stability === "high").length;
+    return {
+      labels: uniqueLabels.slice(0, 3),
+      checked: retrievalTrace.length,
+      stable: stableCount,
+      failed: traceFailureCount,
+      hits: sourceHitCount,
+    };
+  }, [locale, retrievalTrace, sourceHitCount, traceFailureCount]);
   const evidenceCoverageScore = Math.min(
     100,
     Math.round(
@@ -1767,12 +1787,18 @@ export default function Home() {
     try {
       await navigator.clipboard.writeText(localizedMarkdownBrief);
       setMarkdownCopyStatus("copied");
+      setShowManualCopyReport(false);
       window.setTimeout(() => setMarkdownCopyStatus("idle"), 1600);
     } catch {
       setMarkdownCopyStatus("failed");
-      window.setTimeout(() => setMarkdownCopyStatus("idle"), 2200);
+      setShowManualCopyReport(true);
     }
   }, [localizedMarkdownBrief]);
+
+  const selectManualCopyReport = useCallback(() => {
+    manualCopyReportRef.current?.focus();
+    manualCopyReportRef.current?.select();
+  }, []);
 
   const selectedNote = notes.find((n) => n.id === selectedNodeId);
 
@@ -1831,6 +1857,7 @@ export default function Home() {
     setAnalysisBrief(null);
     setMarkdownBrief(null);
     setMarkdownCopyStatus("idle");
+    setShowManualCopyReport(false);
     setProductHarness(null);
     setPipelineEval(null);
     setUncertaintyReport(null);
@@ -1867,6 +1894,7 @@ export default function Home() {
         setAnalysisBrief(payload.analysis_brief ?? null);
         setMarkdownBrief(payload.markdown_brief ?? null);
         setMarkdownCopyStatus("idle");
+        setShowManualCopyReport(false);
         setProductHarness(payload.product_harness ?? null);
         setPipelineEval(payload.evaluation ?? null);
         setUncertaintyReport(payload.uncertainty_report ?? null);
@@ -1905,6 +1933,7 @@ export default function Home() {
       setAnalysisBrief(payload.analysis_brief ?? null);
       setMarkdownBrief(payload.markdown_brief ?? null);
       setMarkdownCopyStatus("idle");
+      setShowManualCopyReport(false);
       setProductHarness(payload.product_harness ?? null);
       setPipelineEval(payload.evaluation ?? null);
       setUncertaintyReport(payload.uncertainty_report ?? null);
@@ -1963,6 +1992,7 @@ export default function Home() {
       setAnalysisBrief(null);
       setMarkdownBrief(null);
       setMarkdownCopyStatus("idle");
+      setShowManualCopyReport(false);
       setProductHarness(null);
       setPipelineEval(null);
       setUncertaintyReport(null);
@@ -2503,13 +2533,25 @@ export default function Home() {
         <h2 className="panel-title">{t("panel.hypotheses")}</h2>
 
         {localizedAnalysisBrief && (
-          <div className="compact-item" style={{ background: "rgba(255,255,255,0.78)" }}>
+          <div
+            className="compact-item"
+            data-testid="readable-brief"
+            style={{ background: "rgba(255,255,255,0.78)" }}
+          >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-              <div className="compact-label" style={{ marginBottom: 0 }}>{locale === "en" ? "Analysis brief" : "分析结论"}</div>
+              <div className="compact-label" style={{ marginBottom: 0 }}>
+                {locale === "en" ? "Readable brief" : "\u9605\u8bfb\u7248\u7b80\u62a5"}
+              </div>
               {localizedMarkdownBrief && (
                 <button
                   type="button"
+                  data-testid="copy-report-button"
                   onClick={copyMarkdownBrief}
+                  title={
+                    locale === "en"
+                      ? "Copy the portable Markdown report"
+                      : "\u590d\u5236 Markdown \u62a5\u544a"
+                  }
                   style={{
                     border: "1px solid rgba(49, 95, 131, 0.22)",
                     borderRadius: "8px",
@@ -2519,38 +2561,149 @@ export default function Home() {
                     cursor: "pointer",
                     fontSize: "0.54rem",
                     fontWeight: 800,
-                    letterSpacing: "0.04em",
+                    letterSpacing: 0,
                     textTransform: "uppercase",
                   }}
                 >
                   {markdownCopyStatus === "copied"
-                    ? locale === "en" ? "Copied" : "已复制"
+                    ? locale === "en" ? "Copied" : "\u5df2\u590d\u5236"
                     : markdownCopyStatus === "failed"
-                      ? locale === "en" ? "Copy failed" : "复制失败"
-                      : locale === "en" ? "Copy Markdown" : "复制 Markdown"}
+                      ? locale === "en" ? "Copy failed" : "\u590d\u5236\u5931\u8d25"
+                      : locale === "en" ? "Copy report" : "\u590d\u5236\u62a5\u544a"}
                 </button>
               )}
             </div>
-            <div style={{ fontSize: "0.7rem", color: "#4d3c28", lineHeight: 1.5, fontWeight: 700 }}>
+            <div style={{ marginTop: "7px", fontSize: "0.7rem", color: "#4d3c28", lineHeight: 1.5, fontWeight: 700 }}>
               {localizedAnalysisBrief.answer}
             </div>
             <div style={{ marginTop: "5px", fontSize: "0.58rem", color: "#7a6b55" }}>
-              {locale === "en" ? "Confidence signal" : "置信信号"} {localizedAnalysisBrief.confidence}%
+              {locale === "en" ? "Confidence signal" : "\u7f6e\u4fe1\u4fe1\u53f7"} {localizedAnalysisBrief.confidence}%
             </div>
-            {localizedAnalysisBrief.topReasons.slice(0, 2).map((reason, index) => (
-              <div
-                key={`brief-reason-${index}`}
-                style={{ marginTop: "7px", fontSize: "0.6rem", color: "#5c4a32", lineHeight: 1.45 }}
-              >
-                {locale === "en" ? "- " : "· "}{reason.length > 150 ? `${reason.slice(0, 150)}...` : reason}
+
+            <div style={{ marginTop: "10px" }}>
+              <div style={{ fontSize: "0.58rem", color: "#315f83", fontWeight: 800 }}>
+                {locale === "en" ? "Top reasons" : "\u5173\u952e\u539f\u56e0"}
               </div>
-            ))}
-            <div style={{ marginTop: "8px", fontSize: "0.58rem", color: challengeCheckSummary.refuting > 0 ? "#a0503c" : "#6b5a42", lineHeight: 1.45 }}>
-              {localizedAnalysisBrief.challengeSummary}
+              {localizedAnalysisBrief.topReasons.slice(0, 3).map((reason, index) => (
+                <div
+                  key={`brief-reason-${index}`}
+                  style={{
+                    marginTop: "6px",
+                    display: "grid",
+                    gridTemplateColumns: "18px minmax(0, 1fr)",
+                    gap: "5px",
+                    fontSize: "0.6rem",
+                    color: "#5c4a32",
+                    lineHeight: 1.45,
+                  }}
+                >
+                  <strong style={{ color: "#315f83" }}>{index + 1}.</strong>
+                  <span>{reason}</span>
+                </div>
+              ))}
             </div>
-            {localizedAnalysisBrief.missingEvidence[0] && (
-              <div style={{ marginTop: "6px", fontSize: "0.56rem", color: "#8b7355", lineHeight: 1.45 }}>
-                {locale === "en" ? "Missing: " : "仍缺："}{localizedAnalysisBrief.missingEvidence[0]}
+
+            <div style={{ marginTop: "10px" }}>
+              <div style={{ fontSize: "0.58rem", color: "#315f83", fontWeight: 800 }}>
+                {locale === "en" ? "What to check" : "\u5ba1\u9605\u91cd\u70b9"}
+              </div>
+              <div style={{ marginTop: "5px", fontSize: "0.58rem", color: challengeCheckSummary.refuting > 0 ? "#a0503c" : "#6b5a42", lineHeight: 1.45 }}>
+                {localizedAnalysisBrief.challengeSummary}
+              </div>
+              {localizedAnalysisBrief.missingEvidence.slice(0, 2).map((item, index) => (
+                <div
+                  key={`brief-gap-${index}`}
+                  style={{ marginTop: "5px", fontSize: "0.56rem", color: "#8b7355", lineHeight: 1.45 }}
+                >
+                  {locale === "en" ? "Gap: " : "\u7f3a\u53e3\uff1a"}{item}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: "9px", fontSize: "0.56rem", color: "#7a6b55", lineHeight: 1.45 }}>
+              {locale === "en" ? "Evidence coverage: " : "\u8bc1\u636e\u8986\u76d6\uff1a"}
+              {localizedAnalysisBrief.sourceCoverage}
+            </div>
+            {sourceTransparencySummary.checked > 0 && (
+              <div
+                data-testid="source-health-summary"
+                style={{
+                  marginTop: "9px",
+                  padding: "7px 8px",
+                  border: "1px solid rgba(49, 95, 131, 0.14)",
+                  borderRadius: "8px",
+                  background: "rgba(255,255,255,0.56)",
+                  fontSize: "0.55rem",
+                  color: "#6b5a42",
+                  lineHeight: 1.45,
+                }}
+              >
+                <div style={{ color: "#315f83", fontWeight: 800 }}>
+                  {locale === "en" ? "Sources checked" : "\u5df2\u68c0\u7d22\u6765\u6e90"}:{" "}
+                  {sourceTransparencySummary.labels.join(", ") ||
+                    (locale === "en" ? "source trace available" : "\u5df2\u8fd4\u56de\u6765\u6e90\u8f68\u8ff9")}
+                </div>
+                <div style={{ marginTop: "3px" }}>
+                  {locale === "en" ? "Stable sources" : "\u7a33\u5b9a\u6765\u6e90"}:{" "}
+                  {sourceTransparencySummary.stable}/{sourceTransparencySummary.checked}
+                  {" · "}
+                  {locale === "en" ? "Failed sources" : "\u5931\u8d25\u6765\u6e90"}:{" "}
+                  {sourceTransparencySummary.failed}
+                  {" · "}
+                  {locale === "en" ? "Hits" : "\u547d\u4e2d"}: {sourceTransparencySummary.hits}
+                </div>
+              </div>
+            )}
+            {localizedMarkdownBrief && showManualCopyReport && (
+              <div style={{ marginTop: "10px" }}>
+                <div style={{ fontSize: "0.58rem", color: "#a0503c", fontWeight: 800 }}>
+                  {locale === "en" ? "Manual copy" : "\u624b\u52a8\u590d\u5236"}
+                </div>
+                <div style={{ marginTop: "4px", fontSize: "0.55rem", color: "#7a6b55", lineHeight: 1.45 }}>
+                  {locale === "en"
+                    ? "Clipboard permission was blocked. Select the report text below and copy it manually."
+                    : "\u6d4f\u89c8\u5668\u62e6\u622a\u4e86\u526a\u8d34\u677f\u6743\u9650\u3002\u9009\u4e2d\u4e0b\u65b9\u62a5\u544a\u6587\u672c\u540e\u624b\u52a8\u590d\u5236\u3002"}
+                </div>
+                <button
+                  type="button"
+                  onClick={selectManualCopyReport}
+                  style={{
+                    marginTop: "6px",
+                    border: "1px solid rgba(49, 95, 131, 0.22)",
+                    borderRadius: "8px",
+                    padding: "5px 8px",
+                    background: "rgba(255,255,255,0.66)",
+                    color: "#315f83",
+                    cursor: "pointer",
+                    fontSize: "0.54rem",
+                    fontWeight: 800,
+                  }}
+                >
+                  {locale === "en" ? "Select report text" : "\u9009\u4e2d\u62a5\u544a\u6587\u672c"}
+                </button>
+                <textarea
+                  ref={manualCopyReportRef}
+                  data-testid="manual-copy-report"
+                  readOnly
+                  value={localizedMarkdownBrief}
+                  onFocus={selectManualCopyReport}
+                  style={{
+                    marginTop: "6px",
+                    width: "100%",
+                    minHeight: "132px",
+                    maxHeight: "220px",
+                    resize: "vertical",
+                    border: "1px solid rgba(160, 80, 60, 0.20)",
+                    borderRadius: "8px",
+                    padding: "8px",
+                    background: "rgba(255,255,255,0.72)",
+                    color: "#4d3c28",
+                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                    fontSize: "0.56rem",
+                    lineHeight: 1.5,
+                    whiteSpace: "pre-wrap",
+                  }}
+                />
               </div>
             )}
           </div>
