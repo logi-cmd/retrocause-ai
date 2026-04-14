@@ -572,6 +572,11 @@ Execute the next 1/2/3/4 sequence:
 - `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
   - Result: `safe-to-deploy`, 90/100.
   - Non-blocking warnings: this task spans implementation, tests, README, project state, and evidence; `docs/PROJECT_STATE.md` changed by the project documentation-sync rule.
+- Release docs sync
+  - Updated source `README.md` and `docs/PROJECT_STATE.md` from `v0.1.0-alpha.3` to `v0.1.0-alpha.4` before publishing the public OSS export.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"` after alpha.4 release docs sync
+  - Result: `safe-to-deploy`, 90/100.
+  - Non-blocking warnings: broad release-scope documentation/evidence/test/frontend diff and intentional `docs/PROJECT_STATE.md` continuity update.
 
 ### Behavior Notes
 
