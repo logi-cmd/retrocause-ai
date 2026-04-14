@@ -605,3 +605,44 @@ Execute the next 1/2/3/4 sequence:
 
 - Manual-copy fallback is intentionally a browser-side UX fallback; it does not replace the one-click clipboard path.
 - The Chinese localization table remains targeted phrase substitution, not a full translation layer for arbitrary model-generated labels.
+
+## 2026-04-14 Production Brief Harness Design
+
+### Task
+
+Respond to the product concern that optimizing around a single US/Iran question is not useful for production users. Design the next OSS direction as a general production-output layer for market, policy/geopolitics, and postmortem scenarios.
+
+### Files Touched
+
+- `docs/superpowers/specs/2026-04-14-production-brief-harness-design.md`
+- `docs/PROJECT_STATE.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, and the brainstorming skill before writing the design.
+- Reviewed recent commits and searched for US/Iran, readable brief, manual copy, and source-health references in the current implementation.
+- Spec self-review
+  - Result: no `TBD`, `TODO`, or placeholder markers found.
+  - Confirmed the spec covers freshness gating, evidence anchoring, OSS/Pro boundary, and single-case regression boundaries.
+- `npm test`
+  - Result: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, full pytest, and Playwright E2E script.
+  - Pytest result: 219 passed.
+  - E2E result: 604 passed, 0 failed, 0 skipped.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: `safe-to-deploy`, 95/100.
+  - Non-blocking warning: intentional `docs/PROJECT_STATE.md` continuity update.
+
+### Behavior Notes
+
+- No code implementation was performed in this pass.
+- The spec defines Production Brief Harness as OSS scope because it is core single-run usefulness.
+- Pro remains scoped to hosted, repeatable, collaborative, scheduled, saved, branded, and source-policy workflows.
+- The spec explicitly says US/Iran should remain a regression case and should not drive hardcoded product behavior.
+- The spec requires freshness gating for latest-information questions and evidence anchoring for every production claim.
+
+### Residual Risks
+
+- This is a design-only checkpoint; implementation still needs a separate plan and tests.
+- The existing frontend still contains targeted US/Iran label mappings until the implementation pass replaces them with general scenario/role labeling.

@@ -36,7 +36,7 @@ What is not done:
 
 Stabilize quality-first live evidence retrieval, especially for time-sensitive market/news queries where relative windows such as `today` and `yesterday` must not reuse stale evidence.
 
-Current UX focus: polish the portable Markdown research brief so reviewable analysis can move cleanly into individual research, market, policy, and geopolitical workflows. Pro workflow depth is documented separately so hosted reports, schedules, source policies, and team sharing do not blur the OSS boundary.
+Current UX focus: move from single-question polish to a general Production Brief Harness. OSS should support scenario-aware market, policy/geopolitics, and postmortem briefs with freshness/source-quality gating; Pro workflow depth remains hosted reports, schedules, source policies, saved comparisons, and team sharing.
 
 ## Working Rules
 
@@ -64,6 +64,7 @@ Current UX focus: polish the portable Markdown research brief so reviewable anal
 - Dogfooded the readable brief live path and removed the Chinese-mode fallback that collapsed specific live causal-map node labels into generic `市场影响因素` notes.
 - Added a manual-copy fallback for blocked clipboard permissions, a source-health summary inside the readable brief, and targeted Chinese localization for the US/Iran golden-case graph labels.
 - Published `v0.1.0-alpha.4` with readable-brief UX polish, copy fallback, source-health summary, Markdown challenge wording, and graph-label fixes.
+- Designed the next OSS direction as a general Production Brief Harness for market, policy/geopolitics, and postmortem workflows, explicitly moving single-case US/Iran optimizations into regression-test territory rather than product logic.
 
 ## Blockers
 
@@ -72,7 +73,7 @@ Current UX focus: polish the portable Markdown research brief so reviewable anal
 
 ## Next Step
 
-Post-release polish for the alpha: dogfood the readable brief and Markdown report across live domains, then implement Pro workflow depth only after the saved-run/report/share/schedule value path is validated.
+Post-release polish for the alpha: implement the Production Brief Harness so the product produces scenario-aware, evidence-anchored, freshness-gated outputs for market, policy/geopolitics, and postmortem workflows.
 
 Release-readiness pass from the user journey:
 
