@@ -23,9 +23,9 @@ RetroCause 是一个开源的因果解释工作台，适合研究复杂事件的
 
 ## Current Status / 当前状态
 
-**English:** RetroCause is a research-grade alpha published as `v0.1.0-alpha.2` at [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai). The browser app, API, tests, provider preflight, challenge coverage, Markdown research brief, and value harness are working locally. A live golden-case run for the US/Iran Islamabad talks query passed on 2026-04-13 with OpenRouter DeepSeek V3.
+**English:** RetroCause is a research-grade alpha published as `v0.1.0-alpha.3` at [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai). The browser app, API, tests, provider preflight, challenge coverage, Markdown research brief, and value harness are working locally. A live golden-case run for the US/Iran Islamabad talks query passed on 2026-04-14 with OpenRouter DeepSeek V3.
 
-**中文：** RetroCause 当前是 research-grade alpha，已在 [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai) 发布 `v0.1.0-alpha.2`。本地浏览器应用、API、测试、模型预检、反证覆盖、Markdown 研究简报和结果价值检查已经可用。2026-04-13 使用 OpenRouter DeepSeek V3 跑通了“美国和伊朗在伊斯兰堡谈判结束，未达成协议的原因是什么”这个 live golden case。
+**中文：** RetroCause 当前是 research-grade alpha，已在 [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai) 发布 `v0.1.0-alpha.3`。本地浏览器应用、API、测试、模型预检、反证覆盖、Markdown 研究简报和结果价值检查已经可用。2026-04-14 使用 OpenRouter DeepSeek V3 跑通了“美国和伊朗在伊斯兰堡谈判结束，未达成协议的原因是什么”这个 live golden case。
 
 Known limits / 已知限制：
 

@@ -22,7 +22,7 @@ What is done:
 - refreshed live golden-case screenshot under `docs/images/golden-us-iran-live-ui.png`
 - automated validation through the root `npm test` command
 - clean public GitHub repo published at `https://github.com/logi-cmd/retrocause-ai`
-- GitHub prerelease `v0.1.0-alpha.2`
+- GitHub prerelease `v0.1.0-alpha.3`
 
 What is not done:
 
@@ -34,7 +34,7 @@ What is not done:
 
 Stabilize quality-first live evidence retrieval, especially for time-sensitive market/news queries where relative windows such as `today` and `yesterday` must not reuse stale evidence.
 
-Current UX focus: polish the portable Markdown research brief so reviewable analysis can move cleanly into individual research, market, policy, and geopolitical workflows.
+Current UX focus: polish the portable Markdown research brief so reviewable analysis can move cleanly into individual research, market, policy, and geopolitical workflows. Pro workflow depth is documented separately so hosted reports, schedules, source policies, and team sharing do not blur the OSS boundary.
 
 ## Working Rules
 
@@ -54,6 +54,9 @@ Current UX focus: polish the portable Markdown research brief so reviewable anal
 - Decided the OSS/Pro product boundary: OSS gets copyable Markdown research briefs; Pro gets hosted, PDF/DOCX, team, scheduled, branded, source-policy, and saved-comparison workflows.
 - Fixed the local WSL default distro for gstack-style tooling by installing `Ubuntu-24.04`, setting it as default instead of Docker Desktop's internal `docker-desktop` distro, and configuring a non-root default user `retrocause` with passwordless sudo for development tooling.
 - Added OSS Markdown research brief output to `/api/analyze/v2` and the browser analysis card.
+- Re-ran the US/Iran Islamabad talks golden case on 2026-04-14 with OpenRouter DeepSeek V3: live, fresh, 20 evidence items, 5 chains, 3 challenge checks, product harness `ready_for_review`, and a 4k+ character Markdown brief.
+- Prepared `v0.1.0-alpha.3` as the first public alpha that includes the copyable Markdown research brief.
+- Added `docs/pro-workflow-spec.md` to keep future paid workflows scoped around repeatable value instead of adding vague "more AI" features.
 
 ## Blockers
 
@@ -62,7 +65,7 @@ Current UX focus: polish the portable Markdown research brief so reviewable anal
 
 ## Next Step
 
-Post-release polish for the alpha: polish the OSS Markdown research brief across live domains, then keep Pro workflow depth separate from the open-source inspectable core.
+Post-release polish for the alpha: publish and dogfood the OSS Markdown research brief across live domains, then implement Pro workflow depth only after the saved-run/report/share/schedule value path is validated.
 
 Release-readiness pass from the user journey:
 

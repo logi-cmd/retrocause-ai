@@ -274,3 +274,94 @@ Note: the working tree already contained unrelated local edits before this task.
 - Frontend lint warnings were cleaned for the alpha.2 polish pass.
 - The publish export intentionally omits nonessential docs and local evidence logs, so public users see the bilingual README and runnable code but not the internal planning trail.
 - The local `logi-cmd` command was not available; publishing uses the GitHub CLI authenticated as `logi-cmd`.
+
+## 2026-04-14 Alpha.3 Readiness And Pro Workflow Follow-Up
+
+### Task
+
+Execute the next 1/2/3/4 sequence:
+
+1. Run alpha.3 release readiness from a new-user path.
+2. Re-verify the US/Iran Islamabad golden case and Markdown brief with OpenRouter.
+3. Publish the OSS package as `v0.1.0-alpha.3` under `logi-cmd`.
+4. Write a Pro workflow spec from user scenarios and monetizable value.
+
+### Files Touched
+
+- `README.md`
+- `docs/PROJECT_STATE.md`
+- `docs/roadmap-and-limitations.md`
+- `docs/pro-workflow-spec.md`
+- `.agent-guardrails/evidence/current-task.md`
+- `logs/golden-us-iran-alpha3-response.json`
+- `logs/golden-us-iran-alpha3-brief.md`
+
+### Commands Run
+
+- `npm test`
+  - First result: failed at `python scripts/e2e_test.py` because the E2E script assumes backend `127.0.0.1:8000` and frontend `localhost:3005` are already running.
+  - Before that failure, frontend lint/build, `ruff check retrocause/`, and `pytest tests/ --basetemp=.pytest-tmp` all passed.
+  - Pytest result in that run: 213 passed.
+- `python -B -m uvicorn retrocause.api.main:app --host 127.0.0.1 --port 8000` via background `Start-Process`
+  - Result: FastAPI listened on `127.0.0.1:8000`.
+- `npm run dev -- -p 3005` in `frontend/` via background `Start-Process`
+  - Result: Next.js listened on `localhost:3005`.
+- `python scripts/e2e_test.py`
+  - Result: passed.
+  - E2E result: 604 passed, 0 failed, 0 skipped.
+  - Covered demo transparency, panel toggles, zoom controls, chain B switching back to chain A, node selection, language toggle, and console health.
+- OpenRouter provider preflight against `deepseek/deepseek-chat-v3-0324`
+  - Result: `status=ok`, no failure code.
+- `POST /api/analyze/v2` for `美国和伊朗在伊斯兰堡谈判结束 未达成协议的原因是什么` using OpenRouter `deepseek/deepseek-chat-v3-0324`
+  - First PowerShell client attempt: provider preflight passed, but `Invoke-WebRequest` threw a client-side `NullReferenceException` after the backend returned `200`.
+  - First Python inline attempt: returned `partial_live`, but investigation showed the Chinese query was corrupted to question marks by the Windows pipeline.
+  - Corrected Python/httpx attempt using Unicode escapes for the query: passed.
+  - Result: `analysis_mode=live`, `is_demo=false`, `freshness_status=fresh`, 20 evidence items, 5 chains, 3 challenge checks, 7 retrieval trace rows, product harness `ready_for_review`, score 1.0, Markdown brief length 4394.
+  - Saved response: `logs/golden-us-iran-alpha3-response.json`.
+  - Saved Markdown brief: `logs/golden-us-iran-alpha3-brief.md`.
+- gstack browse setup/status commands
+  - Result: Windows gstack browse binary exists under both `.codex` and `.claude` skill directories.
+  - `goto http://localhost:3005` returned 200.
+  - `console --errors` returned no console errors.
+  - Snapshot/screenshot commands only printed `[browse] Starting server...` and did not produce the requested PNG, so Playwright E2E remains the reliable browser proof for this pass.
+- `npm test` after README, project state, roadmap, Pro spec, and evidence sync
+  - Result: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, `pytest tests/ --basetemp=.pytest-tmp`, and `python scripts/e2e_test.py`.
+  - Pytest result: 213 passed.
+  - E2E result: 604 passed, 0 failed, 0 skipped.
+- Public export sync to `D:\opencode\retrocause-ai-public-20260413`
+  - Result: synchronized the OSS code and README for alpha.3.
+  - Kept nonessential docs out of the public publish package; `docs/pro-workflow-spec.md`, `docs/PROJECT_STATE.md`, and roadmap/state docs remain source-repo documentation, not public alpha.3 payload.
+  - Removed scratch scripts that contained old hardcoded OpenRouter keys before publishing.
+- Public export secret scan
+  - Result: clean for `sk-or-v1-`, `ghp_`, `gho_`, and `GITHUB_PERSONAL_ACCESS_TOKEN` patterns outside ignored build/cache/log folders.
+- Public export validation
+  - `npm --prefix frontend install`: installed frontend dependencies for verification only.
+  - `npm --prefix frontend run lint`: passed.
+  - `npm --prefix frontend run build`: passed.
+  - `ruff check retrocause/`: passed.
+  - `pytest tests/ --basetemp=.pytest-tmp`: 213 passed.
+  - `python scripts/e2e_test.py` with `RETROCAUSE_E2E_BASE=http://127.0.0.1:8002` and `RETROCAUSE_E2E_FRONTEND=http://localhost:3007`: 604 passed, 0 failed, 0 skipped.
+- Public GitHub publish
+  - Public export commit: `8c96096 Add markdown research brief alpha`.
+  - Pushed `main` to `git@github.com:logi-cmd/retrocause-ai.git`.
+  - Created GitHub prerelease `v0.1.0-alpha.3`.
+  - Release URL: `https://github.com/logi-cmd/retrocause-ai/releases/tag/v0.1.0-alpha.3`.
+- Source documentation checkpoint
+  - Source commit: `b62a692 docs: record alpha3 release and pro workflow spec`.
+  - `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"` after the source docs commit: `safe-to-deploy`, 95/100.
+  - Remaining warnings are non-blocking continuity warnings because the task intentionally updates multiple docs and `docs/PROJECT_STATE.md`.
+
+### Observations
+
+- The alpha.3 app is functionally ready for the Markdown brief OSS path: live golden case, challenge coverage, retrieval trace, value harness, and Markdown output all exist in the API result.
+- The API field is `retrieval_trace`, not `source_trace`; user-facing docs can still call this "source trace", but tests and scripts should inspect the actual field.
+- Windows Chinese API calls are fragile unless the query is sent as true UTF-8 JSON bytes or constructed without console encoding loss.
+- The top reason text can still show `0 challenge` for particular top edges even when separate challenge checks found refuting/context evidence for other checked edges. This is honest per-edge reporting, but it may still read too negative to users and should be polished later.
+
+### Residual Risks
+
+- The 2026-04-14 golden case succeeded, but the live source mix still depends on external availability and quota.
+- OpenRouter preflight passing does not guarantee every later LLM subcall will succeed under latency, quota, or provider behavior.
+- gstack browse is installed but its screenshot command did not produce an artifact in this Windows session; Playwright E2E passed and is the verification source for UI behavior.
+- Pro workflow remains documented direction only in this pass; no Pro persistence/export/team/schedule code has been added.

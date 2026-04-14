@@ -29,7 +29,7 @@
 
 ## Current OSS Completion Status
 
-The OSS version is **alpha-complete for local demonstration and inspection**, and now has one live golden-case validation:
+The OSS version is **alpha-complete for local demonstration and inspection**, and has repeated live golden-case validation:
 
 - it can be installed locally
 - it can start the backend and frontend together
@@ -37,7 +37,8 @@ The OSS version is **alpha-complete for local demonstration and inspection**, an
 - it can run the evidence-board workflow end to end
 - it can copy a Markdown research brief for notes, docs, and individual analysis workflows
 - it has automated coverage through the root `npm test` path
-- the 2026-04-13 US/Iran Islamabad talks golden case passed with OpenRouter DeepSeek V3 as a non-demo live result
+- the 2026-04-13 and 2026-04-14 US/Iran Islamabad talks golden cases passed with OpenRouter DeepSeek V3 as non-demo live results
+- the 2026-04-14 golden case produced a copyable Markdown research brief suitable for notes, docs, and individual analysis review
 
 It is **not yet release-complete as a polished public OSS launch** until release packaging is done:
 
@@ -113,6 +114,8 @@ To support that, the product still needs:
 - saved comparison runs or reusable templates
 - stronger source reliability defaults for the chosen vertical
 - clear confidence, gaps, and counterpoint sections that a user can forward without rewriting
+
+The Pro workflow shape is specified in [`docs/pro-workflow-spec.md`](./pro-workflow-spec.md).
 
 ## Near-Term Roadmap
 
@@ -192,6 +195,7 @@ To support that, the product still needs:
 - identify one repeated workflow where explanation quality is materially more valuable than generic chat answers
 - build Pro-grade comparison / report / stakeholder-facing workflows
 - invest in trust-preserving domain packs before broad feature expansion
+- use [`docs/pro-workflow-spec.md`](./pro-workflow-spec.md) as the boundary for Pro design work before writing Pro code
 
 ## Not planned for OSS by default
 
