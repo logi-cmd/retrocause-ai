@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-04-13
+Last updated: 2026-04-14
 
 ## Goal
 
@@ -27,13 +27,14 @@ What is not done:
 
 - stable `v0.1.0` release
 - first-time OSS release polish beyond the current bilingual README
-- export/share/report workflows that would make the product directly useful in repeated paid workflows
+- Markdown research brief export for OSS
+- Pro report/share/team workflows that would make the product directly useful in repeated paid workflows
 
 ## Current Focus
 
 Stabilize quality-first live evidence retrieval, especially for time-sensitive market/news queries where relative windows such as `today` and `yesterday` must not reuse stale evidence.
 
-Current UX focus: make live analysis failures and thin outputs actionable through provider preflight and a result value harness.
+Current UX focus: turn a reviewable analysis into a portable Markdown research brief for individual research, market, policy, and geopolitical workflows.
 
 ## Working Rules
 
@@ -50,14 +51,17 @@ Current UX focus: make live analysis failures and thin outputs actionable throug
 - Fixed an over-broad Chinese localization regex that turned `nuclear` into `nucl出口管理条例`.
 - Published the clean OSS alpha package to `logi-cmd/retrocause-ai` and created prerelease `v0.1.0-alpha.1`.
 - Prepared `v0.1.0-alpha.2` with README status polish, zero-warning frontend lint, and explicit Turbopack root config.
+- Decided the OSS/Pro product boundary: OSS gets copyable Markdown research briefs; Pro gets hosted, PDF/DOCX, team, scheduled, branded, source-policy, and saved-comparison workflows.
+- Fixed the local WSL default distro for gstack-style tooling by installing `Ubuntu-24.04`, setting it as default instead of Docker Desktop's internal `docker-desktop` distro, and configuring a non-root default user `retrocause` with passwordless sudo for development tooling.
 
 ## Blockers
 
-- The product can explain and inspect causal evidence, but it does not yet package outputs into a report/share/export workflow that directly supports client, team, or market-intelligence monetization.
+- The OSS product can explain and inspect causal evidence, but it does not yet export a Markdown research brief.
+- Direct monetization should stay Pro-oriented: hosted operation, repeatable delivery, PDF/DOCX, scheduled runs, team sharing, source controls, and saved comparisons.
 
 ## Next Step
 
-Post-release polish for the alpha: reduce first-run friction, clean remaining lint warnings, and design the report/share/export workflow that would create clearer repeated-use value.
+Post-release polish for the alpha: implement the OSS Markdown research brief, then keep Pro workflow depth separate from the open-source inspectable core.
 
 Release-readiness pass from the user journey:
 
@@ -65,4 +69,4 @@ Release-readiness pass from the user journey:
 2. first live run has a clear preflight path
 3. degraded output tells the user what to fix next
 4. a strong output makes the reasons, evidence, counterpoints, and gaps obvious
-5. docs state honestly that OSS is an inspectable alpha / release candidate, while Pro value would come from reliable repeated workflows and report/share/export depth
+5. docs state honestly that OSS is an inspectable alpha / release candidate, with Markdown research brief export planned for OSS and higher-end report/share/team depth reserved for Pro

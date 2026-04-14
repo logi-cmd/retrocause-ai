@@ -214,6 +214,18 @@ Note: the working tree already contained unrelated local edits before this task.
   - Blocking errors: 0.
   - Remaining warnings: cross-top-level release scope, dependency metadata config change, and project-state continuity notes.
   - Mitigation: task contract explicitly declares docs/config/guardrails/internal release polish, rollback notes, and risk justification.
+- WSL default distro investigation and fix
+  - `wsl.exe -l -v`: initially showed `docker-desktop` as the default distro and `Ubuntu-24.04` absent.
+  - `wsl.exe -d docker-desktop -e /bin/sh -c 'ls -l /bin/bash /bin/sh 2>/dev/null; cat /etc/os-release 2>/dev/null || true'`: showed `/bin/sh -> /bin/busybox`, Docker Desktop, and no `/bin/bash`.
+  - `bash.exe -lc 'echo bash-ok'`: reproduced `execvpe(/bin/bash) failed: No such file or directory`.
+  - `wsl.exe --install Ubuntu-24.04`: timed out after distro registration, but `wsl.exe -l -v` showed `Ubuntu-24.04` installed.
+  - `wsl.exe --set-default Ubuntu-24.04`: default changed from `docker-desktop` to `Ubuntu-24.04`.
+  - Killed stuck `wsl.exe` / `bash.exe` client processes after Ubuntu first-run initialization hung; WSL service remained running.
+  - `bash.exe -lc "echo bash-ok; cat /etc/os-release | head -2"`: passed and reported `Ubuntu 24.04.4 LTS`.
+- Documentation sync for OSS/Pro boundary
+  - `README.md`: added explicit OSS vs Pro boundary and stated planned OSS Markdown research brief.
+  - `docs/PROJECT_STATE.md`: updated current focus, blockers, done-recently, and next step for OSS Markdown brief vs Pro workflows.
+  - `docs/roadmap-and-limitations.md`: clarified Markdown brief as OSS, with PDF/DOCX/team/scheduled/branded workflows Pro-first.
 - Project state documentation
   - Updated `docs/PROJECT_STATE.md` to record that the OSS package is now published as an alpha prerelease rather than only a local release candidate.
 - Guardrails scope maintenance
@@ -224,6 +236,15 @@ Note: the working tree already contained unrelated local edits before this task.
   - Updated README and project state to point at `v0.1.0-alpha.2`.
   - Validated the public export with frontend lint/build, backend lint, and full pytest.
   - Validated the source repo with root `npm test` using the local `.venv` Python environment.
+- OSS/Pro boundary and local tooling follow-up
+  - Confirmed the product boundary: OSS should include a copyable Markdown research brief for individual research and analysis workflows.
+  - Confirmed Pro should focus on hosted operation, PDF/DOCX, team sharing, scheduled briefings, saved comparisons, source policy controls, domain packs, and branded deliverables.
+  - Installed `Ubuntu-24.04` under WSL and set it as the default distro instead of Docker Desktop's internal `docker-desktop` distro.
+  - Verified `bash.exe -lc "echo bash-ok"` now runs against Ubuntu 24.04.4 LTS.
+  - Configured WSL's default Ubuntu user as non-root user `retrocause`; verified `/usr/bin/bash` and passwordless sudo are available.
+  - Updated README, project state, and roadmap documentation with the OSS/Pro boundary.
+  - Re-ran root `npm test` after starting the local API and frontend services; frontend lint/build, `ruff check retrocause/`, `pytest tests/`, and script E2E all passed.
+  - Ran `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`; result was `pass-with-concerns` at 80/100 with 4 non-blocking warnings about broad historical release-scope diff, config metadata, and project-state files.
 
 ## Residual Risks
 

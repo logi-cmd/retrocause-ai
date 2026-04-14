@@ -32,11 +32,13 @@ Known limits / 已知限制：
 - Live quality depends on source availability, model behavior, and API quota.
 - Some generated labels may remain partly English in Chinese mode.
 - Report/export/share workflows are not included yet.
+- Planned OSS report output is a copyable Markdown research brief. Higher-end PDF, team, scheduled, and branded workflows belong in a future Pro tier.
 
 - 结果是“有证据锚定的解释”，不是已经被证明的因果真理。
 - Live 模式质量取决于来源可用性、模型行为和 API 额度。
 - 中文模式下，部分模型生成的长标签可能仍保留英文。
 - 当前还没有报告导出、分享、团队工作流。
+- 计划中的 OSS 报告输出会先做可复制的 Markdown 研究简报。PDF、团队协作、定时生成、品牌模板等更适合未来 Pro 版本。
 
 ## Quick Start / 快速开始
 
@@ -157,6 +159,16 @@ RetroCause 适合需要“解释事件原因，并检查推理链”的场景：
 - 地缘政治 / 新闻因果简报
 - 公司或竞品复盘
 - 证据锚定解释界面的研究 demo
+
+## OSS vs Pro Boundary / OSS 与 Pro 边界
+
+**OSS:** local, inspectable analysis for individual researchers and builders. OSS should include the evidence board, source trace, challenge coverage, value harness, and a copyable Markdown research brief so users can take the result into their own notes or analysis workflow.
+
+**Pro:** repeatable delivery workflows. Pro should justify payment through hosted runs, PDF/DOCX reports, team sharing, scheduled briefings, saved comparisons, source policy controls, domain packs, branded templates, and higher-trust operating workflows.
+
+**中文：** OSS 版服务个人研究者和开发者，重点是本地可运行、可检查、可复制。OSS 应包含证据墙、来源轨迹、反证覆盖、结果价值检查，以及可复制的 Markdown 研究简报，方便用户放进自己的笔记、投研或政策分析流程。
+
+**Pro：** Pro 版应该服务可重复交付的工作流，包括托管运行、PDF/DOCX 报告、团队分享、定时简报、历史对比、来源策略控制、垂直领域包、品牌模板和更高可信的运营能力。
 
 ## License / 许可证
 

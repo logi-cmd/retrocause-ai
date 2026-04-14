@@ -97,12 +97,17 @@ It is:
 
 The current OSS product helps users inspect causal explanations, but direct monetization usually requires an output that can be reused in a business workflow.
 
-The most credible near-term paid wedge is not generic "why answers." It is a repeatable brief/report workflow for users who need to explain market, policy, geopolitical, or competitive events to other people.
+The most credible near-term wedge is not generic "why answers." It is a repeatable brief/report workflow for users who need to explain market, policy, geopolitical, or competitive events to themselves first, and then to other people.
+
+The OSS/Pro boundary should be:
+
+- **OSS:** copyable Markdown research brief for individual judgment, personal research notes, policy/market/geopolitical analysis, and transparent review.
+- **Pro:** hosted, scheduled, team-ready, client-ready delivery workflows with PDF/DOCX, saved comparisons, branded templates, source policy controls, and operational reliability.
 
 To support that, the product still needs:
 
-- a clear "decision brief" output format
-- export/share/report generation
+- a clear Markdown research brief output format in OSS
+- Pro-grade export/share/report generation
 - saved comparison runs or reusable templates
 - stronger source reliability defaults for the chosen vertical
 - clear confidence, gaps, and counterpoint sections that a user can forward without rewriting
@@ -181,8 +186,9 @@ To support that, the product still needs:
 
 ### P6 — Shape the future Pro tier around real jobs-to-be-done
 
+- keep the OSS wedge useful: evidence board plus copyable Markdown research brief
 - identify one repeated workflow where explanation quality is materially more valuable than generic chat answers
-- build better comparison / report / stakeholder-facing workflows
+- build Pro-grade comparison / report / stakeholder-facing workflows
 - invest in trust-preserving domain packs before broad feature expansion
 
 ## Not planned for OSS by default
@@ -191,6 +197,8 @@ The following directions are intentionally treated as **Pro-first** unless the O
 
 - persistent workspaces and saved analysis history
 - shareable report workflows for teams / clients / stakeholders
+- PDF / DOCX / branded report generation
+- scheduled or monitored briefing runs
 - streaming-first long-running analysis UX
 - strong provenance ledger / audit trail for repeated operational use
 - heavy multi-agent orchestration as a core product promise
@@ -220,6 +228,7 @@ OSS should provide the full product idea clearly:
 - competing chains
 - explicit uncertainty and demo labeling
 - a usable evidence-board interface
+- copyable Markdown research brief output
 
 Pro should justify payment by improving workflow outcomes:
 
@@ -227,6 +236,7 @@ Pro should justify payment by improving workflow outcomes:
 - better explanation comparison and reuse
 - stronger scenario / intervention workflows
 - outputs that help users explain causality to teams, clients, or decision-makers
+- hosted operation, scheduled runs, team sharing, source policy controls, and branded deliverables
 
 The operational policy for rate-limit resilience, caching, concurrency budgets, and source tiers now lives in [`docs/operational-plan.md`](./operational-plan.md) so roadmap decisions can stay aligned with real operating constraints.
 
