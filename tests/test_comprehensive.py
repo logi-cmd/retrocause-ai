@@ -665,7 +665,7 @@ def test_result_to_v2_builds_copyable_markdown_research_brief():
     v2 = _result_to_v2(result, is_demo=False)
 
     assert v2.markdown_brief is not None
-    assert v2.markdown_brief.startswith("# RetroCause Research Brief")
+    assert v2.markdown_brief.startswith("# Policy / Geopolitics Brief")
     assert "## Question" in v2.markdown_brief
     assert "why did talks fail" in v2.markdown_brief
     assert "## Likely Explanation" in v2.markdown_brief
@@ -681,6 +681,24 @@ def test_result_to_v2_builds_copyable_markdown_research_brief():
     assert "EvidenceType.NEWS" not in v2.markdown_brief
     assert "## Source Trace" in v2.markdown_brief
     assert "AP News" in v2.markdown_brief
+
+
+def test_markdown_brief_title_uses_detected_market_scenario():
+    result = _sample_result_with_one_supported_chain("Why did bitcoin fall today?")
+    response = _result_to_v2(result, is_demo=False)
+
+    assert response.markdown_brief is not None
+    assert response.markdown_brief.startswith("# Market / Investment Brief")
+
+
+def test_markdown_brief_includes_production_verification_steps():
+    result = _sample_result_with_one_supported_chain("Why did bitcoin fall today?")
+    response = _result_to_v2(result, is_demo=False)
+
+    assert response.markdown_brief is not None
+    assert "## Production Brief" in response.markdown_brief
+    assert "## Next Verification Steps" in response.markdown_brief
+    assert "## Production Limits" in response.markdown_brief
 
 
 def test_markdown_brief_explains_checked_edges_without_refuting_evidence():

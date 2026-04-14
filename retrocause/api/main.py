@@ -859,8 +859,13 @@ def _markdown_bullet(text: str) -> str:
 
 
 def _build_markdown_research_brief(response: AnalyzeResponseV2) -> str:
+    title = (
+        response.production_brief.title
+        if response.production_brief
+        else "RetroCause Research Brief"
+    )
     lines: list[str] = [
-        "# RetroCause Research Brief",
+        f"# {title}",
         "",
         "## Question",
         response.query or "(empty query)",
@@ -887,6 +892,33 @@ def _build_markdown_research_brief(response: AnalyzeResponseV2) -> str:
         lines.extend(_markdown_bullet(reason) for reason in brief.top_reasons)
     else:
         lines.append("- No reason list is available.")
+
+    if response.production_brief:
+        lines.extend(["", "## Production Brief", "", response.production_brief.executive_summary])
+        for section in response.production_brief.sections:
+            lines.extend(["", f"### {section.title}"])
+            for item in section.items:
+                evidence_note = (
+                    ", ".join(item.evidence_ids)
+                    if item.evidence_ids
+                    else "verification needed"
+                )
+                lines.append(_markdown_bullet(f"{item.summary} Evidence: {evidence_note}."))
+
+        lines.extend(["", "## Next Verification Steps"])
+        if response.production_brief.next_verification_steps:
+            lines.extend(
+                _markdown_bullet(step)
+                for step in response.production_brief.next_verification_steps
+            )
+        else:
+            lines.append("- No production verification steps were generated.")
+
+        lines.extend(["", "## Production Limits"])
+        if response.production_brief.limits:
+            lines.extend(_markdown_bullet(limit) for limit in response.production_brief.limits)
+        else:
+            lines.append("- No additional production limits were generated.")
 
     lines.extend(["", "## Challenge Coverage"])
     if brief and brief.challenge_summary:

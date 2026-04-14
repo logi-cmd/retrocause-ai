@@ -634,7 +634,7 @@ git commit -m "feat: render production brief workflow"
 - Modify: `retrocause/api/main.py`
 - Test: `tests/test_comprehensive.py`
 
-- [ ] **Step 1: Write failing Markdown tests**
+- [x] **Step 1: Write failing Markdown tests**
 
 ```python
 def test_markdown_brief_title_uses_detected_market_scenario():
@@ -652,13 +652,13 @@ def test_markdown_brief_includes_production_verification_steps():
     assert "## Production Limits" in response.markdown_brief
 ```
 
-- [ ] **Step 2: Run and confirm red**
+- [x] **Step 2: Run and confirm red**
 
 ```bash
 pytest tests/test_comprehensive.py::test_markdown_brief_title_uses_detected_market_scenario tests/test_comprehensive.py::test_markdown_brief_includes_production_verification_steps -q
 ```
 
-- [ ] **Step 3: Update `_build_markdown_research_brief`**
+- [x] **Step 3: Update `_build_markdown_research_brief`**
 
 Use production brief title when present:
 
@@ -687,7 +687,7 @@ if response.production_brief:
     lines.append("")
 ```
 
-- [ ] **Step 4: Run Markdown tests and commit**
+- [x] **Step 4: Run Markdown tests and commit**
 
 ```bash
 pytest tests/test_comprehensive.py::test_markdown_brief_title_uses_detected_market_scenario tests/test_comprehensive.py::test_markdown_brief_includes_production_verification_steps tests/test_comprehensive.py::test_result_to_v2_builds_copyable_markdown_research_brief -q
