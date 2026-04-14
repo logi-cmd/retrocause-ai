@@ -502,7 +502,7 @@ git commit -m "feat: expose production scenario override"
 - Modify: `frontend/src/app/page.tsx`
 - Test: `tests/test_comprehensive.py`
 
-- [ ] **Step 1: Write failing frontend static tests**
+- [x] **Step 1: Write failing frontend static tests**
 
 ```python
 def test_frontend_renders_production_brief_and_use_case_selector():
@@ -520,13 +520,13 @@ def test_frontend_offers_three_production_use_cases():
     assert "Postmortem" in page_source
 ```
 
-- [ ] **Step 2: Run and confirm red**
+- [x] **Step 2: Run and confirm red**
 
 ```bash
 pytest tests/test_comprehensive.py::test_frontend_renders_production_brief_and_use_case_selector tests/test_comprehensive.py::test_frontend_offers_three_production_use_cases -q
 ```
 
-- [ ] **Step 3: Add response types**
+- [x] **Step 3: Add response types**
 
 Add types near existing API types:
 
@@ -564,7 +564,7 @@ type ApiProductionBrief = {
 
 Extend `AnalyzeResponseV2` with `scenario`, `production_brief`, and `production_harness`.
 
-- [ ] **Step 4: Add selector state and payload field**
+- [x] **Step 4: Add selector state and payload field**
 
 ```ts
 const [scenarioOverride, setScenarioOverride] = useState("auto");
@@ -578,7 +578,7 @@ When building analyze request body:
 scenario_override: scenarioOverride === "auto" ? null : scenarioOverride,
 ```
 
-- [ ] **Step 5: Render selector and brief**
+- [x] **Step 5: Render selector and brief**
 
 Add selector near the query controls:
 
@@ -614,7 +614,7 @@ Render production brief near readable brief:
 )}
 ```
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 ```bash
 pytest tests/test_comprehensive.py::test_frontend_renders_production_brief_and_use_case_selector tests/test_comprehensive.py::test_frontend_offers_three_production_use_cases -q

@@ -127,6 +127,49 @@ type ApiProductHarness = {
   next_actions: string[];
 };
 
+type ApiScenario = {
+  key: string;
+  label: string;
+  confidence: number;
+  detection_method: string;
+  user_value: string;
+};
+
+type ApiProductionBriefItem = {
+  title: string;
+  summary: string;
+  evidence_ids: string[];
+  confidence: number;
+};
+
+type ApiProductionBriefSection = {
+  kind: string;
+  title: string;
+  items: ApiProductionBriefItem[];
+};
+
+type ApiProductionBrief = {
+  title: string;
+  scenario_key: string;
+  executive_summary: string;
+  sections: ApiProductionBriefSection[];
+  limits: string[];
+  next_verification_steps: string[];
+};
+
+type ApiProductionHarness = {
+  status: string;
+  score: number;
+  scenario_key: string;
+  checks: Array<{
+    name: string;
+    passed: boolean;
+    severity: string;
+    message: string;
+  }>;
+  next_actions: string[];
+};
+
 type ApiProviderPreflight = {
   provider: string;
   model_name: string;
@@ -154,6 +197,9 @@ type AnalyzeResponseV2 = {
   analysis_brief?: ApiAnalysisBrief | null;
   markdown_brief?: string | null;
   product_harness?: ApiProductHarness | null;
+  scenario?: ApiScenario | null;
+  production_brief?: ApiProductionBrief | null;
+  production_harness?: ApiProductionHarness | null;
   evaluation?: {
     evidence_sufficiency: number;
     probability_coherence: number;
@@ -1205,6 +1251,10 @@ export default function Home() {
   const [markdownCopyStatus, setMarkdownCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [showManualCopyReport, setShowManualCopyReport] = useState(false);
   const [productHarness, setProductHarness] = useState<ApiProductHarness | null>(null);
+  const [scenarioOverride, setScenarioOverride] = useState("auto");
+  const [scenario, setScenario] = useState<ApiScenario | null>(null);
+  const [productionBrief, setProductionBrief] = useState<ApiProductionBrief | null>(null);
+  const [productionHarness, setProductionHarness] = useState<ApiProductionHarness | null>(null);
   const [providerPreflight, setProviderPreflight] = useState<ApiProviderPreflight | null>(null);
   const [providerPreflightLoading, setProviderPreflightLoading] = useState(false);
   const [pipelineEval, setPipelineEval] = useState<AnalyzeResponseV2["evaluation"]>(null);
@@ -1859,6 +1909,9 @@ export default function Home() {
     setMarkdownCopyStatus("idle");
     setShowManualCopyReport(false);
     setProductHarness(null);
+    setScenario(null);
+    setProductionBrief(null);
+    setProductionHarness(null);
     setPipelineEval(null);
     setUncertaintyReport(null);
     setSelectedNodeId(null);
@@ -1878,7 +1931,12 @@ export default function Home() {
     setStatusNote(locale === "en" ? "Running live analysis…" : "正在执行真实分析…");
     setLastQuery(query);
 
-    const body: Record<string, unknown> = { query, model: selectedModel, api_key: apiKey };
+    const body: Record<string, unknown> = {
+      query,
+      model: selectedModel,
+      api_key: apiKey,
+      scenario_override: scenarioOverride === "auto" ? null : scenarioOverride,
+    };
     if (selectedExplicitModel) body.explicit_model = selectedExplicitModel;
 
     // Helper to process a successful payload (shared between SSE done and fallback)
@@ -1896,6 +1954,9 @@ export default function Home() {
         setMarkdownCopyStatus("idle");
         setShowManualCopyReport(false);
         setProductHarness(payload.product_harness ?? null);
+        setScenario(payload.scenario ?? null);
+        setProductionBrief(payload.production_brief ?? null);
+        setProductionHarness(payload.production_harness ?? null);
         setPipelineEval(payload.evaluation ?? null);
         setUncertaintyReport(payload.uncertainty_report ?? null);
         setActiveChain(makePlaceholderChain(payload.query, locale));
@@ -1935,6 +1996,9 @@ export default function Home() {
       setMarkdownCopyStatus("idle");
       setShowManualCopyReport(false);
       setProductHarness(payload.product_harness ?? null);
+      setScenario(payload.scenario ?? null);
+      setProductionBrief(payload.production_brief ?? null);
+      setProductionHarness(payload.production_harness ?? null);
       setPipelineEval(payload.evaluation ?? null);
       setUncertaintyReport(payload.uncertainty_report ?? null);
       setActiveChain(toLocalChain(recommended, locale, payload.evidences));
@@ -1994,6 +2058,9 @@ export default function Home() {
       setMarkdownCopyStatus("idle");
       setShowManualCopyReport(false);
       setProductHarness(null);
+      setScenario(null);
+      setProductionBrief(null);
+      setProductionHarness(null);
       setPipelineEval(null);
       setUncertaintyReport(null);
       setEvidenceQualityFilter("all");
@@ -2113,7 +2180,15 @@ export default function Home() {
       setPipelineProgress(null);
       fallbackToDemo();
     }
-  }, [currentQuery, selectedModel, selectedExplicitModel, apiKey, locale, localizedDemo.primaryChain]);
+  }, [
+    currentQuery,
+    selectedModel,
+    selectedExplicitModel,
+    apiKey,
+    scenarioOverride,
+    locale,
+    localizedDemo.primaryChain,
+  ]);
 
   return (
     <div
@@ -2414,6 +2489,30 @@ export default function Home() {
               boxShadow: "inset 0 1px 0 rgba(255,255,255,0.78)",
             }}
           />
+          <div className="compact-label" style={{ marginTop: "10px" }}>
+            {locale === "en" ? "Use case" : "\u4f7f\u7528\u573a\u666f"}
+          </div>
+          <select
+            data-testid="scenario-selector"
+            value={scenarioOverride}
+            onChange={(event) => setScenarioOverride(event.target.value)}
+            className="analyst-input"
+            style={{ cursor: "pointer" }}
+          >
+            <option value="auto">Auto detect</option>
+            <option value="market">Market / Investment</option>
+            <option value="policy_geopolitics">Policy / Geopolitics</option>
+            <option value="postmortem">Postmortem</option>
+          </select>
+          <div style={{ fontSize: "0.56rem", color: "var(--analyst-muted)", marginTop: "5px", lineHeight: 1.35 }}>
+            {scenario
+              ? locale === "en"
+                ? `${scenario.label} (${Math.round(scenario.confidence * 100)}%, ${scenario.detection_method})`
+                : `${localizeBriefText(scenario.label, locale)} (${Math.round(scenario.confidence * 100)}%, ${scenario.detection_method})`
+              : locale === "en"
+                ? "Choose how the answer should be organized."
+                : "\u9009\u62e9\u7b54\u6848\u5e94\u5982\u4f55\u7ec4\u7ec7\u3002"}
+          </div>
           <button
             type="button"
             className="advanced-toggle"
@@ -2704,6 +2803,67 @@ export default function Home() {
                     whiteSpace: "pre-wrap",
                   }}
                 />
+              </div>
+            )}
+          </div>
+        )}
+
+        {productionBrief && (
+          <div
+            className="compact-item"
+            data-testid="production-brief"
+            style={{ background: "rgba(255,255,255,0.80)" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+              <div className="compact-label" style={{ marginBottom: 0 }}>
+                {locale === "en" ? "Production brief" : "\u751f\u4ea7\u7ea7\u7b80\u62a5"}
+              </div>
+              {productionHarness && (
+                <span
+                  style={{
+                    fontSize: "0.54rem",
+                    color: productionHarness.status === "ready_for_brief" ? "#526f44" : "#a0503c",
+                    fontWeight: 800,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  {productionHarness.status.replaceAll("_", " ")}
+                </span>
+              )}
+            </div>
+            <div style={{ marginTop: "7px", fontSize: "0.66rem", color: "#4d3c28", lineHeight: 1.5, fontWeight: 700 }}>
+              {locale === "en"
+                ? productionBrief.executive_summary
+                : localizeBriefText(productionBrief.executive_summary, locale)}
+            </div>
+            {productionBrief.sections.slice(0, 3).map((section) => (
+              <div key={section.kind} style={{ marginTop: "10px" }}>
+                <div style={{ fontSize: "0.58rem", color: "#315f83", fontWeight: 800 }}>
+                  {locale === "en" ? section.title : localizeBriefText(section.title, locale)}
+                </div>
+                {section.items.slice(0, 3).map((item) => (
+                  <div
+                    key={`${section.kind}-${item.title}`}
+                    style={{ marginTop: "6px", fontSize: "0.58rem", color: "#5c4a32", lineHeight: 1.45 }}
+                  >
+                    {locale === "en" ? item.summary : localizeBriefText(item.summary, locale)}
+                    {item.evidence_ids.length > 0 && (
+                      <span style={{ color: "#8b7355" }}>
+                        {" "}
+                        {locale === "en" ? "Evidence" : "\u8bc1\u636e"}: {item.evidence_ids.join(", ")}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+            {productionBrief.limits.length > 0 && (
+              <div style={{ marginTop: "9px", fontSize: "0.56rem", color: "#8b7355", lineHeight: 1.45 }}>
+                {locale === "en" ? "Limit: " : "\u9650\u5236\uff1a"}
+                {locale === "en"
+                  ? productionBrief.limits[0]
+                  : localizeBriefText(productionBrief.limits[0], locale)}
               </div>
             )}
           </div>

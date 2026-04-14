@@ -787,6 +787,27 @@ def test_frontend_summarizes_source_transparency_in_readable_brief():
     assert "Failed sources" in page_source
 
 
+def test_frontend_renders_production_brief_and_use_case_selector():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'data-testid="scenario-selector"' in page_source
+    assert 'data-testid="production-brief"' in page_source
+    assert "scenario_override" in page_source
+    assert "Production brief" in page_source
+
+
+def test_frontend_offers_three_production_use_cases():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Market / Investment" in page_source
+    assert "Policy / Geopolitics" in page_source
+    assert "Postmortem" in page_source
+
+
 def test_frontend_localizes_us_iran_golden_case_labels():
     page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
         encoding="utf-8"
