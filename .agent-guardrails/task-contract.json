@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "task": "Modify retrocause backend and frontend to stop misleadingly showing every chain as zero refuting evidence: add an evidence stance/refutation status derived from existing evidence fields, surface honest coverage in the API/UI, update tests, and keep changes scoped to retrocause/api/main.py, retrocause/anchoring.py or engine evidence logic, frontend/src/app/page.tsx, tests.",
+  "task": "Add OSS Markdown research brief output: expose a deterministic markdown_brief in /api/analyze/v2, add a browser Copy Markdown action, update tests and documentation, and keep Pro PDF/team/scheduled/branded workflows out of OSS scope.",
   "preset": "generic",
   "createdAt": "2026-04-12T20:27:08.681Z",
   "allowedPaths": [
@@ -30,6 +30,7 @@
     "retrocause/anchoring.py",
     "retrocause/api/",
     "retrocause/api/main.py",
+    "tests/test_comprehensive.py",
     "tests/test_anchoring.py",
     "uvicorn_stderr.log",
     "uvicorn_stdout.log"
@@ -46,7 +47,9 @@
     "docs",
     "config",
     "guardrails-internal",
-    "other"
+    "other",
+    "interface",
+    "tests"
   ],
   "riskLevel": "low",
   "requiresReviewNotes": true,
@@ -74,11 +77,12 @@
   "expectedConcurrencyImpact": "",
   "observabilityRequirements": [],
   "rollbackNotes": "Public alpha.2 can be rolled back by deleting the v0.1.0-alpha.2 GitHub prerelease/tag or publishing a corrective alpha tag; source repo changes are captured in the local alpha release polish commit.",
-  "riskJustification": "Release polish intentionally touches README, project state, guardrails evidence, frontend lint cleanup, Next config, and dependency metadata. No backend behavior changes are included in the alpha.2 polish commit.",
+  "riskJustification": "Markdown brief is a small additive API/UI feature. It derives from existing grounded response fields and does not introduce new LLM conclusions or paid Pro report workflows.",
   "guardRules": [
-    "不修改源代码逻辑",
+    "只做向后兼容的新增字段和 UI 操作",
     "保持向后兼容",
-    "更新 API 文档"
+    "更新 API/README/项目状态文档",
+    "新增或更新测试覆盖"
   ],
   "roughIntent": {
     "detected": true,

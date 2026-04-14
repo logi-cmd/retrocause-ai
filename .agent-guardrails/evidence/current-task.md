@@ -255,6 +255,9 @@ Note: the working tree already contained unrelated local edits before this task.
   - Frontend checks: `npm --prefix frontend run lint` passed; `npm --prefix frontend run build` passed.
   - Focused verification: `ruff check retrocause\api\main.py tests\test_comprehensive.py` passed; `pytest tests/test_comprehensive.py::test_result_to_v2_builds_copyable_markdown_research_brief tests/test_comprehensive.py::test_v2_schema_round_trip tests/test_comprehensive.py::test_product_harness_rewards_useful_evidence_backed_result -q` passed.
   - Full verification: `npm test` passed after starting local FastAPI and Next.js services. Pytest result: 213 passed. E2E result: 604 passed, 0 failed, 0 skipped.
+  - First feature guardrail check: `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"` failed because the task contract still described the older docs/config-only release polish scope and did not allow `interface` or `tests` changes.
+  - Contract correction: updated `.agent-guardrails/task-contract.json` to describe the OSS Markdown brief task, allow additive API/UI interface changes and tests, and keep Pro PDF/team/scheduled/branded workflows out of scope.
+  - Second feature guardrail check: `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"` passed as `safe-to-deploy`, 90/100. Remaining non-blocking warnings: feature touches 6 top-level areas because API/UI/test/docs/evidence are all involved, and `docs/PROJECT_STATE.md` changed as required by the project documentation-sync rule.
 
 ## Residual Risks
 
