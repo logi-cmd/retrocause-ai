@@ -17,6 +17,7 @@ What is done:
 - explicit demo / partial-live / live result labeling
 - provider preflight harness for API key and model checks
 - product value harness for whether a result is reviewable
+- scenario-aware OSS Production Brief Harness for market, policy/geopolitics, and postmortem workflows
 - copyable Markdown research brief in the V2 API and browser UI
 - structured in-app readable brief so Markdown is the copy/export format rather than the only reading surface
 - polished Markdown brief wording for challenge coverage, including readable source labels and clear no-refuting-evidence language instead of ambiguous `0 challenge` phrasing
@@ -36,9 +37,9 @@ What is not done:
 
 Stabilize quality-first live evidence retrieval, especially for time-sensitive market/news queries where relative windows such as `today` and `yesterday` must not reuse stale evidence.
 
-Current UX focus: move from single-question polish to a general Production Brief Harness. OSS should support scenario-aware market, policy/geopolitics, and postmortem briefs with freshness/source-quality gating; Pro workflow depth remains hosted reports, schedules, source policies, saved comparisons, and team sharing.
+Current UX focus: validate the general Production Brief Harness across real market, policy/geopolitics, and postmortem questions. OSS now supports scenario-aware single-run briefs with freshness/source-quality gating; Pro workflow depth remains hosted reports, schedules, source policies, saved comparisons, and team sharing.
 
-Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md`; next work should execute it task-by-task with tests and documentation sync.
+Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md` and has been executed through code, frontend, export, and regression cleanup. Remaining work is release validation and public alpha sync.
 
 ## Working Rules
 
@@ -68,6 +69,8 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Published `v0.1.0-alpha.4` with readable-brief UX polish, copy fallback, source-health summary, Markdown challenge wording, and graph-label fixes.
 - Designed the next OSS direction as a general Production Brief Harness for market, policy/geopolitics, and postmortem workflows, explicitly moving single-case US/Iran optimizations into regression-test territory rather than product logic.
 - Wrote the implementation plan for the Production Brief Harness, covering scenario detection, scenario override, evidence-anchored production sections, freshness/actionability gates, frontend rendering, Markdown export, single-case cleanup, docs, tests, and guardrails verification.
+- Added the OSS Production Brief Harness for market, policy/geopolitics, and postmortem workflows.
+- Removed single-case US/Iran product labeling from frontend logic and kept it as regression context only.
 
 ## Blockers
 
@@ -76,7 +79,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 
 ## Next Step
 
-Post-release polish for the alpha: execute the Production Brief Harness implementation plan so the product produces scenario-aware, evidence-anchored, freshness-gated outputs for market, policy/geopolitics, and postmortem workflows.
+Release validation/public alpha sync for the Production Brief Harness: run the full local verification suite, guardrails check, and then prepare the next public alpha update once the branch is reviewed.
 
 Release-readiness pass from the user journey:
 

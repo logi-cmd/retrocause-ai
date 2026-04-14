@@ -769,7 +769,7 @@ git commit -m "refactor: remove single-case graph label product logic"
 - Modify: `docs/PROJECT_STATE.md`
 - Modify: `.agent-guardrails/evidence/current-task.md`
 
-- [ ] **Step 1: Update README in both languages**
+- [x] **Step 1: Update README in both languages**
 
 Add to `What You Get / 你会看到什么`:
 
@@ -783,7 +783,7 @@ Add to `OSS vs Pro Boundary`:
 OSS includes local single-run production briefs and Markdown export. Pro remains the place for hosted recurring runs, PDF/DOCX, saved comparisons, team review, source-policy controls, and branded delivery.
 ```
 
-- [ ] **Step 2: Update PROJECT_STATE**
+- [x] **Step 2: Update PROJECT_STATE**
 
 Move current focus from planned implementation to shipped behavior once Tasks 1-7 pass:
 
@@ -794,7 +794,7 @@ Move current focus from planned implementation to shipped behavior once Tasks 1-
 
 Set `Next Step` to release validation/public alpha sync.
 
-- [ ] **Step 3: Update evidence note**
+- [x] **Step 3: Update evidence note**
 
 Append:
 
@@ -822,7 +822,7 @@ Implement the approved Production Brief Harness across API, frontend, Markdown e
 - Latest-info readiness still depends on available live retrieval sources and provider behavior.
 ```
 
-- [ ] **Step 4: Run full verification**
+- [x] **Step 4: Run full verification**
 
 ```bash
 npm test
@@ -833,7 +833,7 @@ Expected:
 - `npm test` passes frontend lint/build, `ruff check retrocause/`, pytest, and E2E.
 - Guardrails reports no blocking issues. Non-blocking documentation-scope warnings are acceptable only if they match the documented task scope and evidence note.
 
-- [ ] **Step 5: Final commit**
+- [x] **Step 5: Final commit**
 
 ```bash
 git add README.md docs/PROJECT_STATE.md .agent-guardrails/evidence/current-task.md

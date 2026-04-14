@@ -22,13 +22,14 @@ RetroCause 是一个开源的因果解释工作台，适合研究复杂事件的
 - **Source trace / 来源轨迹**: each live run shows which sources were queried and how many results were found.
 - **Provider preflight / 模型预检**: test whether the selected model and API key can return valid JSON before running a full analysis.
 - **Value harness / 结果价值检查**: the UI tells you whether a result is ready for review, needs more evidence, or is blocked by provider/model setup.
+- **Production brief modes / 生产级简报模式**: auto-detect or choose Market / Investment, Policy / Geopolitics, or Postmortem so the output explains what a user can decide, what evidence supports it, what could change the view, and what is not ready yet.
 - **Demo transparency / Demo 透明标记**: demo, partial-live, and live modes are labeled explicitly.
 
 ## Current Status / 当前状态
 
-**English:** RetroCause is a research-grade alpha published as `v0.1.0-alpha.4` at [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai). The browser app, API, tests, provider preflight, challenge coverage, Markdown research brief, copy fallback, source-health summary, and value harness are working locally. A live golden-case run for the US/Iran Islamabad talks query passed on 2026-04-14 with OpenRouter DeepSeek V3.
+**English:** RetroCause is a research-grade alpha published as `v0.1.0-alpha.4` at [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai). The browser app, API, tests, provider preflight, challenge coverage, Markdown research brief, copy fallback, source-health summary, value harness, and scenario-aware production brief harness are working locally. A live golden-case run for the US/Iran Islamabad talks query passed on 2026-04-14 with OpenRouter DeepSeek V3.
 
-**中文：** RetroCause 当前是 research-grade alpha，已在 [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai) 发布 `v0.1.0-alpha.4`。本地浏览器应用、API、测试、模型预检、反证覆盖、Markdown 研究简报、复制降级、来源健康摘要和结果价值检查已经可用。2026-04-14 使用 OpenRouter DeepSeek V3 跑通了“美国和伊朗在伊斯兰堡谈判结束，未达成协议的原因是什么”这个 live golden case。
+**中文：** RetroCause 当前是 research-grade alpha，已在 [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai) 发布 `v0.1.0-alpha.4`。本地浏览器应用、API、测试、模型预检、反证覆盖、Markdown 研究简报、复制降级、来源健康摘要、结果价值检查和场景化生产级简报 harness 已经可用。2026-04-14 使用 OpenRouter DeepSeek V3 跑通了“美国和伊朗在伊斯兰堡谈判结束，未达成协议的原因是什么”这个 live golden case。
 
 Known limits / 已知限制：
 
@@ -37,12 +38,14 @@ Known limits / 已知限制：
 - Some generated labels may remain partly English in Chinese mode, but live graph nodes should keep their specific meaning instead of falling back to generic factor labels.
 - PDF/export/share/team workflows are not included yet.
 - OSS report output is a copyable Markdown research brief. Higher-end PDF, team, scheduled, and branded workflows belong in a future Pro tier.
+- OSS includes local single-run production briefs and Markdown export. Pro remains the place for hosted recurring runs, PDF/DOCX, saved comparisons, team review, source-policy controls, and branded delivery.
 
 - 结果是“有证据锚定的解释”，不是已经被证明的因果真理。
 - Live 模式质量取决于来源可用性、模型行为和 API 额度。
 - 中文模式下，部分模型生成的长标签可能仍保留英文，但 Live 因果图节点应保留具体含义，而不是退回成泛化的“因素”标签。
 - 当前还没有 PDF 导出、分享、团队工作流。
 - OSS 报告输出现在是可复制的 Markdown 研究简报。PDF、团队协作、定时生成、品牌模板等更适合未来 Pro 版本。
+- OSS 包含本地单次生产级简报和 Markdown 导出。托管定时运行、PDF/DOCX、历史对比、团队审阅、来源策略控制和品牌化交付仍属于未来 Pro 方向。
 
 ## Quick Start / 快速开始
 
@@ -85,18 +88,20 @@ Example questions / 示例问题：
 1. Open **Model settings** on the homepage.
 2. Paste your OpenRouter API key.
 3. Click **Run model preflight**.
-4. If preflight passes, click **Start analysis**.
-5. Inspect the analysis brief, source trace, challenge coverage, and value harness before trusting the result.
-6. Click **Copy report** in the readable brief card to take the Markdown report into notes, docs, or research workflows. If the browser blocks clipboard access, use the manual-copy report box that appears.
+4. Choose **Auto detect**, **Market / Investment**, **Policy / Geopolitics**, or **Postmortem** in the use-case selector.
+5. If preflight passes, click **Start analysis**.
+6. Inspect the production brief, analysis brief, source trace, challenge coverage, and value harness before trusting the result.
+7. Click **Copy report** in the readable brief card to take the Markdown report into notes, docs, or research workflows. If the browser blocks clipboard access, use the manual-copy report box that appears.
 
 中文步骤：
 
 1. 打开首页左侧的 **模型与密钥设置**。
 2. 粘贴你的 OpenRouter API key。
 3. 点击 **运行模型预检**。
-4. 预检通过后点击 **开始分析**。
-5. 先检查分析简报、来源轨迹、反证覆盖和 Value Harness，再决定是否相信结果。
-6. 在分析结论卡片中点击 **复制报告**，把结果带进笔记、文档或研究流程。如果浏览器拦截剪贴板权限，请使用自动展开的手动复制文本框。
+4. 在使用场景选择器里选择 **自动识别**、**市场 / 投资**、**政策 / 地缘政治** 或 **复盘**。
+5. 预检通过后点击 **开始分析**。
+6. 先检查生产级简报、分析简报、来源轨迹、反证覆盖和 Value Harness，再决定是否相信结果。
+7. 在分析结论卡片中点击 **复制报告**，把结果带进笔记、文档或研究流程。如果浏览器拦截剪贴板权限，请使用自动展开的手动复制文本框。
 
 API keys are only needed for real analysis. Without a key, the app remains usable in demo mode.
 
@@ -168,11 +173,11 @@ RetroCause 适合需要“解释事件原因，并检查推理链”的场景：
 
 ## OSS vs Pro Boundary / OSS 与 Pro 边界
 
-**OSS:** local, inspectable analysis for individual researchers and builders. OSS should include the evidence board, source trace, challenge coverage, value harness, and a copyable Markdown research brief so users can take the result into their own notes or analysis workflow.
+**OSS:** local, inspectable analysis for individual researchers and builders. OSS should include the evidence board, source trace, challenge coverage, value harness, scenario-aware single-run production briefs, and a copyable Markdown research brief so users can take the result into their own notes or analysis workflow.
 
 **Pro:** repeatable delivery workflows. Pro should justify payment through hosted runs, PDF/DOCX reports, team sharing, scheduled briefings, saved comparisons, source policy controls, domain packs, branded templates, and higher-trust operating workflows.
 
-**中文：** OSS 版服务个人研究者和开发者，重点是本地可运行、可检查、可复制。OSS 应包含证据墙、来源轨迹、反证覆盖、结果价值检查，以及可复制的 Markdown 研究简报，方便用户放进自己的笔记、投研或政策分析流程。
+**中文：** OSS 版服务个人研究者和开发者，重点是本地可运行、可检查、可复制。OSS 应包含证据墙、来源轨迹、反证覆盖、结果价值检查、场景化单次生产级简报，以及可复制的 Markdown 研究简报，方便用户放进自己的笔记、投研或政策分析流程。
 
 **Pro：** Pro 版应该服务可重复交付的工作流，包括托管运行、PDF/DOCX 报告、团队分享、定时简报、历史对比、来源策略控制、垂直领域包、品牌模板和更高可信的运营能力。
 

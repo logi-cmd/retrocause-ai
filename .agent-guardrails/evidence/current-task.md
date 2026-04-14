@@ -218,6 +218,66 @@ Note: the working tree already contained unrelated local edits before this task.
   - `wsl.exe -l -v`: initially showed `docker-desktop` as the default distro and `Ubuntu-24.04` absent.
   - `wsl.exe -d docker-desktop -e /bin/sh -c 'ls -l /bin/bash /bin/sh 2>/dev/null; cat /etc/os-release 2>/dev/null || true'`: showed `/bin/sh -> /bin/busybox`, Docker Desktop, and no `/bin/bash`.
   - `bash.exe -lc 'echo bash-ok'`: reproduced `execvpe(/bin/bash) failed: No such file or directory`.
+
+## 2026-04-14 Production Brief Harness Implementation
+
+### Task
+
+Implement the approved Production Brief Harness across API, frontend, Markdown export, tests, and docs.
+
+### Files Touched
+
+- `retrocause/api/main.py`
+- `frontend/src/app/page.tsx`
+- `tests/test_comprehensive.py`
+- `README.md`
+- `docs/PROJECT_STATE.md`
+- `docs/superpowers/plans/2026-04-14-production-brief-harness.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- `pytest tests/test_comprehensive.py::test_detects_market_production_scenario tests/test_comprehensive.py::test_detects_policy_geopolitics_production_scenario tests/test_comprehensive.py::test_detects_postmortem_production_scenario tests/test_comprehensive.py::test_scenario_override_wins_over_auto_detection -q`
+  - Result: passed after adding scenario detection and override handling.
+- `pytest tests/test_comprehensive.py::test_market_production_brief_has_expected_sections tests/test_comprehensive.py::test_policy_production_brief_has_expected_sections tests/test_comprehensive.py::test_postmortem_production_brief_has_expected_sections -q`
+  - Result: passed after adding production brief sections.
+- `pytest tests/test_comprehensive.py::test_recent_market_result_needs_fresh_evidence_before_ready tests/test_comprehensive.py::test_policy_result_with_weak_source_trace_surfaces_source_risk tests/test_comprehensive.py::test_postmortem_without_internal_evidence_is_not_actionable -q`
+  - Result: passed after adding production harness readiness checks.
+- `pytest tests/test_comprehensive.py::test_analyze_v2_accepts_scenario_override_without_live_key -q`
+  - Result: passed after wiring `scenario_override` into V2 analysis paths.
+- `pytest tests/test_comprehensive.py::test_frontend_renders_production_brief_and_use_case_selector tests/test_comprehensive.py::test_frontend_offers_three_production_use_cases -q`
+  - Result: passed after frontend selector and production brief rendering.
+- `pytest tests/test_comprehensive.py::test_markdown_brief_title_uses_detected_market_scenario tests/test_comprehensive.py::test_markdown_brief_includes_production_verification_steps -q`
+  - Result: passed after Markdown export included production brief sections.
+- `pytest tests/test_comprehensive.py::test_frontend_does_not_hardcode_single_case_product_labels -q`
+  - Result: failed as expected before removing single-case frontend labels.
+- `pytest tests/test_comprehensive.py::test_frontend_does_not_hardcode_single_case_product_labels tests/test_comprehensive.py::test_frontend_keeps_specific_live_node_labels -q`
+  - Result: passed after removing single-case graph-label product logic.
+- `npm --prefix frontend run lint`
+  - Result: passed.
+- `ruff check retrocause\api\main.py tests\test_comprehensive.py`
+  - Result: passed.
+- `pytest tests/test_comprehensive.py::test_markdown_brief_explains_checked_edges_without_refuting_evidence tests/test_comprehensive.py::test_markdown_brief_includes_production_verification_steps tests/test_comprehensive.py::test_policy_production_brief_has_expected_sections -q`
+  - Result: passed after replacing the new `0 challenge evidence` phrasing with an explicit no-challenge-evidence sentence.
+- `ruff check retrocause\api\main.py`
+  - Result: passed.
+- `npm test`
+  - First result: failed only because `test_markdown_brief_explains_checked_edges_without_refuting_evidence` caught a new `0 challenge evidence` phrase in production brief verification text.
+- `npm test`
+  - Final result: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, `pytest tests/ --basetemp=.pytest-tmp`, and `python scripts/e2e_test.py`.
+  - Pytest result: 234 passed.
+  - E2E result: 604 passed, 0 failed, 0 skipped.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: passed with trust score 95/100.
+  - Blocking errors: 0.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed; this is expected because project documentation sync is required for this task.
+
+### Residual Risks
+
+- Scenario detection is deterministic keyword routing; deeper domain-specific source policies remain Pro/future work.
+- Latest-info readiness still depends on available live retrieval sources and provider behavior.
+- Production brief sections are evidence-anchored, but high-stakes publication still needs human review of source quality and missing-evidence notes.
   - `wsl.exe --install Ubuntu-24.04`: timed out after distro registration, but `wsl.exe -l -v` showed `Ubuntu-24.04` installed.
   - `wsl.exe --set-default Ubuntu-24.04`: default changed from `docker-desktop` to `Ubuntu-24.04`.
   - Killed stuck `wsl.exe` / `bash.exe` client processes after Ubuntu first-run initialization hung; WSL service remained running.
