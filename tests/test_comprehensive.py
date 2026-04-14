@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from pathlib import Path
 
 from retrocause.api.main import (
     AnalyzeRequest,
@@ -39,6 +40,9 @@ from retrocause.models import (
     HypothesisStatus,
 )
 from retrocause.pipeline import Pipeline, PipelineContext
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
@@ -569,6 +573,20 @@ def test_markdown_brief_explains_checked_edges_without_refuting_evidence():
     assert "No challenge evidence attached to this edge after targeted retrieval" in v2.markdown_brief
     assert "Challenge evidence on this edge: 0" not in v2.markdown_brief
     assert "0 challenge" not in v2.markdown_brief
+
+
+def test_frontend_renders_readable_brief_instead_of_raw_markdown_copy():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'data-testid="readable-brief"' in page_source
+    assert "Readable brief" in page_source
+    assert "Top reasons" in page_source
+    assert "What to check" in page_source
+    assert 'data-testid="copy-report-button"' in page_source
+    assert "Copy report" in page_source
+    assert "Copy Markdown" not in page_source
 
 
 def test_result_to_v2_node_types():

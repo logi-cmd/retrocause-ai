@@ -416,3 +416,50 @@ Polish the OSS Markdown research brief so users do not misread per-edge zero ref
 
 - The wording is clearer in English Markdown output, but deeper Chinese localization of generated brief sections remains future work.
 - Challenge retrieval is still bounded to selected edges; "no challenge evidence found" means none was attached/found in that targeted retrieval pass, not that no refutation exists anywhere.
+
+## 2026-04-14 In-App Readable Brief Polish
+
+### Task
+
+Make the OSS report output friendlier for product reading: keep Markdown as the portable copy/export format, but render a structured in-app readable brief by default.
+
+### Files Touched
+
+- `frontend/src/app/page.tsx`
+- `tests/test_comprehensive.py`
+- `README.md`
+- `docs/PROJECT_STATE.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- `python scripts\e2e_test.py`
+  - TDD red result while shaping the behavior: failed with 604 passed, 2 failed.
+  - Missing behavior: no `[data-testid='readable-brief']` structured report and copy action still read like raw Markdown.
+- `python scripts\e2e_test.py`
+  - Result after implementation: passed.
+  - E2E result: 606 passed, 0 failed, 0 skipped.
+- `pytest tests\test_comprehensive.py::test_frontend_renders_readable_brief_instead_of_raw_markdown_copy -q`
+  - Result after moving the regression into the task-contract `tests/` scope: passed.
+- `npm --prefix frontend run lint`
+  - Result: passed.
+- `npm test`
+  - Result: passed.
+  - Included frontend lint, frontend build, `ruff check retrocause/`, full pytest, and Playwright E2E script.
+  - Pytest result: 215 passed.
+  - E2E result: 604 passed, 0 failed, 0 skipped.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result after committing this change: passed as `safe-to-deploy`, 90/100.
+  - Non-blocking warnings: the change spans implementation, tests, README, project state, and evidence; `docs/PROJECT_STATE.md` changed by project documentation-sync rule.
+
+### Behavior Notes
+
+- The browser now labels the result card as `Readable brief` / `阅读版简报`.
+- The in-app card shows sections for likely explanation, confidence signal, top reasons, what to check, gaps, and evidence coverage.
+- The copy button is now `Copy report` / `复制报告`; its title still makes clear that the portable format is Markdown.
+- The API still returns `markdown_brief`, preserving OSS developer and integration value.
+
+### Residual Risks
+
+- This pass improves the existing left-panel card rather than building a full long-form report view.
+- The readable brief still depends on current `analysis_brief` fields and does not add a new LLM-written narrative.

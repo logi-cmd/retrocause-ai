@@ -18,6 +18,7 @@ What is done:
 - provider preflight harness for API key and model checks
 - product value harness for whether a result is reviewable
 - copyable Markdown research brief in the V2 API and browser UI
+- structured in-app readable brief so Markdown is the copy/export format rather than the only reading surface
 - polished Markdown brief wording for challenge coverage, including readable source labels and clear no-refuting-evidence language instead of ambiguous `0 challenge` phrasing
 - live US/Iran Islamabad talks golden-case validation with OpenRouter DeepSeek V3
 - refreshed live golden-case screenshot under `docs/images/golden-us-iran-live-ui.png`
@@ -59,6 +60,7 @@ Current UX focus: polish the portable Markdown research brief so reviewable anal
 - Prepared `v0.1.0-alpha.3` as the first public alpha that includes the copyable Markdown research brief.
 - Added `docs/pro-workflow-spec.md` to keep future paid workflows scoped around repeatable value instead of adding vague "more AI" features.
 - Polished the Markdown research brief so top reasons use human-readable source/edge labels and checked edges with no attached refuting evidence explain that state directly.
+- Upgraded the browser analysis card into a structured readable brief with top reasons, what-to-check, evidence coverage, and a `Copy report` action that still exports Markdown.
 
 ## Blockers
 
@@ -67,7 +69,7 @@ Current UX focus: polish the portable Markdown research brief so reviewable anal
 
 ## Next Step
 
-Post-release polish for the alpha: publish and dogfood the OSS Markdown research brief across live domains, then implement Pro workflow depth only after the saved-run/report/share/schedule value path is validated.
+Post-release polish for the alpha: dogfood the readable brief and Markdown report across live domains, then implement Pro workflow depth only after the saved-run/report/share/schedule value path is validated.
 
 Release-readiness pass from the user journey:
 

@@ -2503,13 +2503,25 @@ export default function Home() {
         <h2 className="panel-title">{t("panel.hypotheses")}</h2>
 
         {localizedAnalysisBrief && (
-          <div className="compact-item" style={{ background: "rgba(255,255,255,0.78)" }}>
+          <div
+            className="compact-item"
+            data-testid="readable-brief"
+            style={{ background: "rgba(255,255,255,0.78)" }}
+          >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-              <div className="compact-label" style={{ marginBottom: 0 }}>{locale === "en" ? "Analysis brief" : "分析结论"}</div>
+              <div className="compact-label" style={{ marginBottom: 0 }}>
+                {locale === "en" ? "Readable brief" : "\u9605\u8bfb\u7248\u7b80\u62a5"}
+              </div>
               {localizedMarkdownBrief && (
                 <button
                   type="button"
+                  data-testid="copy-report-button"
                   onClick={copyMarkdownBrief}
+                  title={
+                    locale === "en"
+                      ? "Copy the portable Markdown report"
+                      : "\u590d\u5236 Markdown \u62a5\u544a"
+                  }
                   style={{
                     border: "1px solid rgba(49, 95, 131, 0.22)",
                     borderRadius: "8px",
@@ -2519,40 +2531,69 @@ export default function Home() {
                     cursor: "pointer",
                     fontSize: "0.54rem",
                     fontWeight: 800,
-                    letterSpacing: "0.04em",
+                    letterSpacing: 0,
                     textTransform: "uppercase",
                   }}
                 >
                   {markdownCopyStatus === "copied"
-                    ? locale === "en" ? "Copied" : "已复制"
+                    ? locale === "en" ? "Copied" : "\u5df2\u590d\u5236"
                     : markdownCopyStatus === "failed"
-                      ? locale === "en" ? "Copy failed" : "复制失败"
-                      : locale === "en" ? "Copy Markdown" : "复制 Markdown"}
+                      ? locale === "en" ? "Copy failed" : "\u590d\u5236\u5931\u8d25"
+                      : locale === "en" ? "Copy report" : "\u590d\u5236\u62a5\u544a"}
                 </button>
               )}
             </div>
-            <div style={{ fontSize: "0.7rem", color: "#4d3c28", lineHeight: 1.5, fontWeight: 700 }}>
+            <div style={{ marginTop: "7px", fontSize: "0.7rem", color: "#4d3c28", lineHeight: 1.5, fontWeight: 700 }}>
               {localizedAnalysisBrief.answer}
             </div>
             <div style={{ marginTop: "5px", fontSize: "0.58rem", color: "#7a6b55" }}>
-              {locale === "en" ? "Confidence signal" : "置信信号"} {localizedAnalysisBrief.confidence}%
+              {locale === "en" ? "Confidence signal" : "\u7f6e\u4fe1\u4fe1\u53f7"} {localizedAnalysisBrief.confidence}%
             </div>
-            {localizedAnalysisBrief.topReasons.slice(0, 2).map((reason, index) => (
-              <div
-                key={`brief-reason-${index}`}
-                style={{ marginTop: "7px", fontSize: "0.6rem", color: "#5c4a32", lineHeight: 1.45 }}
-              >
-                {locale === "en" ? "- " : "· "}{reason.length > 150 ? `${reason.slice(0, 150)}...` : reason}
+
+            <div style={{ marginTop: "10px" }}>
+              <div style={{ fontSize: "0.58rem", color: "#315f83", fontWeight: 800 }}>
+                {locale === "en" ? "Top reasons" : "\u5173\u952e\u539f\u56e0"}
               </div>
-            ))}
-            <div style={{ marginTop: "8px", fontSize: "0.58rem", color: challengeCheckSummary.refuting > 0 ? "#a0503c" : "#6b5a42", lineHeight: 1.45 }}>
-              {localizedAnalysisBrief.challengeSummary}
+              {localizedAnalysisBrief.topReasons.slice(0, 3).map((reason, index) => (
+                <div
+                  key={`brief-reason-${index}`}
+                  style={{
+                    marginTop: "6px",
+                    display: "grid",
+                    gridTemplateColumns: "18px minmax(0, 1fr)",
+                    gap: "5px",
+                    fontSize: "0.6rem",
+                    color: "#5c4a32",
+                    lineHeight: 1.45,
+                  }}
+                >
+                  <strong style={{ color: "#315f83" }}>{index + 1}.</strong>
+                  <span>{reason}</span>
+                </div>
+              ))}
             </div>
-            {localizedAnalysisBrief.missingEvidence[0] && (
-              <div style={{ marginTop: "6px", fontSize: "0.56rem", color: "#8b7355", lineHeight: 1.45 }}>
-                {locale === "en" ? "Missing: " : "仍缺："}{localizedAnalysisBrief.missingEvidence[0]}
+
+            <div style={{ marginTop: "10px" }}>
+              <div style={{ fontSize: "0.58rem", color: "#315f83", fontWeight: 800 }}>
+                {locale === "en" ? "What to check" : "\u5ba1\u9605\u91cd\u70b9"}
               </div>
-            )}
+              <div style={{ marginTop: "5px", fontSize: "0.58rem", color: challengeCheckSummary.refuting > 0 ? "#a0503c" : "#6b5a42", lineHeight: 1.45 }}>
+                {localizedAnalysisBrief.challengeSummary}
+              </div>
+              {localizedAnalysisBrief.missingEvidence.slice(0, 2).map((item, index) => (
+                <div
+                  key={`brief-gap-${index}`}
+                  style={{ marginTop: "5px", fontSize: "0.56rem", color: "#8b7355", lineHeight: 1.45 }}
+                >
+                  {locale === "en" ? "Gap: " : "\u7f3a\u53e3\uff1a"}{item}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: "9px", fontSize: "0.56rem", color: "#7a6b55", lineHeight: 1.45 }}>
+              {locale === "en" ? "Evidence coverage: " : "\u8bc1\u636e\u8986\u76d6\uff1a"}
+              {localizedAnalysisBrief.sourceCoverage}
+            </div>
           </div>
         )}
 
