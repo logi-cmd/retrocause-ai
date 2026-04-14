@@ -245,6 +245,16 @@ Note: the working tree already contained unrelated local edits before this task.
   - Updated README, project state, and roadmap documentation with the OSS/Pro boundary.
   - Re-ran root `npm test` after starting the local API and frontend services; frontend lint/build, `ruff check retrocause/`, `pytest tests/`, and script E2E all passed.
   - Ran `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`; result was `pass-with-concerns` at 80/100 with 4 non-blocking warnings about broad historical release-scope diff, config metadata, and project-state files.
+- OSS Markdown research brief follow-up
+  - Added `markdown_brief` to the V2 API response.
+  - Built the Markdown brief deterministically from existing grounded response fields: query, run status, likely explanation, top reasons, challenge coverage, gaps, evidence, source trace, and use note.
+  - Added a browser "Copy Markdown" action on the analysis brief card.
+  - Updated README, project state, and roadmap docs to state that the OSS Markdown brief now exists, while PDF/team/scheduled/branded workflows remain Pro-oriented.
+  - TDD red check: `pytest tests/test_comprehensive.py::test_result_to_v2_builds_copyable_markdown_research_brief -q` failed because `AnalyzeResponseV2` had no `markdown_brief`.
+  - Green check: `pytest tests/test_comprehensive.py::test_result_to_v2_builds_copyable_markdown_research_brief tests/test_comprehensive.py::test_result_to_v2_surfaces_challenge_checks_and_analysis_brief -q` passed.
+  - Frontend checks: `npm --prefix frontend run lint` passed; `npm --prefix frontend run build` passed.
+  - Focused verification: `ruff check retrocause\api\main.py tests\test_comprehensive.py` passed; `pytest tests/test_comprehensive.py::test_result_to_v2_builds_copyable_markdown_research_brief tests/test_comprehensive.py::test_v2_schema_round_trip tests/test_comprehensive.py::test_product_harness_rewards_useful_evidence_backed_result -q` passed.
+  - Full verification: `npm test` passed after starting local FastAPI and Next.js services. Pytest result: 213 passed. E2E result: 604 passed, 0 failed, 0 skipped.
 
 ## Residual Risks
 

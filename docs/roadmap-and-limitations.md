@@ -25,6 +25,7 @@
 - Evidence Access Layer for query planning, source brokering, multi-source aggregation, evidence quality ordering, short-lived caching, source cooldown, and API/UI retrieval trace transparency
 - provider preflight harness that checks whether the selected provider key/model can return valid JSON before spending a full run
 - product value harness that tells users whether a result is reviewable, evidence-backed, challenged, or blocked by model/provider setup
+- copyable Markdown research brief in the V2 API and browser UI
 
 ## Current OSS Completion Status
 
@@ -34,6 +35,7 @@ The OSS version is **alpha-complete for local demonstration and inspection**, an
 - it can start the backend and frontend together
 - it can show demo, partial-live, and live states honestly
 - it can run the evidence-board workflow end to end
+- it can copy a Markdown research brief for notes, docs, and individual analysis workflows
 - it has automated coverage through the root `npm test` path
 - the 2026-04-13 US/Iran Islamabad talks golden case passed with OpenRouter DeepSeek V3 as a non-demo live result
 
@@ -41,7 +43,7 @@ It is **not yet release-complete as a polished public OSS launch** until release
 
 - first-run onboarding should be reviewed once more as if the user has never seen the project
 - release notes, tag/commit, and known-limit messaging should be finalized
-- the output still needs report/share/export packaging before it has obvious direct monetization value for repeated client, market-intelligence, or strategy workflows
+- the output has OSS Markdown packaging, but Pro-grade PDF/share/team workflows are still needed for repeated client, market-intelligence, or strategy workflows
 
 ## Current Limitations
 
@@ -106,7 +108,7 @@ The OSS/Pro boundary should be:
 
 To support that, the product still needs:
 
-- a clear Markdown research brief output format in OSS
+- continued polish on the OSS Markdown research brief output format
 - Pro-grade export/share/report generation
 - saved comparison runs or reusable templates
 - stronger source reliability defaults for the chosen vertical

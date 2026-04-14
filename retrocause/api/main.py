@@ -347,6 +347,8 @@ class AnalyzeResponseV2(BaseModel):
     challenge_checks: List[ChallengeCheckV2] = []
     # User-facing synthesis of the current result.
     analysis_brief: Optional[AnalysisBriefV2] = None
+    # Copyable OSS research brief built from grounded response fields.
+    markdown_brief: Optional[str] = None
     # Harness-level verdict for whether the run produced user-reviewable value.
     product_harness: Optional[ProductHarnessReportV2] = None
     # Uncertainty report
@@ -469,6 +471,7 @@ def _empty_live_failure_response(query: str, error_msg: str) -> AnalyzeResponseV
         uncertainty_report=None,
         error=error_msg,
     )
+    response.markdown_brief = _build_markdown_research_brief(response)
     response.product_harness = _build_product_harness(response)
     return response
 
@@ -654,6 +657,99 @@ def _build_analysis_brief(
         missing_evidence=missing[:4],
         source_coverage=source_coverage,
     )
+
+
+def _markdown_bullet(text: str) -> str:
+    normalized = " ".join(str(text).split())
+    return f"- {normalized}" if normalized else "- "
+
+
+def _build_markdown_research_brief(response: AnalyzeResponseV2) -> str:
+    lines: list[str] = [
+        "# RetroCause Research Brief",
+        "",
+        "## Question",
+        response.query or "(empty query)",
+        "",
+        "## Run Status",
+        _markdown_bullet(f"Mode: {response.analysis_mode}"),
+        _markdown_bullet(f"Freshness: {response.freshness_status}"),
+    ]
+    if response.time_range:
+        lines.append(_markdown_bullet(f"Time range: {response.time_range}"))
+    if response.partial_live_reasons:
+        lines.append(_markdown_bullet(f"Limits: {'; '.join(response.partial_live_reasons)}"))
+
+    brief = response.analysis_brief
+    lines.extend(["", "## Likely Explanation"])
+    if brief:
+        lines.append(brief.answer)
+        lines.append(_markdown_bullet(f"Confidence signal: {brief.confidence:.0%}"))
+    else:
+        lines.append("No analysis brief was produced for this run.")
+
+    lines.extend(["", "## Top Reasons"])
+    if brief and brief.top_reasons:
+        lines.extend(_markdown_bullet(reason) for reason in brief.top_reasons)
+    else:
+        lines.append("- No reason list is available.")
+
+    lines.extend(["", "## Challenge Coverage"])
+    if brief and brief.challenge_summary:
+        lines.append(_markdown_bullet(brief.challenge_summary))
+    if response.challenge_checks:
+        for check in response.challenge_checks[:5]:
+            lines.append(
+                _markdown_bullet(
+                    f"{check.source.replace('_', ' ')} -> {check.target.replace('_', ' ')}: "
+                    f"{check.status}, {check.refuting_count} challenge, "
+                    f"{check.context_count} context, {check.result_count} retrieved"
+                )
+            )
+    elif not brief or not brief.challenge_summary:
+        lines.append("- Challenge retrieval was not checked.")
+
+    lines.extend(["", "## Gaps And Caveats"])
+    if brief and brief.missing_evidence:
+        lines.extend(_markdown_bullet(item) for item in brief.missing_evidence)
+    else:
+        lines.append("- No explicit gap list was produced.")
+
+    lines.extend(["", "## Evidence"])
+    if response.evidences:
+        for item in response.evidences[:8]:
+            stance = "Challenges" if item.stance == "refuting" or not item.is_supporting else "Supports"
+            content = " ".join(item.content.split())
+            lines.append(
+                _markdown_bullet(
+                    f"[{item.id}] {stance}. Source: {item.source}. "
+                    f"Reliability: {item.reliability}. {content}"
+                )
+            )
+    else:
+        lines.append("- No evidence items are attached.")
+
+    lines.extend(["", "## Source Trace"])
+    if response.retrieval_trace:
+        for item in response.retrieval_trace[:8]:
+            label = item.source_label or item.source
+            cache_note = "cache hit" if item.cache_hit else "fresh query"
+            lines.append(
+                _markdown_bullet(
+                    f"{label}: {item.result_count} result(s), {cache_note}. Query: {item.query}"
+                )
+            )
+    else:
+        lines.append("- No retrieval trace is attached.")
+
+    lines.extend(
+        [
+            "",
+            "## Use Note",
+            "This brief is evidence-grounded product output, not verified causal truth. Review source quality, challenge coverage, and missing evidence before relying on it.",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _build_product_harness(response: AnalyzeResponseV2) -> ProductHarnessReportV2:
@@ -1068,6 +1164,7 @@ def _result_to_v2(
         analysis_brief=_build_analysis_brief(result, chains_v2, challenge_checks),
         uncertainty_report=uncertainty_v2,
     )
+    response.markdown_brief = _build_markdown_research_brief(response)
     response.product_harness = _build_product_harness(response)
     return response
 

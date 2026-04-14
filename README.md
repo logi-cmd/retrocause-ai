@@ -14,6 +14,7 @@ RetroCause 是一个开源的因果解释工作台，适合研究复杂事件的
 
 - **Evidence-backed causal chains / 带证据的因果链**: competing explanations with probabilities and linked evidence.
 - **Analysis brief / 分析简报**: a short summary of the most likely explanation and the strongest reasons.
+- **Markdown research brief / Markdown 研究简报**: copy a portable brief with question, likely explanation, reasons, challenge coverage, evidence, and source trace.
 - **Challenge coverage / 反证覆盖**: checked edges show whether refuting or context evidence was found.
 - **Source trace / 来源轨迹**: each live run shows which sources were queried and how many results were found.
 - **Provider preflight / 模型预检**: test whether the selected model and API key can return valid JSON before running a full analysis.
@@ -22,23 +23,23 @@ RetroCause 是一个开源的因果解释工作台，适合研究复杂事件的
 
 ## Current Status / 当前状态
 
-**English:** RetroCause is a research-grade alpha published as `v0.1.0-alpha.2` at [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai). The browser app, API, tests, provider preflight, challenge coverage, and value harness are working locally. A live golden-case run for the US/Iran Islamabad talks query passed on 2026-04-13 with OpenRouter DeepSeek V3.
+**English:** RetroCause is a research-grade alpha published as `v0.1.0-alpha.2` at [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai). The browser app, API, tests, provider preflight, challenge coverage, Markdown research brief, and value harness are working locally. A live golden-case run for the US/Iran Islamabad talks query passed on 2026-04-13 with OpenRouter DeepSeek V3.
 
-**中文：** RetroCause 当前是 research-grade alpha，已在 [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai) 发布 `v0.1.0-alpha.2`。本地浏览器应用、API、测试、模型预检、反证覆盖和结果价值检查已经可用。2026-04-13 使用 OpenRouter DeepSeek V3 跑通了“美国和伊朗在伊斯兰堡谈判结束，未达成协议的原因是什么”这个 live golden case。
+**中文：** RetroCause 当前是 research-grade alpha，已在 [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai) 发布 `v0.1.0-alpha.2`。本地浏览器应用、API、测试、模型预检、反证覆盖、Markdown 研究简报和结果价值检查已经可用。2026-04-13 使用 OpenRouter DeepSeek V3 跑通了“美国和伊朗在伊斯兰堡谈判结束，未达成协议的原因是什么”这个 live golden case。
 
 Known limits / 已知限制：
 
 - Results are evidence-grounded explanations, not verified causal truth.
 - Live quality depends on source availability, model behavior, and API quota.
 - Some generated labels may remain partly English in Chinese mode.
-- Report/export/share workflows are not included yet.
-- Planned OSS report output is a copyable Markdown research brief. Higher-end PDF, team, scheduled, and branded workflows belong in a future Pro tier.
+- PDF/export/share/team workflows are not included yet.
+- OSS report output is a copyable Markdown research brief. Higher-end PDF, team, scheduled, and branded workflows belong in a future Pro tier.
 
 - 结果是“有证据锚定的解释”，不是已经被证明的因果真理。
 - Live 模式质量取决于来源可用性、模型行为和 API 额度。
 - 中文模式下，部分模型生成的长标签可能仍保留英文。
-- 当前还没有报告导出、分享、团队工作流。
-- 计划中的 OSS 报告输出会先做可复制的 Markdown 研究简报。PDF、团队协作、定时生成、品牌模板等更适合未来 Pro 版本。
+- 当前还没有 PDF 导出、分享、团队工作流。
+- OSS 报告输出现在是可复制的 Markdown 研究简报。PDF、团队协作、定时生成、品牌模板等更适合未来 Pro 版本。
 
 ## Quick Start / 快速开始
 
@@ -83,6 +84,7 @@ Example questions / 示例问题：
 3. Click **Run model preflight**.
 4. If preflight passes, click **Start analysis**.
 5. Inspect the analysis brief, source trace, challenge coverage, and value harness before trusting the result.
+6. Click **Copy Markdown** in the analysis brief card to take the result into notes, docs, or research workflows.
 
 中文步骤：
 
@@ -91,6 +93,7 @@ Example questions / 示例问题：
 3. 点击 **运行模型预检**。
 4. 预检通过后点击 **开始分析**。
 5. 先检查分析简报、来源轨迹、反证覆盖和 Value Harness，再决定是否相信结果。
+6. 在分析结论卡片中点击 **复制 Markdown**，把结果带进笔记、文档或研究流程。
 
 API keys are only needed for real analysis. Without a key, the app remains usable in demo mode.
 

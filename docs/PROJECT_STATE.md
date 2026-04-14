@@ -17,6 +17,7 @@ What is done:
 - explicit demo / partial-live / live result labeling
 - provider preflight harness for API key and model checks
 - product value harness for whether a result is reviewable
+- copyable Markdown research brief in the V2 API and browser UI
 - live US/Iran Islamabad talks golden-case validation with OpenRouter DeepSeek V3
 - refreshed live golden-case screenshot under `docs/images/golden-us-iran-live-ui.png`
 - automated validation through the root `npm test` command
@@ -27,14 +28,13 @@ What is not done:
 
 - stable `v0.1.0` release
 - first-time OSS release polish beyond the current bilingual README
-- Markdown research brief export for OSS
 - Pro report/share/team workflows that would make the product directly useful in repeated paid workflows
 
 ## Current Focus
 
 Stabilize quality-first live evidence retrieval, especially for time-sensitive market/news queries where relative windows such as `today` and `yesterday` must not reuse stale evidence.
 
-Current UX focus: turn a reviewable analysis into a portable Markdown research brief for individual research, market, policy, and geopolitical workflows.
+Current UX focus: polish the portable Markdown research brief so reviewable analysis can move cleanly into individual research, market, policy, and geopolitical workflows.
 
 ## Working Rules
 
@@ -53,15 +53,16 @@ Current UX focus: turn a reviewable analysis into a portable Markdown research b
 - Prepared `v0.1.0-alpha.2` with README status polish, zero-warning frontend lint, and explicit Turbopack root config.
 - Decided the OSS/Pro product boundary: OSS gets copyable Markdown research briefs; Pro gets hosted, PDF/DOCX, team, scheduled, branded, source-policy, and saved-comparison workflows.
 - Fixed the local WSL default distro for gstack-style tooling by installing `Ubuntu-24.04`, setting it as default instead of Docker Desktop's internal `docker-desktop` distro, and configuring a non-root default user `retrocause` with passwordless sudo for development tooling.
+- Added OSS Markdown research brief output to `/api/analyze/v2` and the browser analysis card.
 
 ## Blockers
 
-- The OSS product can explain and inspect causal evidence, but it does not yet export a Markdown research brief.
+- The OSS product can now export a Markdown research brief, but the brief format still needs real-user polish across more live domains.
 - Direct monetization should stay Pro-oriented: hosted operation, repeatable delivery, PDF/DOCX, scheduled runs, team sharing, source controls, and saved comparisons.
 
 ## Next Step
 
-Post-release polish for the alpha: implement the OSS Markdown research brief, then keep Pro workflow depth separate from the open-source inspectable core.
+Post-release polish for the alpha: polish the OSS Markdown research brief across live domains, then keep Pro workflow depth separate from the open-source inspectable core.
 
 Release-readiness pass from the user journey:
 
