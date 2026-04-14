@@ -36,7 +36,7 @@
 - Modify: `retrocause/api/main.py`
 - Test: `tests/test_comprehensive.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Add these tests near existing V2 helper tests:
 
@@ -77,7 +77,7 @@ def test_scenario_override_wins_over_auto_detection():
     assert scenario.detection_method == "override"
 ```
 
-- [ ] **Step 2: Run tests and confirm red**
+- [x] **Step 2: Run tests and confirm red**
 
 Run:
 
@@ -87,7 +87,7 @@ pytest tests/test_comprehensive.py::test_detects_market_production_scenario test
 
 Expected: failures because `_detect_production_scenario` and `ScenarioV2` do not exist.
 
-- [ ] **Step 3: Implement minimal schemas and detector**
+- [x] **Step 3: Implement minimal schemas and detector**
 
 In `retrocause/api/main.py`, add `scenario_override` to `AnalyzeRequest`:
 
@@ -159,7 +159,7 @@ def _scenario_from_key(key: str, confidence: float, detection_method: str) -> Sc
     )
 ```
 
-- [ ] **Step 4: Run focused tests and commit**
+- [x] **Step 4: Run focused tests and commit**
 
 Run the four tests from Step 2. Expected: pass.
 

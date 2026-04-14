@@ -17,6 +17,7 @@ from retrocause.api.main import (
     analyze_query_v2,
     preflight_provider,
     _build_product_harness,
+    _detect_production_scenario,
     _result_to_v2,
 )
 from retrocause.app.demo_data import (
@@ -244,6 +245,46 @@ def test_result_to_v2_multiple_chains():
     )
     v2 = _result_to_v2(result, is_demo=False)
     assert v2.recommended_chain_id == "chain-high"
+
+
+def test_detects_market_production_scenario():
+    scenario = _detect_production_scenario(
+        "Why did bitcoin fall today after ETF outflows and rate headlines?"
+    )
+
+    assert scenario.key == "market"
+    assert 0 <= scenario.confidence <= 1
+    assert "market" in scenario.user_value.lower()
+
+
+def test_detects_policy_geopolitics_production_scenario():
+    scenario = _detect_production_scenario(
+        "Why did the ceasefire talks fail after the latest sanctions announcement?"
+    )
+
+    assert scenario.key == "policy_geopolitics"
+    assert 0 <= scenario.confidence <= 1
+    assert "policy" in scenario.user_value.lower() or "geopolitical" in scenario.user_value.lower()
+
+
+def test_detects_postmortem_production_scenario():
+    scenario = _detect_production_scenario(
+        "Why did our checkout conversion drop after the release incident?"
+    )
+
+    assert scenario.key == "postmortem"
+    assert 0 <= scenario.confidence <= 1
+    assert "incident" in scenario.user_value.lower() or "postmortem" in scenario.user_value.lower()
+
+
+def test_scenario_override_wins_over_auto_detection():
+    scenario = _detect_production_scenario(
+        "Why did bitcoin fall today?",
+        override="postmortem",
+    )
+
+    assert scenario.key == "postmortem"
+    assert scenario.detection_method == "override"
 
 
 def test_result_to_v2_surfaces_refutation_status_and_stance():
