@@ -18,6 +18,7 @@ What is done:
 - provider preflight harness for API key and model checks
 - product value harness for whether a result is reviewable
 - copyable Markdown research brief in the V2 API and browser UI
+- polished Markdown brief wording for challenge coverage, including readable source labels and clear no-refuting-evidence language instead of ambiguous `0 challenge` phrasing
 - live US/Iran Islamabad talks golden-case validation with OpenRouter DeepSeek V3
 - refreshed live golden-case screenshot under `docs/images/golden-us-iran-live-ui.png`
 - automated validation through the root `npm test` command
@@ -57,6 +58,7 @@ Current UX focus: polish the portable Markdown research brief so reviewable anal
 - Re-ran the US/Iran Islamabad talks golden case on 2026-04-14 with OpenRouter DeepSeek V3: live, fresh, 20 evidence items, 5 chains, 3 challenge checks, product harness `ready_for_review`, and a 4k+ character Markdown brief.
 - Prepared `v0.1.0-alpha.3` as the first public alpha that includes the copyable Markdown research brief.
 - Added `docs/pro-workflow-spec.md` to keep future paid workflows scoped around repeatable value instead of adding vague "more AI" features.
+- Polished the Markdown research brief so top reasons use human-readable source/edge labels and checked edges with no attached refuting evidence explain that state directly.
 
 ## Blockers
 

@@ -491,14 +491,84 @@ def test_result_to_v2_builds_copyable_markdown_research_brief():
     assert "## Likely Explanation" in v2.markdown_brief
     assert "Sanctions explanation" in v2.markdown_brief
     assert "## Top Reasons" in v2.markdown_brief
-    assert "sanctions pressure -> talks failed" in v2.markdown_brief
+    assert "Sanctions pressure -> Talks failed" in v2.markdown_brief
+    assert "Challenge evidence on this edge: 1" in v2.markdown_brief
     assert "## Challenge Coverage" in v2.markdown_brief
     assert "Found 1 challenge evidence" in v2.markdown_brief
     assert "## Evidence" in v2.markdown_brief
-    assert "[ev-support] Supports" in v2.markdown_brief
-    assert "[ev-refute] Challenges" in v2.markdown_brief
+    assert "[ev-support] Supports. Source: News." in v2.markdown_brief
+    assert "[ev-refute] Challenges. Source: News." in v2.markdown_brief
+    assert "EvidenceType.NEWS" not in v2.markdown_brief
     assert "## Source Trace" in v2.markdown_brief
     assert "AP News" in v2.markdown_brief
+
+
+def test_markdown_brief_explains_checked_edges_without_refuting_evidence():
+    result = AnalysisResult(
+        query="why did talks fail",
+        domain="geopolitics",
+        variables=[
+            CausalVariable(name="sanctions_dispute", description="Sanctions dispute"),
+            CausalVariable(name="failed_agreement", description="No agreement"),
+        ],
+        edges=[
+            CausalEdge(
+                source="sanctions_dispute",
+                target="failed_agreement",
+                conditional_prob=0.74,
+                supporting_evidence_ids=["ev-support"],
+            )
+        ],
+        hypotheses=[
+            HypothesisChain(
+                id="chain-1",
+                name="Sanctions and sequencing gap",
+                description="Disagreement over sanctions relief and sequencing blocked agreement.",
+                variables=[
+                    CausalVariable(name="sanctions_dispute", description="Sanctions dispute"),
+                    CausalVariable(name="failed_agreement", description="No agreement"),
+                ],
+                edges=[
+                    CausalEdge(
+                        source="sanctions_dispute",
+                        target="failed_agreement",
+                        conditional_prob=0.74,
+                        supporting_evidence_ids=["ev-support"],
+                    )
+                ],
+                posterior_probability=0.68,
+            )
+        ],
+        evidences=[
+            Evidence(
+                id="ev-support",
+                content="Officials said sanctions relief sequencing remained unresolved.",
+                source_type=EvidenceType.NEWS,
+                stance="supporting",
+                stance_basis="llm_extraction",
+                source_tier="fresh",
+                extraction_method="llm_fulltext",
+            )
+        ],
+        refutation_checks=[
+            {
+                "edge_id": "sanctions_dispute->failed_agreement",
+                "source": "sanctions_dispute",
+                "target": "failed_agreement",
+                "query": "evidence against sanctions sequencing causing failed talks",
+                "result_count": 2,
+                "refuting_count": 0,
+                "status": "checked_no_refuting_claims",
+            }
+        ],
+    )
+
+    v2 = _result_to_v2(result, is_demo=False)
+
+    assert v2.markdown_brief is not None
+    assert "No challenge evidence attached to this edge after targeted retrieval" in v2.markdown_brief
+    assert "Challenge evidence on this edge: 0" not in v2.markdown_brief
+    assert "0 challenge" not in v2.markdown_brief
 
 
 def test_result_to_v2_node_types():

@@ -15,7 +15,7 @@ RetroCause 是一个开源的因果解释工作台，适合研究复杂事件的
 - **Evidence-backed causal chains / 带证据的因果链**: competing explanations with probabilities and linked evidence.
 - **Analysis brief / 分析简报**: a short summary of the most likely explanation and the strongest reasons.
 - **Markdown research brief / Markdown 研究简报**: copy a portable brief with question, likely explanation, reasons, challenge coverage, evidence, and source trace.
-- **Challenge coverage / 反证覆盖**: checked edges show whether refuting or context evidence was found.
+- **Challenge coverage / 反证覆盖**: checked edges show whether refuting or context evidence was found; if a checked edge has no attached refuting evidence, the brief says that directly instead of showing ambiguous `0 challenge` wording. 已检查的因果边会说明是否找到反证或上下文证据；如果某条边没有附着反证证据，简报会直接说明，而不是显示容易误读的 `0 challenge`。
 - **Source trace / 来源轨迹**: each live run shows which sources were queried and how many results were found.
 - **Provider preflight / 模型预检**: test whether the selected model and API key can return valid JSON before running a full analysis.
 - **Value harness / 结果价值检查**: the UI tells you whether a result is ready for review, needs more evidence, or is blocked by provider/model setup.

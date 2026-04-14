@@ -365,3 +365,54 @@ Execute the next 1/2/3/4 sequence:
 - OpenRouter preflight passing does not guarantee every later LLM subcall will succeed under latency, quota, or provider behavior.
 - gstack browse is installed but its screenshot command did not produce an artifact in this Windows session; Playwright E2E passed and is the verification source for UI behavior.
 - Pro workflow remains documented direction only in this pass; no Pro persistence/export/team/schedule code has been added.
+
+## 2026-04-14 Markdown Brief Challenge Wording Polish
+
+### Task
+
+Polish the OSS Markdown research brief so users do not misread per-edge zero refutation counts as "all evidence chains are unchallenged" or as a hidden scoring bug. Keep the change deterministic and evidence-grounded by using existing edge refutation status, evidence bindings, challenge checks, and source trace data.
+
+### Files Touched
+
+- `retrocause/api/main.py`
+- `tests/test_comprehensive.py`
+- `README.md`
+- `docs/PROJECT_STATE.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- `pytest tests\test_comprehensive.py::test_result_to_v2_builds_copyable_markdown_research_brief -q`
+  - Result: passed before the new wording test, confirming the existing source-label and challenge-count behavior still worked.
+- `pytest tests\test_comprehensive.py::test_markdown_brief_explains_checked_edges_without_refuting_evidence -q`
+  - TDD red result: failed because the Markdown brief did not yet explain a checked edge with no attached refuting evidence.
+- `pytest tests\test_comprehensive.py::test_markdown_brief_explains_checked_edges_without_refuting_evidence tests\test_comprehensive.py::test_result_to_v2_builds_copyable_markdown_research_brief -q`
+  - Result after implementation: passed.
+- `ruff check retrocause\api\main.py tests\test_comprehensive.py`
+  - Result: passed.
+- `pytest tests\test_comprehensive.py::test_markdown_brief_explains_checked_edges_without_refuting_evidence tests\test_comprehensive.py::test_result_to_v2_builds_copyable_markdown_research_brief tests\test_comprehensive.py::test_product_harness_rewards_useful_evidence_backed_result -q`
+  - Result: passed.
+- Started local FastAPI on `127.0.0.1:8000` and Next.js on `localhost:3005` for E2E.
+  - FastAPI log reported `Uvicorn running on http://127.0.0.1:8000`.
+  - Next.js log reported `Ready` on `http://localhost:3005`.
+- `npm test`
+  - Result: passed.
+  - Included frontend lint, frontend build, `ruff check retrocause/`, full pytest, and Playwright E2E script.
+  - Pytest result: 214 passed.
+  - E2E result: 604 passed, 0 failed, 0 skipped.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result after committing this change: passed as `safe-to-deploy`, 90/100.
+  - Non-blocking warnings: the change spans 5 top-level areas because implementation, tests, README, project state, and evidence were intentionally kept in sync; `docs/PROJECT_STATE.md` changed by project documentation-sync rule.
+
+### Behavior Notes
+
+- Top reasons now keep the existing positive count wording when a specific edge has refuting evidence: `Challenge evidence on this edge: N`.
+- Top reasons now explain checked edges with no attached refuting evidence as: `No challenge evidence attached to this edge after targeted retrieval`.
+- Challenge coverage rows now say `challenge evidence found: N` or `no challenge evidence found`, avoiding ambiguous `0 challenge` wording.
+- Evidence source labels in the Markdown brief continue to render as readable labels such as `News`, not internal enum strings such as `EvidenceType.NEWS`.
+- This change does not add new causal conclusions. It only translates existing retrieval/refutation status into clearer user-facing report text.
+
+### Residual Risks
+
+- The wording is clearer in English Markdown output, but deeper Chinese localization of generated brief sections remains future work.
+- Challenge retrieval is still bounded to selected edges; "no challenge evidence found" means none was attached/found in that targeted retrieval pass, not that no refutation exists anywhere.
