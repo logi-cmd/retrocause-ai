@@ -20,6 +20,7 @@ RetroCause 是一个开源的因果解释工作台，适合研究复杂事件的
 - **Source health summary / 来源健康摘要**: the readable brief summarizes checked sources, stable-source coverage, failed sources, and result hits before users trust the answer.
 - **Challenge coverage / 反证覆盖**: checked edges show whether refuting or context evidence was found; if a checked edge has no attached refuting evidence, the brief says that directly instead of showing ambiguous `0 challenge` wording. 已检查的因果边会说明是否找到反证或上下文证据；如果某条边没有附着反证证据，简报会直接说明，而不是显示容易误读的 `0 challenge`。
 - **Source trace / 来源轨迹**: each live run shows which sources were queried and how many results were found.
+- **Source policy direction / 来源策略方向**: retrieval should use scenario-aware source packs, cache, provider budgets, and visible degraded states instead of depending on a single fragile search source.
 - **Provider preflight / 模型预检**: test whether the selected model and API key can return valid JSON before running a full analysis.
 - **Value harness / 结果价值检查**: the UI tells you whether a result is ready for review, needs more evidence, or is blocked by provider/model setup.
 - **Production brief modes / 生产级简报模式**: auto-detect or choose Market / Investment, Policy / Geopolitics, or Postmortem so the output explains what a user can decide, what evidence supports it, what could change the view, and what is not ready yet.
@@ -35,6 +36,7 @@ Known limits / 已知限制：
 
 - Results are evidence-grounded explanations, not verified causal truth.
 - Live quality depends on source availability, model behavior, and API quota.
+- Source adapters can be rate-limited. Sustainable hosted use requires source policies, cache, provider budgets, and run orchestration.
 - Some generated labels may remain partly English in Chinese mode, but live graph nodes should keep their specific meaning instead of falling back to generic factor labels.
 - PDF/export/share/team workflows are not included yet.
 - OSS report output is a copyable Markdown research brief. Higher-end PDF, team, scheduled, and branded workflows belong in a future Pro tier.
@@ -42,6 +44,7 @@ Known limits / 已知限制：
 
 - 结果是“有证据锚定的解释”，不是已经被证明的因果真理。
 - Live 模式质量取决于来源可用性、模型行为和 API 额度。
+- 检索源适配器可能被限流。后续托管版需要来源策略、缓存、provider 预算和运行编排来保证可用性。
 - 中文模式下，部分模型生成的长标签可能仍保留英文，但 Live 因果图节点应保留具体含义，而不是退回成泛化的“因素”标签。
 - 当前还没有 PDF 导出、分享、团队工作流。
 - OSS 报告输出现在是可复制的 Markdown 研究简报。PDF、团队协作、定时生成、品牌模板等更适合未来 Pro 版本。
@@ -154,6 +157,7 @@ This runs:
 - Causal graph: NetworkX
 - Probabilistic reasoning groundwork: NumPyro / JAX
 - Evidence sources: web search adapters, AP News, Federal Register, GDELT, ArXiv, Semantic Scholar
+- Retrieval strategy: see [`docs/retrieval-and-output-strategy.md`](docs/retrieval-and-output-strategy.md)
 
 ## When To Use It / 适合什么场景
 
@@ -175,11 +179,11 @@ RetroCause 适合需要“解释事件原因，并检查推理链”的场景：
 
 **OSS:** local, inspectable analysis for individual researchers and builders. OSS should include the evidence board, source trace, challenge coverage, value harness, scenario-aware single-run production briefs, and a copyable Markdown research brief so users can take the result into their own notes or analysis workflow.
 
-**Pro:** repeatable delivery workflows. Pro should justify payment through hosted runs, PDF/DOCX reports, team sharing, scheduled briefings, saved comparisons, source policy controls, domain packs, branded templates, and higher-trust operating workflows.
+**Pro:** hosted reliability for individuals and small teams. Pro should justify payment through run queues, quota management, cache reuse, saved runs, uploaded evidence, scheduled watch topics, PDF/DOCX reports, lightweight team review, source policy controls, and higher-trust operating workflows. Enterprise private deployment is not a near-term goal.
 
 **中文：** OSS 版服务个人研究者和开发者，重点是本地可运行、可检查、可复制。OSS 应包含证据墙、来源轨迹、反证覆盖、结果价值检查、场景化单次生产级简报，以及可复制的 Markdown 研究简报，方便用户放进自己的笔记、投研或政策分析流程。
 
-**Pro：** Pro 版应该服务可重复交付的工作流，包括托管运行、PDF/DOCX 报告、团队分享、定时简报、历史对比、来源策略控制、垂直领域包、品牌模板和更高可信的运营能力。
+**Pro：** Pro 版主要服务个人和小团队的托管可靠性，包括运行队列、额度管理、缓存复用、历史分析、上传资料、定时主题跟踪、PDF/DOCX 报告、轻量团队审阅、来源策略控制和更高可信的运营能力。企业私有部署不是近期目标。
 
 ## License / 许可证
 

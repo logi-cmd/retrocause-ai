@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-04-14
+Last updated: 2026-04-15
 
 ## Goal
 
@@ -31,15 +31,15 @@ What is not done:
 
 - stable `v0.1.0` release
 - first-time OSS release polish beyond the current bilingual README
-- Pro report/share/team workflows that would make the product directly useful in repeated paid workflows
+- Solo Pro / Team Lite hosted workflows that would make the product directly useful in repeated paid workflows
 
 ## Current Focus
 
 Stabilize quality-first live evidence retrieval, especially for time-sensitive market/news queries where relative windows such as `today` and `yesterday` must not reuse stale evidence.
 
-Current UX focus: validate the general Production Brief Harness across real market, policy/geopolitics, and postmortem questions. OSS now supports scenario-aware single-run briefs with freshness/source-quality gating; Pro workflow depth remains hosted reports, schedules, source policies, saved comparisons, and team sharing.
+Current UX focus: validate the general Production Brief Harness across real market, policy/geopolitics, and postmortem questions. OSS now supports scenario-aware single-run briefs with freshness/source-quality gating; Pro workflow depth should focus on individuals and small teams: run queues, quota management, cache reuse, saved runs, uploaded evidence, scheduled watch topics, PDF/DOCX export, and lightweight team review. Enterprise private deployment is not a near-term target.
 
-Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md` and has been executed through code, frontend, export, and regression cleanup. Remaining work is release validation and public alpha sync.
+Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md` and has been executed through code, frontend, export, and regression cleanup. The retrieval/output strategy is now captured in `docs/retrieval-and-output-strategy.md`; remaining work is to turn it into a small SourceBroker/run-orchestration implementation plan.
 
 ## Working Rules
 
@@ -71,15 +71,17 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Wrote the implementation plan for the Production Brief Harness, covering scenario detection, scenario override, evidence-anchored production sections, freshness/actionability gates, frontend rendering, Markdown export, single-case cleanup, docs, tests, and guardrails verification.
 - Added the OSS Production Brief Harness for market, policy/geopolitics, and postmortem workflows.
 - Removed single-case US/Iran product labeling from frontend logic and kept it as regression context only.
+- Reframed the paid direction away from enterprise/private deployment and toward Solo Pro / Team Lite hosted reliability for individuals and small teams.
+- Added `docs/retrieval-and-output-strategy.md` to define the retrieval-to-output pipeline, source adapter rate-limit risks, candidate hosted sources, source policies, cache requirements, run orchestration direction, and development-skill usage.
 
 ## Blockers
 
 - The OSS product can now export a Markdown research brief, but the brief format still needs real-user polish across more live domains.
-- Direct monetization should stay Pro-oriented: hosted operation, repeatable delivery, PDF/DOCX, scheduled runs, team sharing, source controls, and saved comparisons.
+- Direct monetization should stay Pro-oriented but lightweight: hosted operation, run queues, quota management, cache reuse, uploaded evidence, saved runs, PDF/DOCX, scheduled watch topics, lightweight team review, source controls, and saved comparisons.
 
 ## Next Step
 
-Release validation/public alpha sync for the Production Brief Harness: run the full local verification suite, guardrails check, and then prepare the next public alpha update once the branch is reviewed.
+Create the next implementation plan for retrieval reliability: SourceBroker, provider budgets, cache keys with absolute time buckets, optional Tavily/Brave adapters, run status, and visible source-degradation UX.
 
 Release-readiness pass from the user journey:
 

@@ -278,6 +278,53 @@ Implement the approved Production Brief Harness across API, frontend, Markdown e
 - Scenario detection is deterministic keyword routing; deeper domain-specific source policies remain Pro/future work.
 - Latest-info readiness still depends on available live retrieval sources and provider behavior.
 - Production brief sections are evidence-anchored, but high-stakes publication still needs human review of source quality and missing-evidence notes.
+
+## 2026-04-15 Retrieval And Small-Team Pro Strategy
+
+### Task
+
+Integrate the product discussion about source adapter rate limits, better retrieval sources, personal/small-team positioning, uploaded evidence, and why the output needs a retrieval-to-brief pipeline instead of a direct ChatGPT prompt.
+
+### Files Touched
+
+- `README.md`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-workflow-spec.md`
+- `docs/retrieval-and-output-strategy.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, and the planned documentation files before editing.
+- Reviewed current source adapters under `retrocause/sources/`.
+- Searched project docs for retrieval, evidence, CausalRAG, source trace, harness, and Pro workflow references.
+- Checked official provider documentation for candidate hosted retrieval sources:
+  - Tavily rate limits: `https://docs.tavily.com/documentation/rate-limits`
+  - Brave Search API terms: `https://api-dashboard.search.brave.com/documentation/resources/terms-of-service`
+  - Exa contents retrieval: `https://docs.exa.ai/reference/contents-retrieval-with-exa-api`
+  - SerpAPI high-volume/account API docs: `https://serpapi.com/high-volume` and `https://serpapi.com/account-api`
+- `npm test`
+  - Result: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, `pytest tests/ --basetemp=.pytest-tmp`, and `python scripts/e2e_test.py`.
+  - Pytest result: 234 passed.
+  - E2E result: 604 passed, 0 failed, 0 skipped.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: passed with trust score 95/100.
+  - Blocking errors: 0.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed; this is expected because the task intentionally synchronizes project state documentation.
+
+### Changes
+
+- Added `docs/retrieval-and-output-strategy.md` with the retrieval-to-output pipeline, source adapter risks, source portfolio, scenario source policies, cache policy, run orchestrator direction, product output contract, and development-skill usage.
+- Updated README to point to the retrieval strategy and clarify source-policy/rate-limit direction.
+- Updated `docs/pro-workflow-spec.md` to focus on Solo Pro / Team Lite hosted reliability instead of enterprise/private deployment.
+- Updated `docs/PROJECT_STATE.md` so the next implementation step is SourceBroker/run-orchestration planning.
+
+### Residual Risks
+
+- This pass is documentation and product/architecture strategy only; no source adapter or run orchestration code has been implemented yet.
+- Hosted-source candidates have provider-specific pricing, storage, and rate-limit terms that must be rechecked before implementation.
+- Public docs should avoid promising unlimited search, enterprise private deployment, or unsupported provider storage behavior.
   - `wsl.exe --install Ubuntu-24.04`: timed out after distro registration, but `wsl.exe -l -v` showed `Ubuntu-24.04` installed.
   - `wsl.exe --set-default Ubuntu-24.04`: default changed from `docker-desktop` to `Ubuntu-24.04`.
   - Killed stuck `wsl.exe` / `bash.exe` client processes after Ubuntu first-run initialization hung; WSL service remained running.
