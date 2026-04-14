@@ -577,6 +577,23 @@ Execute the next 1/2/3/4 sequence:
 - `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"` after alpha.4 release docs sync
   - Result: `safe-to-deploy`, 90/100.
   - Non-blocking warnings: broad release-scope documentation/evidence/test/frontend diff and intentional `docs/PROJECT_STATE.md` continuity update.
+- Public export sync and validation for `v0.1.0-alpha.4`
+  - Synchronized only user-facing OSS release files into `D:\opencode\retrocause-ai-public-20260413`: `README.md`, `frontend/src/app/page.tsx`, `retrocause/api/main.py`, and `tests/test_comprehensive.py`.
+  - Secret scan result: no `sk-or-v1-`, `ghp_`, `gho_`, or `GITHUB_PERSONAL_ACCESS_TOKEN` patterns outside ignored cache/build/log folders.
+  - `npm --prefix frontend run lint`: passed.
+  - `npm --prefix frontend run build`: passed.
+  - `ruff check retrocause/`: passed.
+  - `pytest tests/ --basetemp=.pytest-tmp`: first failed because `retrocause/api/main.py` had not been synchronized with the newer alpha.4 tests; after syncing it, passed with 219 tests.
+  - `python scripts/e2e_test.py` against export backend `127.0.0.1:8002` and export frontend `localhost:3007`: passed with 604/604 E2E checks.
+  - Stopped the temporary export backend/frontend processes after E2E.
+- Public GitHub publish for `v0.1.0-alpha.4`
+  - Fixed local SSH private-key ACLs so Windows OpenSSH could authenticate as `logi-cmd`.
+  - Pushed public export commit `beb9499 Polish alpha4 report UX` to `main`.
+  - Created and pushed tag `v0.1.0-alpha.4`.
+  - Created GitHub prerelease: `https://github.com/logi-cmd/retrocause-ai/releases/tag/v0.1.0-alpha.4`.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"` after release outcome evidence sync
+  - Result: `safe-to-deploy`, 95/100.
+  - Non-blocking warning: intentional `docs/PROJECT_STATE.md` continuity update.
 
 ### Behavior Notes
 

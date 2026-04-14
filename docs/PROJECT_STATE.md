@@ -63,7 +63,7 @@ Current UX focus: polish the portable Markdown research brief so reviewable anal
 - Upgraded the browser analysis card into a structured readable brief with top reasons, what-to-check, evidence coverage, and a `Copy report` action that still exports Markdown.
 - Dogfooded the readable brief live path and removed the Chinese-mode fallback that collapsed specific live causal-map node labels into generic `市场影响因素` notes.
 - Added a manual-copy fallback for blocked clipboard permissions, a source-health summary inside the readable brief, and targeted Chinese localization for the US/Iran golden-case graph labels.
-- Prepared `v0.1.0-alpha.4` to publish the readable-brief UX polish and graph-label fixes to the public OSS repo.
+- Published `v0.1.0-alpha.4` with readable-brief UX polish, copy fallback, source-health summary, Markdown challenge wording, and graph-label fixes.
 
 ## Blockers
 
