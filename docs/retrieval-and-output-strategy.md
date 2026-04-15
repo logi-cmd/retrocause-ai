@@ -217,6 +217,19 @@ Tavily and Brave Search are implemented as optional hosted sources. OSS remains 
 - Brave web results map title, URL, and description into `SearchResult`.
 - Brave metadata includes `provider=brave`, `content_quality=snippet`, source domain, published date when present, and `cache_policy=transient_results_only` so downstream cache handling can respect restrictive result-storage terms.
 
+### Implemented SourceBroker Reliability Pass
+
+The 2026-04-15 SourceBroker reliability pass is implemented in the OSS app. It does not add a hosted queue, database, or enterprise connector; it makes the current local run more honest and reviewable:
+
+- Source profiles centralize source labels, source kind, stability, cache policy, default RPM, monthly budget, and API-key requirements.
+- Search cache keys include source adapter, source policy, scenario, language, absolute time bucket, normalized scoped query, and result count.
+- Source attempts classify `ok`, `cached`, `rate_limited`, `forbidden`, `timeout`, `source_error`, and `source_limited`.
+- V2 retrieval traces, Markdown briefs, readable briefs, and the right-side browser source trace expose retrieval-health states instead of silently showing zero-result rows.
+- Tavily and Brave are optional, user-key hosted adapters. Missing keys keep OSS on built-in sources; present keys allow scenario-aware optional source ordering.
+- The UI localizes source status labels and includes retry-after hints when available.
+
+This pass is still source-health infrastructure, not a claim that the causal explanation is true. A degraded source means the retrieval layer was limited; users should treat that as a reviewability warning and inspect evidence before acting.
+
 ## Product Output Contract
 
 Every user-facing result should answer:
@@ -245,13 +258,12 @@ Inside the product, a similar idea should become source/domain packs, such as `m
 
 ## Near-Term Implementation Order
 
-1. Add source policy documentation and UI/source-trace language for rate-limited or degraded sources.
-2. Add a lightweight `SourceBroker` layer that centralizes adapter ordering, fallback, cooldown, and source trace metadata.
-3. Add provider budget metadata for each adapter.
-4. Add Tavily and Brave adapters behind optional keys and source policies.
-5. Add cache keys that include scenario and absolute time buckets.
-6. Add a lightweight run model with `run_id`, `status`, `steps`, and usage ledger.
-7. Add uploaded evidence for personal/small-team use before considering any enterprise connector or private deployment.
+1. Dogfood SourceBroker behavior across fresh market, policy/geopolitics, and postmortem questions with real source-limited and cached states.
+2. Add a lightweight run model with `run_id`, `status`, `steps`, usage ledger, and retry/fallback state.
+3. Add persistent cache policy enforcement for providers with restrictive storage terms.
+4. Add uploaded evidence for personal/small-team postmortem use.
+5. Add saved runs and comparisons before adding scheduled watch topics.
+6. Add PDF/DOCX and lightweight team review only after the single-run evidence brief is consistently useful.
 
 ## Non-Goals
 

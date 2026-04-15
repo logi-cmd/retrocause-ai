@@ -184,16 +184,16 @@
 
 **Files:** `README.md`, `docs/PROJECT_STATE.md`, `docs/retrieval-and-output-strategy.md`, `.agent-guardrails/evidence/current-task.md`
 
-- [ ] Update README bilingual usage notes to explain:
+- [x] Update README bilingual usage notes to explain:
   - users may see source-limited or rate-limited states
   - OSS supports local inspectable retrieval
   - optional hosted search adapters require user-provided keys
-- [ ] Update `docs/retrieval-and-output-strategy.md` with the implemented source profile, cache, and degradation behavior.
-- [ ] Update `docs/PROJECT_STATE.md` current status, done-recently, blockers, and next step.
-- [ ] Update guardrails evidence with files touched, commands, behavior notes, and residual risks.
-- [ ] Run `npm test`.
-- [ ] Run `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`.
-- [ ] Commit: `docs: document sourcebroker reliability pass`.
+- [x] Update `docs/retrieval-and-output-strategy.md` with the implemented source profile, cache, and degradation behavior.
+- [x] Update `docs/PROJECT_STATE.md` current status, done-recently, blockers, and next step.
+- [x] Update guardrails evidence with files touched, commands, behavior notes, and residual risks.
+- [x] Run `npm test`.
+- [x] Run `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`.
+- [x] Commit: `docs: document sourcebroker reliability pass`.
 
 ## Self-Review
 

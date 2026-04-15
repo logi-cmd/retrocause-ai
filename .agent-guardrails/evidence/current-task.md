@@ -1243,3 +1243,45 @@ Execute Task 7 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: ma
 
 - This is still source-health metadata, not a causal claim. Users still need to inspect evidence before trusting the explanation.
 - Visual QA for the exact badge spacing remains useful after Task 8 full verification, especially on narrow screens.
+
+## 2026-04-15 SourceBroker Task 8: Documentation And Full Verification
+
+### Task
+
+Execute Task 8 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: update bilingual README usage guidance, retrieval strategy docs, project state, and this evidence note for the completed SourceBroker reliability pass, then run full verification.
+
+### Files Touched
+
+- `README.md`
+- `docs/PROJECT_STATE.md`
+- `docs/retrieval-and-output-strategy.md`
+- `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`, `docs/retrieval-and-output-strategy.md`, `.agent-guardrails/task-contract.json`, and this evidence note before editing.
+- `npm test` with `.venv\Scripts` prepended to `PATH`
+  - Result: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, full pytest, and E2E smoke tests.
+  - Pytest result: 248 passed.
+  - E2E result: 572 passed, 0 failed, 1 skipped.
+  - The skipped item was the optional Playwright full workflow because Playwright was not installed in `.venv`.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: `safe-to-deploy`, 90/100.
+  - Blocking errors: 0.
+  - Non-blocking warnings: the uncommitted check still included the previous Task 7 implementation commit in the `HEAD~1...HEAD` comparison, plus intentional `docs/PROJECT_STATE.md` continuity updates.
+- Committed Task 8 as `docs: document sourcebroker reliability pass`.
+
+### Behavior Notes
+
+- Rewrote README as clean bilingual English/Chinese usage documentation.
+- README now explains source-limited, rate-limited, timeout, source-error, and cached states as retrieval-health signals rather than causal evidence.
+- README now documents optional user-key Tavily and Brave Search adapters and states that OSS continues to run without those hosted keys.
+- README and project docs keep the OSS/Pro boundary focused on local inspectable OSS runs and lightweight Solo Pro / Team Lite hosted reliability.
+- Retrieval strategy docs now summarize the implemented SourceBroker reliability pass across source profiles, cache scoping, degraded-source status, API/brief/UI exposure, and optional hosted adapters.
+
+### Residual Risks
+
+- This pass is documentation and verification only; it does not add hosted run orchestration, persistent cache policy enforcement, uploaded evidence, or saved-run history.
+- Source trace states help users understand retrieval health, but users still need to inspect evidence before acting on a causal explanation.

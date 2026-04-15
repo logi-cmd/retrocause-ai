@@ -8,7 +8,7 @@ RetroCause is a runnable, inspectable causal explanation product for "why did th
 
 ## Current Status
 
-The OSS version is **published as an alpha prerelease**.
+The OSS version is **published as an alpha prerelease** and the SourceBroker retrieval reliability pass is implemented locally.
 
 What is done:
 
@@ -26,11 +26,12 @@ What is done:
 - automated validation through the root `npm test` command
 - clean public GitHub repo published at `https://github.com/logi-cmd/retrocause-ai`
 - GitHub prerelease `v0.1.0-alpha.4`
+- SourceBroker reliability pass: source profiles, scenario/language/time-aware cache keys, degraded-source classification, API/brief/UI source-health status, and optional user-key Tavily/Brave adapters
 
 What is not done:
 
 - stable `v0.1.0` release
-- first-time OSS release polish beyond the current bilingual README
+- first-time OSS release polish beyond the current bilingual README and alpha prerelease
 - Solo Pro / Team Lite hosted workflows that would make the product directly useful in repeated paid workflows
 
 ## Current Focus
@@ -39,7 +40,7 @@ Stabilize quality-first live evidence retrieval, especially for time-sensitive m
 
 Current UX focus: validate the general Production Brief Harness across real market, policy/geopolitics, and postmortem questions. OSS now supports scenario-aware single-run briefs with freshness/source-quality gating; Pro workflow depth should focus on individuals and small teams: run queues, quota management, cache reuse, saved runs, uploaded evidence, scheduled watch topics, PDF/DOCX export, and lightweight team review. Enterprise private deployment is not a near-term target.
 
-Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md` and has been executed through code, frontend, export, and regression cleanup. The retrieval/output strategy is captured in `docs/retrieval-and-output-strategy.md`. The next SourceBroker reliability implementation plan is saved at `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`.
+Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md` and has been executed through code, frontend, export, and regression cleanup. The retrieval/output strategy is captured in `docs/retrieval-and-output-strategy.md`. The SourceBroker reliability implementation plan is saved at `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md` and has been executed through documentation/full verification.
 
 ## Working Rules
 
@@ -82,15 +83,16 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Implemented SourceBroker Task 5: optional Tavily hosted search adapter is key-gated by `TAVILY_API_KEY`, maps Tavily results into `SearchResult`, and stays absent from OSS source registration when the key is not configured.
 - Implemented SourceBroker Task 6: optional Brave Search adapter is key-gated by `BRAVE_SEARCH_API_KEY`, maps Brave web results into `SearchResult`, and marks result metadata with `cache_policy=transient_results_only`.
 - Implemented SourceBroker Task 7: frontend source trace rows now show localized retrieval-health statuses, retry-after hints, and readable brief source-health summary counts for successful, cached, degraded, and reviewability state.
+- Implemented SourceBroker Task 8: README and retrieval docs now explain SourceBroker source states, optional hosted adapters, OSS inspectable retrieval, and OSS/Pro boundary in user-facing language.
 
 ## Blockers
 
-- The OSS product can now export a Markdown research brief, but the brief format still needs real-user polish across more live domains.
+- The OSS product can now export a Markdown research brief and show retrieval-health states, but the brief format still needs real-user polish across more live domains.
 - Direct monetization should stay Pro-oriented but lightweight: hosted operation, run queues, quota management, cache reuse, uploaded evidence, saved runs, PDF/DOCX, scheduled watch topics, lightweight team review, source controls, and saved comparisons.
 
 ## Next Step
 
-Continue the SourceBroker retrieval reliability implementation plan with Task 8: finish documentation and full verification for the SourceBroker reliability pass.
+Dogfood the completed SourceBroker reliability pass across fresh market, policy/geopolitics, and postmortem questions, then decide whether the next implementation slice should be lightweight run orchestration, uploaded evidence, or saved-run history.
 
 Release-readiness pass from the user journey:
 
