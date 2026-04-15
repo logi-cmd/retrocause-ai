@@ -202,6 +202,15 @@ Tasks 3 and 4 of the SourceBroker reliability pass give each source attempt stab
 
 Each attempt also carries source label, source kind, stability, and cache policy from the source profile registry. The engine preserves these fields when compiling live pipeline results, and `_result_to_v2()` accepts both dict traces and `SourceAttempt` objects. Markdown source trace rows now say `rate-limited`, `source-limited`, `timeout`, or `source-error` directly instead of presenting degraded sources as silent zero-result rows. This is retrieval-health metadata only and does not introduce new causal claims.
 
+### Implemented Optional Hosted Sources
+
+Tavily is implemented as the first optional hosted source. OSS remains runnable without a hosted-search account:
+
+- `TAVILY_API_KEY` absent: Tavily is not registered in the app source map and SourceBroker ignores it.
+- `TAVILY_API_KEY` present: Tavily can be included as an optional source and ordered by scenario-aware source policy.
+- Tavily results map title, URL, content/snippet, raw content, score, and published date into `SearchResult`.
+- Tavily metadata includes `provider=tavily`, `content_quality`, source domain, score, published date when present, and `cache_policy=derived_cache_allowed`.
+
 ## Product Output Contract
 
 Every user-facing result should answer:

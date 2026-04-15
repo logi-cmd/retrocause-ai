@@ -1067,3 +1067,68 @@ Execute Task 4 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: su
 
 - This task exposes backend/brief metadata. Frontend-specific bilingual badges and right-panel visual polish remain Task 7.
 - Date-formatted `Retry-After` headers are still not parsed; numeric retry seconds are preserved when available.
+
+## 2026-04-15 SourceBroker Task 5: Optional Tavily Adapter
+
+### Task
+
+Execute Task 5 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: add an optional Tavily hosted search adapter that is enabled only when the user provides `TAVILY_API_KEY`, maps Tavily search results into `SearchResult`, and does not make hosted search mandatory for OSS users.
+
+### Files Touched
+
+- `retrocause/sources/tavily.py`
+- `retrocause/app/demo_data.py`
+- `tests/test_evidence_access.py`
+- `README.md`
+- `docs/PROJECT_STATE.md`
+- `docs/retrieval-and-output-strategy.md`
+- `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`, `retrocause/app/demo_data.py`, `retrocause/evidence_access.py`, `retrocause/sources/`, `tests/test_evidence_access.py`, `.agent-guardrails/task-contract.json`, and this evidence note before implementation.
+- `pytest tests\test_evidence_access.py::test_optional_tavily_adapter_requires_api_key tests\test_evidence_access.py::test_tavily_adapter_maps_results_to_search_result -q`
+  - TDD red result: failed because `_available_source_classes_from_env`, `_optional_hosted_source_names_from_env`, and `retrocause.sources.tavily` did not exist yet.
+- `pytest tests\test_evidence_access.py::test_optional_tavily_adapter_requires_api_key tests\test_evidence_access.py::test_tavily_adapter_maps_results_to_search_result -q`
+  - Result after implementation: 2 passed.
+- `pytest tests\test_evidence_access.py -q`
+  - Result: 22 passed.
+- `ruff check retrocause\sources\tavily.py retrocause\app\demo_data.py tests\test_evidence_access.py`
+  - Result: passed.
+- `pytest tests\test_evidence_access.py tests\test_auto_collect.py -q`
+  - Result: 36 passed.
+- `npm test` with `.venv\Scripts` prepended to `PATH`
+  - First result: failed after frontend lint/build, ruff, and 243 pytest tests passed because `TAVILY_API_KEY` was present in the environment and `_select_source_names(None, "geopolitics")` became non-deterministic by including optional Tavily.
+- `pytest tests\test_query_routing.py::test_select_source_names_prefers_news_sources_for_geopolitics tests\test_evidence_access.py::test_optional_tavily_adapter_requires_api_key tests\test_evidence_access.py::test_tavily_adapter_maps_results_to_search_result -q`
+  - Result after keeping `_select_source_names` deterministic and only adding Tavily in live run registration: 3 passed.
+- `ruff check retrocause\sources\tavily.py retrocause\app\demo_data.py tests\test_evidence_access.py`
+  - Result after the deterministic helper fix: passed.
+- `npm test` with `.venv\Scripts` prepended to `PATH`
+  - Result: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, full pytest, and E2E smoke tests.
+  - Pytest result: 244 passed.
+  - E2E result: 572 passed, 0 failed, 1 skipped.
+  - The skipped item was the optional Playwright full workflow because Playwright was not installed in `.venv`.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - First result: `pass-with-concerns`, 75/100, because README/evidence placeholder wording looked like possible secrets.
+  - Remediation: removed token-like placeholder examples and the literal bearer-token wording from docs/evidence.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result after remediation: `safe-to-deploy`, 90/100.
+  - Blocking errors: 0.
+  - Non-blocking warnings: this task spans `.agent-guardrails`, `README.md`, `docs`, `retrocause`, and `tests`, and `docs/PROJECT_STATE.md` changed by the project documentation-sync rule.
+- Committed Task 5 as `feat: add optional Tavily retrieval adapter`.
+
+### Behavior Notes
+
+- Added `TavilySourceAdapter`, using `TAVILY_API_KEY` by default or an explicit constructor key in tests.
+- The adapter calls Tavily Search with the configured auth header, query, max results, and raw-content inclusion.
+- Tavily results now map title, URL, content, raw content, score, and published date into `SearchResult` plus metadata.
+- App source registration now includes Tavily only when `TAVILY_API_KEY` is present.
+- Broker optional-source routing remains controlled by the existing `broker_source_names(..., optional_sources=...)` path.
+
+### Residual Risks
+
+- Focused tests use mocked HTTP only; no live Tavily account was used.
+- Tavily is now available to the live app when a key is present, but frontend-specific source status labels remain later Task 7 work.
+- `_select_source_names()` remains deterministic for legacy routing tests; optional hosted sources are added in the live analysis path only.

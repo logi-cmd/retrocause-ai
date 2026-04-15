@@ -1080,6 +1080,38 @@ def _select_source_names(configured_sources: str | None, domain: str) -> list[st
     return broker_source_names(configured_sources, plan)
 
 
+def _optional_hosted_source_names_from_env() -> list[str]:
+    import os
+
+    optional_sources: list[str] = []
+    if os.environ.get("TAVILY_API_KEY", "").strip():
+        optional_sources.append("tavily")
+    return optional_sources
+
+
+def _available_source_classes_from_env() -> dict[str, type]:
+    from retrocause.sources.ap_news import APNewsAdapter as _AP
+    from retrocause.sources.arxiv import ArxivSourceAdapter as _Arxiv
+    from retrocause.sources.federal_register import FederalRegisterAdapter as _FederalRegister
+    from retrocause.sources.gdelt import GdeltNewsAdapter as _Gdelt
+    from retrocause.sources.semantic_scholar import SemanticScholarAdapter as _SS
+    from retrocause.sources.web import WebSearchAdapter as _Web
+
+    available_sources: dict[str, type] = {
+        "ap_news": _AP,
+        "arxiv": _Arxiv,
+        "federal_register": _FederalRegister,
+        "semantic_scholar": _SS,
+        "web": _Web,
+        "gdelt": _Gdelt,
+    }
+    if "tavily" in _optional_hosted_source_names_from_env():
+        from retrocause.sources.tavily import TavilySourceAdapter as _Tavily
+
+        available_sources["tavily"] = _Tavily
+    return available_sources
+
+
 def run_real_analysis(
     query: str, api_key: str, model: str, base_url: str | None
 ) -> AnalysisResult | None:
@@ -1088,27 +1120,19 @@ def run_real_analysis(
     from retrocause.config import RetroCauseConfig as _Config
     from retrocause.engine import analyze as _analyze
     from retrocause.llm import LLMClient as _LLMClient
-    from retrocause.sources.ap_news import APNewsAdapter as _AP
     from retrocause.sources.arxiv import ArxivSourceAdapter as _Arxiv
-    from retrocause.sources.federal_register import FederalRegisterAdapter as _FederalRegister
-    from retrocause.sources.gdelt import GdeltNewsAdapter as _Gdelt
     from retrocause.sources.semantic_scholar import SemanticScholarAdapter as _SS
     from retrocause.sources.web import WebSearchAdapter as _Web
     from retrocause.parser import parse_input as _parse_input
 
-    available_sources = {
-        "ap_news": _AP,
-        "arxiv": _Arxiv,
-        "federal_register": _FederalRegister,
-        "semantic_scholar": _SS,
-        "web": _Web,
-        "gdelt": _Gdelt,
-    }
+    available_sources = _available_source_classes_from_env()
     parsed = _parse_input(query)
     from retrocause.evidence_access import broker_source_names, plan_query as _plan_query
 
     requested_sources = broker_source_names(
-        os.environ.get("RETROCAUSE_ENABLED_SOURCES"), _plan_query(query, parsed)
+        os.environ.get("RETROCAUSE_ENABLED_SOURCES"),
+        _plan_query(query, parsed),
+        optional_sources=_optional_hosted_source_names_from_env(),
     )
 
     cfg = _Config.from_env()
@@ -1138,27 +1162,19 @@ def run_real_analysis_with_progress(
     from retrocause.config import RetroCauseConfig as _Config
     from retrocause.engine import analyze as _analyze
     from retrocause.llm import LLMClient as _LLMClient
-    from retrocause.sources.ap_news import APNewsAdapter as _AP
     from retrocause.sources.arxiv import ArxivSourceAdapter as _Arxiv
-    from retrocause.sources.federal_register import FederalRegisterAdapter as _FederalRegister
-    from retrocause.sources.gdelt import GdeltNewsAdapter as _Gdelt
     from retrocause.sources.semantic_scholar import SemanticScholarAdapter as _SS
     from retrocause.sources.web import WebSearchAdapter as _Web
     from retrocause.parser import parse_input as _parse_input
 
-    available_sources = {
-        "ap_news": _AP,
-        "arxiv": _Arxiv,
-        "federal_register": _FederalRegister,
-        "semantic_scholar": _SS,
-        "web": _Web,
-        "gdelt": _Gdelt,
-    }
+    available_sources = _available_source_classes_from_env()
     parsed = _parse_input(query)
     from retrocause.evidence_access import broker_source_names, plan_query as _plan_query
 
     requested_sources = broker_source_names(
-        os.environ.get("RETROCAUSE_ENABLED_SOURCES"), _plan_query(query, parsed)
+        os.environ.get("RETROCAUSE_ENABLED_SOURCES"),
+        _plan_query(query, parsed),
+        optional_sources=_optional_hosted_source_names_from_env(),
     )
 
     cfg = _Config.from_env()

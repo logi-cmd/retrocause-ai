@@ -43,6 +43,7 @@ Known limits / 已知限制：
 - PDF/export/share/team workflows are not included yet.
 - OSS report output is a copyable Markdown research brief. Higher-end PDF, team, scheduled, and branded workflows belong in a future Pro tier.
 - OSS includes local single-run production briefs and Markdown export. Pro remains the place for hosted recurring runs, PDF/DOCX, saved comparisons, team review, source-policy controls, and branded delivery.
+- Optional hosted search is key-gated. Set `TAVILY_API_KEY` to add Tavily as an additional source; without that key, OSS continues to run with the built-in local/free source adapters.
 
 - 结果是“有证据锚定的解释”，不是已经被证明的因果真理。
 - Live 模式质量取决于来源可用性、模型行为和 API 额度。
@@ -129,6 +130,10 @@ curl -X POST http://localhost:8000/api/providers/preflight \
   -H "Content-Type: application/json" \
   -d "{\"model\":\"openrouter\",\"explicit_model\":\"deepseek/deepseek-chat-v3-0324\",\"api_key\":\"YOUR_KEY\"}"
 ```
+
+Optional hosted source:
+
+Set the `TAVILY_API_KEY` environment variable to the value from your Tavily dashboard before starting the app. When `TAVILY_API_KEY` is not set, Tavily is not registered and the app keeps using the built-in source adapters.
 
 Windows PowerShell note / Windows PowerShell 注意：
 

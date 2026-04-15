@@ -436,3 +436,72 @@ def test_broker_source_names_can_include_optional_hosted_sources_when_enabled():
         "web",
         "arxiv",
     ]
+
+
+def test_optional_tavily_adapter_requires_api_key(monkeypatch):
+    from retrocause.app.demo_data import (
+        _available_source_classes_from_env,
+        _optional_hosted_source_names_from_env,
+    )
+
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+
+    assert "tavily" not in _optional_hosted_source_names_from_env()
+    assert "tavily" not in _available_source_classes_from_env()
+
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+
+    assert "tavily" in _optional_hosted_source_names_from_env()
+    assert "tavily" in _available_source_classes_from_env()
+
+
+def test_tavily_adapter_maps_results_to_search_result(monkeypatch):
+    from retrocause.sources.tavily import TavilySourceAdapter
+
+    calls: list[dict] = []
+
+    class _TavilyResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {
+                "results": [
+                    {
+                        "title": "US and Iran talks end without agreement",
+                        "url": "https://example.com/us-iran-talks",
+                        "content": "Talks ended after disagreement over sanctions sequencing.",
+                        "raw_content": "Full article text about sanctions sequencing.",
+                        "score": 0.87,
+                        "published_date": "2026-04-15",
+                    }
+                ],
+                "request_id": "req-123",
+            }
+
+    def fake_post(url: str, **kwargs) -> _TavilyResponse:
+        calls.append({"url": url, **kwargs})
+        return _TavilyResponse()
+
+    monkeypatch.setattr("retrocause.sources.tavily.httpx.post", fake_post)
+
+    results = TavilySourceAdapter("tvly-test").search("US Iran talks", max_results=1)
+
+    assert calls[0]["url"] == "https://api.tavily.com/search"
+    assert calls[0]["headers"]["Authorization"] == "Bearer tvly-test"
+    assert calls[0]["json"]["query"] == "US Iran talks"
+    assert calls[0]["json"]["max_results"] == 1
+    assert calls[0]["json"]["include_raw_content"] == "text"
+
+    assert len(results) == 1
+    item = results[0]
+    assert item.title == "US and Iran talks end without agreement"
+    assert item.url == "https://example.com/us-iran-talks"
+    assert item.content == "Talks ended after disagreement over sanctions sequencing."
+    assert item.source_type == EvidenceType.NEWS
+    assert item.metadata["provider"] == "tavily"
+    assert item.metadata["score"] == 0.87
+    assert item.metadata["published"] == "2026-04-15"
+    assert item.metadata["page_content"] == "Full article text about sanctions sequencing."
+    assert item.metadata["content_quality"] == "fulltext"
+    assert item.metadata["cache_policy"] == "derived_cache_allowed"

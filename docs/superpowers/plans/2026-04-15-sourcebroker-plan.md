@@ -133,16 +133,16 @@
 
 **Files:** `retrocause/sources/tavily.py`, `retrocause/app/demo_data.py`, `tests/test_evidence_access.py`
 
-- [ ] Add tests first:
+- [x] Add tests first:
   - `test_optional_tavily_adapter_requires_api_key`
   - `test_tavily_adapter_maps_results_to_search_result`
-- [ ] Implement `TavilySourceAdapter`.
-- [ ] Read the key from `TAVILY_API_KEY`.
-- [ ] Return no adapter from app source registration when the key is absent.
-- [ ] Map Tavily result title, URL, content/snippet, score, and published date metadata into `SearchResult`.
-- [ ] Mark metadata with `content_quality`, provider name, and cache policy.
-- [ ] Run the focused adapter tests without requiring a real API key by mocking HTTP.
-- [ ] Commit: `feat: add optional Tavily retrieval adapter`.
+- [x] Implement `TavilySourceAdapter`.
+- [x] Read the key from `TAVILY_API_KEY`.
+- [x] Return no adapter from app source registration when the key is absent.
+- [x] Map Tavily result title, URL, content/snippet, score, and published date metadata into `SearchResult`.
+- [x] Mark metadata with `content_quality`, provider name, and cache policy.
+- [x] Run the focused adapter tests without requiring a real API key by mocking HTTP.
+- [x] Commit: `feat: add optional Tavily retrieval adapter`.
 
 ## Task 6: Optional Brave Search Adapter
 
