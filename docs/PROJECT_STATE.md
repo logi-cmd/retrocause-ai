@@ -85,16 +85,17 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Implemented SourceBroker Task 7: frontend source trace rows now show localized retrieval-health statuses, retry-after hints, and readable brief source-health summary counts for successful, cached, degraded, and reviewability state.
 - Implemented SourceBroker Task 8: README and retrieval docs now explain SourceBroker source states, optional hosted adapters, OSS inspectable retrieval, and OSS/Pro boundary in user-facing language.
 - Dogfooded the completed SourceBroker reliability pass across market, policy/geopolitics, and postmortem live scenarios with OpenRouter DeepSeek V3: all three returned live reviewable results with source trace rows, evidence counts, Markdown briefs, and harness `ready_for_review`.
+- Added a degraded-source drill regression covering `rate_limited`, `forbidden`, `timeout`, `source_error`, `source_limited`, and `cached` source trace rows in the same reviewable output.
 
 ## Blockers
 
 - The OSS product can now export a Markdown research brief and show retrieval-health states, but the brief format still needs real-user polish across more live domains.
-- The latest dogfood covered the normal live path only; a degraded-source drill still needs to intentionally exercise 429, forbidden, timeout, source-error, and source-limited states.
+- The degraded-source drill is now covered by a deterministic regression test; the remaining gap is visual/browser dogfood of those bad-path states in the right-side source trace.
 - Direct monetization should stay Pro-oriented but lightweight: hosted operation, run queues, quota management, cache reuse, uploaded evidence, saved runs, PDF/DOCX, scheduled watch topics, lightweight team review, source controls, and saved comparisons.
 
 ## Next Step
 
-Run a degraded-source drill for the completed SourceBroker reliability pass, then decide whether the next implementation slice should be lightweight run orchestration, uploaded evidence, or saved-run history.
+Run visual/browser dogfood for degraded-source states, then decide whether the next implementation slice should be lightweight run orchestration, uploaded evidence, or saved-run history.
 
 Release-readiness pass from the user journey:
 

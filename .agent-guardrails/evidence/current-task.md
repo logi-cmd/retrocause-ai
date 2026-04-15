@@ -1339,3 +1339,40 @@ Dogfood the completed SourceBroker reliability pass across one market, one polic
 - This dogfood validates the normal live path, not the degraded-source UX under real provider failure.
 - A follow-up degraded-source drill should intentionally simulate 429, forbidden, timeout, and cooldown states through existing mocked adapters or a small test harness so the user-facing bad-path output can be inspected without waiting for real providers to fail.
 - The market run returned `freshness_status=recent` rather than `fresh`, which is acceptable for review but should be highlighted to users before any trade or investment use.
+
+## 2026-04-15 SourceBroker Degraded-Source Drill
+
+### Task
+
+Add a deterministic degraded-source drill regression so the bad path is checked without waiting for real providers to fail. The drill verifies that a single reviewable output can expose rate-limited, forbidden, timed-out, source-error, source-limited, and cached trace rows.
+
+### Files Touched
+
+- `tests/test_comprehensive.py`
+- `docs/PROJECT_STATE.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, `tests/test_comprehensive.py`, `retrocause/api/main.py`, `.agent-guardrails/task-contract.json`, and this evidence note before editing.
+- `pytest tests\test_comprehensive.py::test_degraded_source_drill_surfaces_all_limited_states_for_review -q`
+  - Result: passed.
+  - The existing SourceBroker output already surfaced all tested degraded statuses in analysis source coverage and Markdown source trace.
+- `npm test` with `.venv\Scripts` prepended to `PATH`
+  - Result: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, full pytest, and E2E smoke tests.
+  - Pytest result: 249 passed.
+  - E2E result: 572 passed, 0 failed, 1 skipped.
+  - The skipped item was the optional Playwright full workflow because Playwright was not installed in `.venv`.
+
+### Behavior Notes
+
+- Added `test_degraded_source_drill_surfaces_all_limited_states_for_review`.
+- The drill builds a representative V2 result with `rate_limited`, `forbidden`, `timeout`, `source_error`, `source_limited`, and `cached` retrieval trace rows.
+- The test asserts the analysis brief says `6 source attempt(s), 5 degraded or limited`.
+- The test asserts Markdown source trace includes `status: rate-limited`, `status: forbidden`, `status: timeout`, `status: source-error`, `status: source-limited`, `status: cached`, `retry after 30s`, and `cache policy: transient_results_only`.
+
+### Residual Risks
+
+- This is deterministic API/brief regression coverage, not browser visual dogfood.
+- The next useful UX check is to render a degraded trace in the browser and inspect whether the right-side status labels, colors, and retry-after copy are obvious enough for a first-time user.

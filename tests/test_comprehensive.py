@@ -461,6 +461,98 @@ def test_retrieval_trace_exposes_degraded_source_metadata():
     assert "cache policy: short_lived_cache_allowed" in response.markdown_brief
 
 
+def test_degraded_source_drill_surfaces_all_limited_states_for_review():
+    result = _sample_result_with_one_supported_chain(
+        "Why did US Iran talks in Islamabad end without agreement?"
+    )
+    result.retrieval_trace = [
+        {
+            "source": "ap_news",
+            "query": "US Iran Islamabad talks AP",
+            "result_count": 0,
+            "cache_hit": False,
+            "status": "rate_limited",
+            "retry_after_seconds": 30,
+            "source_label": "AP News",
+            "source_kind": "wire_news",
+            "stability": "high",
+            "cache_policy": "short_lived_cache_allowed",
+        },
+        {
+            "source": "federal_register",
+            "query": "US Iran official sanctions register",
+            "result_count": 0,
+            "cache_hit": False,
+            "status": "forbidden",
+            "source_label": "Federal Register",
+            "source_kind": "official_record",
+            "stability": "high",
+            "cache_policy": "public_record_cache_allowed",
+        },
+        {
+            "source": "gdelt",
+            "query": "US Iran talks timeout",
+            "result_count": 0,
+            "cache_hit": False,
+            "status": "timeout",
+            "source_label": "GDELT",
+            "source_kind": "news_index",
+            "stability": "medium",
+            "cache_policy": "short_lived_cache_allowed",
+        },
+        {
+            "source": "brave",
+            "query": "US Iran talks broad web",
+            "result_count": 0,
+            "cache_hit": False,
+            "status": "source_error",
+            "source_label": "Brave Search",
+            "source_kind": "web_search",
+            "stability": "medium",
+            "cache_policy": "transient_results_only",
+        },
+        {
+            "source": "tavily",
+            "query": "US Iran talks fallback",
+            "result_count": 0,
+            "cache_hit": False,
+            "status": "source_limited",
+            "source_label": "Tavily Search",
+            "source_kind": "hosted_search",
+            "stability": "medium",
+            "cache_policy": "derived_cache_allowed",
+        },
+        {
+            "source": "web",
+            "query": "US Iran talks cached evidence",
+            "result_count": 3,
+            "cache_hit": True,
+            "status": "cached",
+            "source_label": "Trusted web search",
+            "source_kind": "web_search",
+            "stability": "medium",
+            "cache_policy": "derived_cache_allowed",
+        },
+    ]
+
+    response = _result_to_v2(result, is_demo=False)
+
+    assert response.analysis_brief is not None
+    assert "6 source attempt(s), 5 degraded or limited" in response.analysis_brief.source_coverage
+    assert response.markdown_brief is not None
+    for status in [
+        "status: rate-limited",
+        "status: forbidden",
+        "status: timeout",
+        "status: source-error",
+        "status: source-limited",
+        "status: cached",
+    ]:
+        assert status in response.markdown_brief
+    assert "retry after 30s" in response.markdown_brief
+    assert "cache policy: transient_results_only" in response.markdown_brief
+
+
 def test_postmortem_without_internal_evidence_is_not_actionable():
     result = _sample_result_with_one_supported_chain(
         "Why did our checkout conversion drop after the release incident?"
