@@ -1086,6 +1086,8 @@ def _optional_hosted_source_names_from_env() -> list[str]:
     optional_sources: list[str] = []
     if os.environ.get("TAVILY_API_KEY", "").strip():
         optional_sources.append("tavily")
+    if os.environ.get("BRAVE_SEARCH_API_KEY", "").strip():
+        optional_sources.append("brave")
     return optional_sources
 
 
@@ -1109,6 +1111,10 @@ def _available_source_classes_from_env() -> dict[str, type]:
         from retrocause.sources.tavily import TavilySourceAdapter as _Tavily
 
         available_sources["tavily"] = _Tavily
+    if "brave" in _optional_hosted_source_names_from_env():
+        from retrocause.sources.brave import BraveSearchSourceAdapter as _Brave
+
+        available_sources["brave"] = _Brave
     return available_sources
 
 

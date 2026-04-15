@@ -43,7 +43,7 @@ Known limits / 已知限制：
 - PDF/export/share/team workflows are not included yet.
 - OSS report output is a copyable Markdown research brief. Higher-end PDF, team, scheduled, and branded workflows belong in a future Pro tier.
 - OSS includes local single-run production briefs and Markdown export. Pro remains the place for hosted recurring runs, PDF/DOCX, saved comparisons, team review, source-policy controls, and branded delivery.
-- Optional hosted search is key-gated. Set `TAVILY_API_KEY` to add Tavily as an additional source; without that key, OSS continues to run with the built-in local/free source adapters.
+- Optional hosted search is key-gated. Set `TAVILY_API_KEY` to add Tavily or `BRAVE_SEARCH_API_KEY` to add Brave Search as additional sources; without those keys, OSS continues to run with the built-in local/free source adapters.
 
 - 结果是“有证据锚定的解释”，不是已经被证明的因果真理。
 - Live 模式质量取决于来源可用性、模型行为和 API 额度。
@@ -131,9 +131,11 @@ curl -X POST http://localhost:8000/api/providers/preflight \
   -d "{\"model\":\"openrouter\",\"explicit_model\":\"deepseek/deepseek-chat-v3-0324\",\"api_key\":\"YOUR_KEY\"}"
 ```
 
-Optional hosted source:
+Optional hosted sources:
 
-Set the `TAVILY_API_KEY` environment variable to the value from your Tavily dashboard before starting the app. When `TAVILY_API_KEY` is not set, Tavily is not registered and the app keeps using the built-in source adapters.
+Set `TAVILY_API_KEY` to add Tavily Search or `BRAVE_SEARCH_API_KEY` to add Brave Search before starting the app. When these variables are not set, those hosted adapters are not registered and the app keeps using the built-in source adapters.
+
+可选托管检索源：启动应用前设置 `TAVILY_API_KEY` 可启用 Tavily，设置 `BRAVE_SEARCH_API_KEY` 可启用 Brave Search。未设置这些变量时，OSS 版本仍使用内置检索源运行。
 
 Windows PowerShell note / Windows PowerShell 注意：
 

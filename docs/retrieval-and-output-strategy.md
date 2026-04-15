@@ -204,12 +204,16 @@ Each attempt also carries source label, source kind, stability, and cache policy
 
 ### Implemented Optional Hosted Sources
 
-Tavily is implemented as the first optional hosted source. OSS remains runnable without a hosted-search account:
+Tavily and Brave Search are implemented as optional hosted sources. OSS remains runnable without a hosted-search account:
 
 - `TAVILY_API_KEY` absent: Tavily is not registered in the app source map and SourceBroker ignores it.
 - `TAVILY_API_KEY` present: Tavily can be included as an optional source and ordered by scenario-aware source policy.
 - Tavily results map title, URL, content/snippet, raw content, score, and published date into `SearchResult`.
 - Tavily metadata includes `provider=tavily`, `content_quality`, source domain, score, published date when present, and `cache_policy=derived_cache_allowed`.
+- `BRAVE_SEARCH_API_KEY` absent: Brave Search is not registered in the app source map and SourceBroker ignores it.
+- `BRAVE_SEARCH_API_KEY` present: Brave Search can be included as an optional source and ordered by scenario-aware source policy.
+- Brave web results map title, URL, and description into `SearchResult`.
+- Brave metadata includes `provider=brave`, `content_quality=snippet`, source domain, published date when present, and `cache_policy=transient_results_only` so downstream cache handling can respect restrictive result-storage terms.
 
 ## Product Output Contract
 

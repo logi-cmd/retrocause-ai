@@ -455,6 +455,23 @@ def test_optional_tavily_adapter_requires_api_key(monkeypatch):
     assert "tavily" in _available_source_classes_from_env()
 
 
+def test_optional_brave_adapter_requires_api_key(monkeypatch):
+    from retrocause.app.demo_data import (
+        _available_source_classes_from_env,
+        _optional_hosted_source_names_from_env,
+    )
+
+    monkeypatch.delenv("BRAVE_SEARCH_API_KEY", raising=False)
+
+    assert "brave" not in _optional_hosted_source_names_from_env()
+    assert "brave" not in _available_source_classes_from_env()
+
+    monkeypatch.setenv("BRAVE_SEARCH_API_KEY", "brave-test")
+
+    assert "brave" in _optional_hosted_source_names_from_env()
+    assert "brave" in _available_source_classes_from_env()
+
+
 def test_tavily_adapter_maps_results_to_search_result(monkeypatch):
     from retrocause.sources.tavily import TavilySourceAdapter
 
@@ -505,3 +522,53 @@ def test_tavily_adapter_maps_results_to_search_result(monkeypatch):
     assert item.metadata["page_content"] == "Full article text about sanctions sequencing."
     assert item.metadata["content_quality"] == "fulltext"
     assert item.metadata["cache_policy"] == "derived_cache_allowed"
+
+
+def test_brave_adapter_marks_transient_cache_policy(monkeypatch):
+    from retrocause.sources.brave import BraveSearchSourceAdapter
+
+    calls: list[dict] = []
+
+    class _BraveResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {
+                "web": {
+                    "results": [
+                        {
+                            "title": "US and Iran talks end without agreement",
+                            "url": "https://example.com/us-iran-talks",
+                            "description": "Talks ended after disagreement over sanctions sequencing.",
+                            "age": "2026-04-15T12:00:00Z",
+                        }
+                    ]
+                }
+            }
+
+    def fake_get(url: str, **kwargs) -> _BraveResponse:
+        calls.append({"url": url, **kwargs})
+        return _BraveResponse()
+
+    monkeypatch.setattr("retrocause.sources.brave.httpx.get", fake_get)
+
+    results = BraveSearchSourceAdapter("brave-test").search("US Iran talks", max_results=1)
+
+    assert calls[0]["url"] == "https://api.search.brave.com/res/v1/web/search"
+    assert calls[0]["headers"]["X-Subscription-Token"] == "brave-test"
+    assert calls[0]["params"]["q"] == "US Iran talks"
+    assert calls[0]["params"]["count"] == 1
+
+    assert len(results) == 1
+    item = results[0]
+    assert item.title == "US and Iran talks end without agreement"
+    assert item.url == "https://example.com/us-iran-talks"
+    assert item.content == "Talks ended after disagreement over sanctions sequencing."
+    assert item.source_type == EvidenceType.NEWS
+    assert item.metadata["provider"] == "brave"
+    assert item.metadata["source_domain"] == "example.com"
+    assert item.metadata["published"] == "2026-04-15"
+    assert item.metadata["content_quality"] == "snippet"
+    assert item.metadata["cache_policy"] == "transient_results_only"
+    assert "page_content" not in item.metadata

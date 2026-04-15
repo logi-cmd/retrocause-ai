@@ -1132,3 +1132,60 @@ Execute Task 5 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: ad
 - Focused tests use mocked HTTP only; no live Tavily account was used.
 - Tavily is now available to the live app when a key is present, but frontend-specific source status labels remain later Task 7 work.
 - `_select_source_names()` remains deterministic for legacy routing tests; optional hosted sources are added in the live analysis path only.
+
+## 2026-04-15 SourceBroker Task 6: Optional Brave Search Adapter
+
+### Task
+
+Execute Task 6 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: add an optional Brave Search adapter that is enabled only when the user provides `BRAVE_SEARCH_API_KEY`, maps Brave web search results into `SearchResult`, and marks provider metadata with a transient result-storage policy.
+
+### Files Touched
+
+- `retrocause/sources/brave.py`
+- `retrocause/app/demo_data.py`
+- `tests/test_evidence_access.py`
+- `README.md`
+- `docs/PROJECT_STATE.md`
+- `docs/retrieval-and-output-strategy.md`
+- `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`, `retrocause/app/demo_data.py`, `retrocause/evidence_access.py`, `retrocause/sources/tavily.py`, `retrocause/sources/base.py`, `tests/test_evidence_access.py`, `.agent-guardrails/task-contract.json`, and this evidence note before implementation.
+- Checked official Brave Search API docs for the Web Search endpoint, API-key header, and request parameters.
+- `pytest tests\test_evidence_access.py::test_optional_brave_adapter_requires_api_key tests\test_evidence_access.py::test_brave_adapter_marks_transient_cache_policy -q`
+  - TDD red result: failed because `_optional_hosted_source_names_from_env()` did not include Brave and `retrocause.sources.brave` did not exist.
+- `pytest tests\test_evidence_access.py::test_optional_brave_adapter_requires_api_key tests\test_evidence_access.py::test_brave_adapter_marks_transient_cache_policy -q`
+  - Result after implementation: 2 passed.
+- `pytest tests\test_evidence_access.py -q`
+  - Result: 24 passed.
+- `ruff check retrocause\sources\brave.py retrocause\app\demo_data.py tests\test_evidence_access.py`
+  - Result: passed.
+- `pytest tests\test_evidence_access.py tests\test_auto_collect.py -q`
+  - Result: 38 passed.
+- `npm test` with `.venv\Scripts` prepended to `PATH`
+  - Result: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, full pytest, and E2E smoke tests.
+  - Pytest result: 246 passed.
+  - E2E result: 572 passed, 0 failed, 1 skipped.
+  - The skipped item was the optional Playwright full workflow because Playwright was not installed in `.venv`.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: `safe-to-deploy`, 90/100.
+  - Blocking errors: 0.
+  - Non-blocking warnings: this task spans `.agent-guardrails`, `README.md`, `docs`, `retrocause`, and `tests`, and `docs/PROJECT_STATE.md` changed by the project documentation-sync rule.
+- Committed Task 6 as `feat: add optional Brave retrieval adapter`.
+
+### Behavior Notes
+
+- Added `BraveSearchSourceAdapter`, using `BRAVE_SEARCH_API_KEY` by default or an explicit constructor key in tests.
+- The adapter calls Brave Web Search with query and result-count parameters plus the required API-key header.
+- Brave web results now map title, URL, description, source domain, and published date when present into `SearchResult`.
+- Brave metadata includes `provider=brave`, `content_quality=snippet`, and `cache_policy=transient_results_only`.
+- App source registration now includes Brave only when `BRAVE_SEARCH_API_KEY` is present.
+
+### Residual Risks
+
+- Focused tests use mocked HTTP only; no live Brave account was used.
+- Brave result metadata is snippet-only in this pass. Full page fetch/extract remains governed by downstream source policy and provider terms.
+- Frontend-specific bilingual source status labels remain later Task 7 work.

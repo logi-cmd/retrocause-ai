@@ -148,16 +148,16 @@
 
 **Files:** `retrocause/sources/brave.py`, `retrocause/app/demo_data.py`, `tests/test_evidence_access.py`
 
-- [ ] Add tests first:
+- [x] Add tests first:
   - `test_optional_brave_adapter_requires_api_key`
   - `test_brave_adapter_marks_transient_cache_policy`
-- [ ] Implement `BraveSearchSourceAdapter`.
-- [ ] Read the key from `BRAVE_SEARCH_API_KEY`.
-- [ ] Return no adapter from app source registration when the key is absent.
-- [ ] Map web results to `SearchResult`.
-- [ ] Mark Brave metadata with transient result-storage policy so downstream cache handling can respect provider terms.
-- [ ] Run the focused adapter tests without requiring a real API key by mocking HTTP.
-- [ ] Commit: `feat: add optional Brave retrieval adapter`.
+- [x] Implement `BraveSearchSourceAdapter`.
+- [x] Read the key from `BRAVE_SEARCH_API_KEY`.
+- [x] Return no adapter from app source registration when the key is absent.
+- [x] Map web results to `SearchResult`.
+- [x] Mark Brave metadata with transient result-storage policy so downstream cache handling can respect provider terms.
+- [x] Run the focused adapter tests without requiring a real API key by mocking HTTP.
+- [x] Commit: `feat: add optional Brave retrieval adapter`.
 
 ## Task 7: UI And Markdown Source Degradation Language
 
