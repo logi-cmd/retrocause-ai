@@ -163,22 +163,22 @@
 
 **Files:** `frontend/src/app/page.tsx`, `tests/test_comprehensive.py`
 
-- [ ] Add tests first:
+- [x] Add tests first:
   - `test_frontend_surfaces_rate_limited_source_trace_language`
   - `test_frontend_localizes_source_trace_status`
-- [ ] Add a small frontend helper for status labels:
+- [x] Add a small frontend helper for status labels:
   - English: `Ready`, `Cached`, `Source limited`, `Rate limited`, `Forbidden`, `Timed out`, `Source error`
   - Chinese: `可用`, `缓存`, `来源受限`, `限流`, `无权限`, `超时`, `来源错误`
-- [ ] Show source status in the right-side trace and readable brief source-health summary.
-- [ ] Keep the summary useful for a user:
+- [x] Show source status in the right-side trace and readable brief source-health summary.
+- [x] Keep the summary useful for a user:
   - checked sources
   - successful sources
   - cached sources
   - limited/degraded sources
   - whether the result is still reviewable
-- [ ] Run `pytest tests/test_comprehensive.py::test_frontend_surfaces_rate_limited_source_trace_language -q`.
-- [ ] Run `npm --prefix frontend run lint`.
-- [ ] Commit: `feat: show degraded source trace status`.
+- [x] Run `pytest tests/test_comprehensive.py::test_frontend_surfaces_rate_limited_source_trace_language -q`.
+- [x] Run `npm --prefix frontend run lint`.
+- [x] Commit: `feat: show degraded source trace status`.
 
 ## Task 8: Documentation And Full Verification
 

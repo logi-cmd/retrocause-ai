@@ -89,6 +89,9 @@ type ApiRetrievalTrace = {
   result_count: number;
   cache_hit?: boolean;
   error?: string | null;
+  status?: string | null;
+  retry_after_seconds?: number | null;
+  cache_policy?: string | null;
 };
 
 type ApiChallengeCheck = {
@@ -393,6 +396,40 @@ function formatSourceStabilityLabel(
     default:
       return locale === "en" ? "unknown" : "未知";
   }
+}
+
+function sourceTraceStatus(item: ApiRetrievalTrace): string {
+  if (item.status) return item.status;
+  if (item.cache_hit) return "cached";
+  if (item.error) return item.error;
+  return "ok";
+}
+
+function formatSourceStatusLabel(status: string | null | undefined, locale: "zh" | "en"): string {
+  switch (status) {
+    case "ok":
+      return locale === "en" ? "Ready" : "\u53ef\u7528";
+    case "cached":
+      return locale === "en" ? "Cached" : "\u7f13\u5b58";
+    case "source_limited":
+      return locale === "en" ? "Source limited" : "\u6765\u6e90\u53d7\u9650";
+    case "rate_limited":
+      return locale === "en" ? "Rate limited" : "\u9650\u6d41";
+    case "forbidden":
+      return locale === "en" ? "Forbidden" : "\u65e0\u6743\u9650";
+    case "timeout":
+      return locale === "en" ? "Timed out" : "\u8d85\u65f6";
+    case "source_error":
+      return locale === "en" ? "Source error" : "\u6765\u6e90\u9519\u8bef";
+    default:
+      return locale === "en" ? "Source error" : "\u6765\u6e90\u9519\u8bef";
+  }
+}
+
+function isDegradedSourceTrace(item: ApiRetrievalTrace): boolean {
+  return ["source_limited", "rate_limited", "forbidden", "timeout", "source_error"].includes(
+    sourceTraceStatus(item)
+  );
 }
 
 function formatRefutationStatusLabel(
@@ -1644,7 +1681,7 @@ export default function Home() {
     ? Math.max(progressStageOrder.indexOf(pipelineProgress.step), Math.max(0, pipelineProgress.stepIndex - 1))
     : -1;
   const sourceHitCount = retrievalTrace.reduce((sum, item) => sum + Math.max(0, item.result_count), 0);
-  const traceFailureCount = retrievalTrace.filter((item) => Boolean(item.error)).length;
+  const traceFailureCount = retrievalTrace.filter((item) => isDegradedSourceTrace(item)).length;
   const sourceTransparencySummary = useMemo(() => {
     const uniqueLabels = Array.from(
       new Set(
@@ -1654,14 +1691,29 @@ export default function Home() {
       )
     ).filter(Boolean);
     const stableCount = retrievalTrace.filter((item) => item.stability === "high").length;
+    const cachedCount = retrievalTrace.filter((item) => sourceTraceStatus(item) === "cached").length;
+    const degradedCount = retrievalTrace.filter((item) => isDegradedSourceTrace(item)).length;
+    const successfulCount = retrievalTrace.filter(
+      (item) => !isDegradedSourceTrace(item) && item.result_count > 0
+    ).length;
     return {
       labels: uniqueLabels.slice(0, 3),
       checked: retrievalTrace.length,
       stable: stableCount,
-      failed: traceFailureCount,
+      successful: successfulCount,
+      cached: cachedCount,
+      failed: degradedCount,
       hits: sourceHitCount,
+      reviewability:
+        degradedCount === 0
+          ? locale === "en"
+            ? "Reviewable"
+            : "\u53ef\u5ba1\u9605"
+          : locale === "en"
+            ? "Needs source attention"
+            : "\u9700\u68c0\u67e5\u6765\u6e90",
     };
-  }, [locale, retrievalTrace, sourceHitCount, traceFailureCount]);
+  }, [locale, retrievalTrace, sourceHitCount]);
   const evidenceCoverageScore = Math.min(
     100,
     Math.round(
@@ -2746,6 +2798,20 @@ export default function Home() {
                   {" · "}
                   {locale === "en" ? "Hits" : "\u547d\u4e2d"}: {sourceTransparencySummary.hits}
                 </div>
+                <div style={{ marginTop: "3px" }}>
+                  {locale === "en" ? "Successful sources" : "\u6210\u529f\u6765\u6e90"}:{" "}
+                  {sourceTransparencySummary.successful}
+                  {" / "}
+                  {locale === "en" ? "Cached sources" : "\u7f13\u5b58\u6765\u6e90"}:{" "}
+                  {sourceTransparencySummary.cached}
+                  {" / "}
+                  {locale === "en" ? "Degraded sources" : "\u53d7\u9650\u6765\u6e90"}:{" "}
+                  {sourceTransparencySummary.failed}
+                </div>
+                <div style={{ marginTop: "3px", fontWeight: 800 }}>
+                  {locale === "en" ? "Reviewability" : "\u53ef\u5ba1\u9605\u6027"}:{" "}
+                  {sourceTransparencySummary.reviewability}
+                </div>
               </div>
             )}
             {localizedMarkdownBrief && showManualCopyReport && (
@@ -3328,16 +3394,21 @@ export default function Home() {
                       gap: "2px",
                       padding: "5px 6px",
                       borderRadius: "8px",
-                      background: item.error ? "rgba(192,57,43,0.08)" : "rgba(255,255,255,0.55)",
-                      border: item.error ? "1px solid rgba(192,57,43,0.18)" : "1px solid rgba(160,140,110,0.14)",
+                      background: isDegradedSourceTrace(item) ? "rgba(192,57,43,0.08)" : "rgba(255,255,255,0.55)",
+                      border: isDegradedSourceTrace(item) ? "1px solid rgba(192,57,43,0.18)" : "1px solid rgba(160,140,110,0.14)",
                     }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "6px", fontSize: "0.55rem", color: item.error ? "#a13b2f" : "#5c4a32" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "6px", fontSize: "0.55rem", color: isDegradedSourceTrace(item) ? "#a13b2f" : "#5c4a32" }}>
                       <span>
                         {item.source_label || item.source}
                         {item.cache_hit ? (locale === "en" ? " cache" : " 缓存") : ""}
                       </span>
-                      <span>{item.error ? item.error : `${item.result_count} ${locale === "en" ? "hits" : "条"}`}</span>
+                      <span data-testid="source-trace-status">
+                        {formatSourceStatusLabel(sourceTraceStatus(item), locale)}
+                        {item.retry_after_seconds
+                          ? ` / ${locale === "en" ? "retry after" : "\u91cd\u8bd5\u7b49\u5f85"} ${item.retry_after_seconds}s`
+                          : ""}
+                      </span>
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", fontSize: "0.5rem", color: "#8b7355", textTransform: "uppercase", letterSpacing: "0.04em" }}>
                       <span>{formatSourceKindLabel(item.source_kind, locale)}</span>

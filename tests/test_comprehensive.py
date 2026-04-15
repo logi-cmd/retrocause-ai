@@ -858,6 +858,36 @@ def test_frontend_summarizes_source_transparency_in_readable_brief():
     assert "Failed sources" in page_source
 
 
+def test_frontend_surfaces_rate_limited_source_trace_language():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert "formatSourceStatusLabel" in page_source
+    assert "Rate limited" in page_source
+    assert "Source limited" in page_source
+    assert "Timed out" in page_source
+    assert "Source error" in page_source
+    assert "retry_after_seconds" in page_source
+    assert "data-testid=\"source-trace-status\"" in page_source
+    assert "Reviewability" in page_source
+    assert "Needs source attention" in page_source
+
+
+def test_frontend_localizes_source_trace_status():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert "\\u53ef\\u7528" in page_source
+    assert "\\u7f13\\u5b58" in page_source
+    assert "\\u6765\\u6e90\\u53d7\\u9650" in page_source
+    assert "\\u9650\\u6d41" in page_source
+    assert "\\u65e0\\u6743\\u9650" in page_source
+    assert "\\u8d85\\u65f6" in page_source
+    assert "\\u6765\\u6e90\\u9519\\u8bef" in page_source
+
+
 def test_frontend_renders_production_brief_and_use_case_selector():
     page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
         encoding="utf-8"

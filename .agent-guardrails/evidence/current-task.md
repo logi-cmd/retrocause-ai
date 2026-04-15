@@ -1189,3 +1189,57 @@ Execute Task 6 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: ad
 - Focused tests use mocked HTTP only; no live Brave account was used.
 - Brave result metadata is snippet-only in this pass. Full page fetch/extract remains governed by downstream source policy and provider terms.
 - Frontend-specific bilingual source status labels remain later Task 7 work.
+
+## 2026-04-15 SourceBroker Task 7: UI Source Degradation Language
+
+### Task
+
+Execute Task 7 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: make degraded source states readable in the browser UI and source-health summary so users can distinguish ready, cached, source-limited, rate-limited, forbidden, timed-out, and source-error rows.
+
+### Files Touched
+
+- `frontend/src/app/page.tsx`
+- `tests/test_comprehensive.py`
+- `docs/PROJECT_STATE.md`
+- `docs/retrieval-and-output-strategy.md`
+- `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`, `frontend/src/app/page.tsx`, `tests/test_comprehensive.py`, `docs/retrieval-and-output-strategy.md`, `.agent-guardrails/task-contract.json`, and this evidence note before implementation.
+- `pytest tests\test_comprehensive.py::test_frontend_surfaces_rate_limited_source_trace_language tests\test_comprehensive.py::test_frontend_localizes_source_trace_status -q`
+  - TDD red result: failed because the frontend had no status label helper or localized source status strings.
+- `pytest tests\test_comprehensive.py::test_frontend_surfaces_rate_limited_source_trace_language tests\test_comprehensive.py::test_frontend_localizes_source_trace_status -q`
+  - Result after implementation: 2 passed.
+- `pytest tests\test_comprehensive.py::test_frontend_surfaces_rate_limited_source_trace_language tests\test_comprehensive.py::test_frontend_localizes_source_trace_status tests\test_comprehensive.py::test_frontend_summarizes_source_transparency_in_readable_brief -q`
+  - Result: 3 passed.
+- `npm --prefix frontend run lint`
+  - Result: passed.
+- `npm test` with `.venv\Scripts` prepended to `PATH`
+  - Result: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, full pytest, and E2E smoke tests.
+  - Pytest result: 248 passed.
+  - E2E result: 572 passed, 0 failed, 1 skipped.
+  - The skipped item was the optional Playwright full workflow because Playwright was not installed in `.venv`.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: `safe-to-deploy`, 90/100.
+  - Blocking errors: 0.
+  - Non-blocking warnings: this uncommitted task view spans implementation, tests, docs, and evidence; `docs/PROJECT_STATE.md` changed by the project documentation-sync rule.
+- Committed Task 7 as `feat: show degraded source trace status`.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"` after committing Task 7
+  - Result: `safe-to-deploy`, 90/100.
+  - Blocking errors: 0.
+  - Non-blocking warnings: the committed task spans `.agent-guardrails`, `docs`, `frontend`, and `tests`; `docs/PROJECT_STATE.md` changed by the project documentation-sync rule.
+
+### Behavior Notes
+
+- `ApiRetrievalTrace` now includes frontend fields for `status`, `retry_after_seconds`, and `cache_policy`.
+- Added a frontend source-status label helper for English and Chinese statuses.
+- Right-side source trace rows now render a `source-trace-status` status label and retry-after hint when present.
+- The readable brief source-health summary now includes successful, cached, degraded, and reviewability state in addition to checked/stable/hit counts.
+
+### Residual Risks
+
+- This is still source-health metadata, not a causal claim. Users still need to inspect evidence before trusting the explanation.
+- Visual QA for the exact badge spacing remains useful after Task 8 full verification, especially on narrow screens.

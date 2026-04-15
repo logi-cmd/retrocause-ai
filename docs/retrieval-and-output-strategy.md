@@ -202,6 +202,8 @@ Tasks 3 and 4 of the SourceBroker reliability pass give each source attempt stab
 
 Each attempt also carries source label, source kind, stability, and cache policy from the source profile registry. The engine preserves these fields when compiling live pipeline results, and `_result_to_v2()` accepts both dict traces and `SourceAttempt` objects. Markdown source trace rows now say `rate-limited`, `source-limited`, `timeout`, or `source-error` directly instead of presenting degraded sources as silent zero-result rows. This is retrieval-health metadata only and does not introduce new causal claims.
 
+The browser UI now localizes these retrieval-health states in the right-side source trace and readable brief source-health summary. Users can see successful, cached, degraded, and reviewability counts instead of interpreting zero-hit or error rows as causal evidence.
+
 ### Implemented Optional Hosted Sources
 
 Tavily and Brave Search are implemented as optional hosted sources. OSS remains runnable without a hosted-search account:
