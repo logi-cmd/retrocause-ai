@@ -792,3 +792,67 @@ After user approval of the Production Brief Harness design, create a task-by-tas
 
 - This pass creates an implementation plan only; user-visible product behavior is unchanged until the plan is executed.
 - The plan intentionally keeps the first implementation inside existing API/frontend files to minimize review scope, so follow-up refactoring may be warranted if the production brief code grows large.
+
+## 2026-04-15 SourceBroker Retrieval Reliability Implementation Plan
+
+### Task
+
+Create the next implementation plan for retrieval reliability after documenting the retrieval/output strategy. The plan must keep the work grounded in user value: reliable latest-information retrieval, visible source limits, cache safety, and usable source trace output for OSS users and future Solo Pro / Team Lite workflows.
+
+### Files Touched
+
+- `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`
+- `docs/PROJECT_STATE.md`
+- `frontend/next.config.ts`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, `docs/retrieval-and-output-strategy.md`, `retrocause/evidence_access.py`, `tests/test_evidence_access.py`, `.agent-guardrails/task-contract.json`, and this evidence note before writing the plan.
+- Inspected current SourceBroker-like implementation points: query planning, scenario routing, source ordering, cooldown, cache keys, time filtering, and source descriptions.
+- Created `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md` with task-by-task implementation steps, named tests, target files, and commit checkpoints.
+- `Select-String -Path docs\superpowers\plans\2026-04-15-sourcebroker-plan.md -Pattern "TBD|TODO|implement later|fill in details|Similar to Task|appropriate error handling|Write tests for the above"`
+  - Result: no placeholder markers found.
+- `npm test`
+  - First result: frontend lint/build, `ruff check retrocause/`, and 234 pytest tests passed, then E2E failed because the backend was not running on `127.0.0.1:8000`.
+- `cmd /c npm.cmd --prefix frontend run build`
+  - Result after failed background job attempts: reproduced `spawn EPERM` during Next `type-checking`.
+- Root-cause check:
+  - `.next/trace` and `.next/diagnostics/build-diagnostics.json` showed the failure stage was Next type-checking with build worker enabled.
+  - `frontend/node_modules/next/dist/build/type-check.js` confirmed type-checking runs through a worker by default.
+- `cmd /c npm.cmd --prefix frontend run build` after enabling `experimental.workerThreads` in `frontend/next.config.ts`
+  - Result: passed.
+- `npm test` after the Next worker-thread fix with the backend running
+  - Result: frontend lint/build and ruff passed, then pytest collection failed because the root script resolved `pytest` to global Anaconda Python, which lacked `openai`, `fastapi`, and `streamlit_agraph`.
+- `.venv\Scripts\python.exe -m pytest tests\test_evidence_access.py -q`
+  - Result: passed, confirming the project virtual environment has the required Python dependencies.
+- Kept root `package.json` unchanged to stay inside the current task contract; full verification will run `npm test` with `.venv\Scripts` prepended to `PATH`.
+- `cmd /c npm.cmd --prefix frontend run dev -- --port 3005`
+  - Result: failed with `spawn EPERM`; Next dev also uses child-process spawning in this Windows environment.
+- `cmd /c npm.cmd --prefix frontend run start -- --port 3005`
+  - Result: started successfully after a production build and reported `Ready` on `http://localhost:3005`.
+- `npm test` with `.venv\Scripts` prepended to `PATH`, API running on `127.0.0.1:8000`, and production frontend running on `localhost:3005`
+  - Result: passed.
+  - Included frontend lint, frontend build, `.venv` ruff, `.venv` pytest, and E2E smoke tests.
+  - Pytest result: 234 passed.
+  - E2E result: 572 passed, 0 failed, 1 skipped.
+  - The skipped item was the optional Playwright full workflow because Playwright was not installed in `.venv`.
+- `npx agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: passed as `safe-to-deploy`, 95/100.
+  - Non-blocking warnings: state-management continuity warnings because `docs/PROJECT_STATE.md` and evidence were intentionally synchronized.
+
+### Behavior Notes
+
+- No product code behavior changed in this pass.
+- The plan deliberately extends the existing `retrocause.evidence_access` boundary before introducing any new run queue or database.
+- The plan treats rate limits as a user-facing product state: source-limited, rate-limited, cached, forbidden, timed out, or source error.
+- Optional hosted search providers are planned as key-gated adapters, so OSS can still run locally without Tavily or Brave keys.
+- Next.js build behavior changed only in build execution mode: type-checking now uses worker threads to avoid Windows `spawn EPERM` in this environment.
+- Local verification should use `.venv\Scripts` before global Python on `PATH`, matching how the app is launched locally.
+
+### Residual Risks
+
+- This is a planning checkpoint only; source trace behavior remains unchanged until the plan is executed.
+- Tavily and Brave adapter details will need mocked HTTP tests first so CI does not depend on live external accounts.
+- The current task contract is older and broad enough to allow docs/plans/evidence updates, but the implementation pass should create or refresh a task contract if the scope changes materially.
+- Full `npm test` passes when the local API and production frontend are available for E2E and `.venv\Scripts` is first on `PATH`.

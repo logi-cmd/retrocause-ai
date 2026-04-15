@@ -39,7 +39,7 @@ Stabilize quality-first live evidence retrieval, especially for time-sensitive m
 
 Current UX focus: validate the general Production Brief Harness across real market, policy/geopolitics, and postmortem questions. OSS now supports scenario-aware single-run briefs with freshness/source-quality gating; Pro workflow depth should focus on individuals and small teams: run queues, quota management, cache reuse, saved runs, uploaded evidence, scheduled watch topics, PDF/DOCX export, and lightweight team review. Enterprise private deployment is not a near-term target.
 
-Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md` and has been executed through code, frontend, export, and regression cleanup. The retrieval/output strategy is now captured in `docs/retrieval-and-output-strategy.md`; remaining work is to turn it into a small SourceBroker/run-orchestration implementation plan.
+Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md` and has been executed through code, frontend, export, and regression cleanup. The retrieval/output strategy is captured in `docs/retrieval-and-output-strategy.md`. The next SourceBroker reliability implementation plan is saved at `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`.
 
 ## Working Rules
 
@@ -73,6 +73,8 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Removed single-case US/Iran product labeling from frontend logic and kept it as regression context only.
 - Reframed the paid direction away from enterprise/private deployment and toward Solo Pro / Team Lite hosted reliability for individuals and small teams.
 - Added `docs/retrieval-and-output-strategy.md` to define the retrieval-to-output pipeline, source adapter rate-limit risks, candidate hosted sources, source policies, cache requirements, run orchestration direction, and development-skill usage.
+- Wrote the SourceBroker retrieval reliability implementation plan, covering source profiles, scenario/source-policy cache keys, degraded source status classification, API/UI source trace metadata, optional Tavily/Brave adapters, docs, tests, and guardrails verification.
+- Stabilized the local Windows Next.js build by enabling Next worker threads, avoiding `spawn EPERM` during type-checking in this environment.
 
 ## Blockers
 
@@ -81,7 +83,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 
 ## Next Step
 
-Create the next implementation plan for retrieval reliability: SourceBroker, provider budgets, cache keys with absolute time buckets, optional Tavily/Brave adapters, run status, and visible source-degradation UX.
+Execute the SourceBroker retrieval reliability implementation plan task-by-task: start with source profiles and source-policy cache keys, then expose degraded-source status through API, Markdown, and UI before adding optional Tavily/Brave adapters.
 
 Release-readiness pass from the user journey:
 

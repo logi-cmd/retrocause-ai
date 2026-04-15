@@ -6,6 +6,9 @@ const rootDir = dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  experimental: {
+    workerThreads: true,
+  },
   turbopack: {
     root: rootDir,
   },
