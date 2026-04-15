@@ -1364,6 +1364,11 @@ Add a deterministic degraded-source drill regression so the bad path is checked 
   - Pytest result: 249 passed.
   - E2E result: 572 passed, 0 failed, 1 skipped.
   - The skipped item was the optional Playwright full workflow because Playwright was not installed in `.venv`.
+- Committed the drill as `test: add degraded source drill`.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"` after committing the drill
+  - Result: `safe-to-deploy`, 95/100.
+  - Blocking errors: 0.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed by the project documentation-sync rule.
 
 ### Behavior Notes
 
