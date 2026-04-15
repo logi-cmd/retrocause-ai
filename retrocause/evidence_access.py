@@ -61,6 +61,20 @@ class EvidenceAccessPolicy:
 
 
 @dataclass(frozen=True)
+class SourceProfile:
+    """Stable retrieval-source policy metadata for broker and UI traces."""
+
+    name: str
+    source_label: str
+    source_kind: str
+    stability: str
+    cache_policy: str
+    default_monthly_budget: int
+    default_rpm: int
+    requires_api_key: bool
+
+
+@dataclass(frozen=True)
 class SourceAttempt:
     """Trace record for one source-adapter attempt."""
 
@@ -88,6 +102,119 @@ def reset_evidence_access_state() -> None:
     _SOURCE_LAST_CALL_AT.clear()
     _SOURCE_QUERY_CACHE.clear()
     _SOURCE_COOLDOWN_UNTIL.clear()
+
+
+SOURCE_PROFILES: dict[str, SourceProfile] = {
+    "ap_news": SourceProfile(
+        name="ap_news",
+        source_label="AP News",
+        source_kind="wire_news",
+        stability="high",
+        cache_policy="short_lived_cache_allowed",
+        default_monthly_budget=5000,
+        default_rpm=30,
+        requires_api_key=False,
+    ),
+    "gdelt": SourceProfile(
+        name="gdelt",
+        source_label="GDELT Global Knowledge Graph",
+        source_kind="news_index",
+        stability="medium",
+        cache_policy="short_lived_cache_allowed",
+        default_monthly_budget=10000,
+        default_rpm=60,
+        requires_api_key=False,
+    ),
+    "gdelt_news": SourceProfile(
+        name="gdelt_news",
+        source_label="GDELT Global Knowledge Graph",
+        source_kind="news_index",
+        stability="medium",
+        cache_policy="short_lived_cache_allowed",
+        default_monthly_budget=10000,
+        default_rpm=60,
+        requires_api_key=False,
+    ),
+    "web": SourceProfile(
+        name="web",
+        source_label="Trusted web search",
+        source_kind="web_search",
+        stability="medium",
+        cache_policy="short_lived_cache_allowed",
+        default_monthly_budget=3000,
+        default_rpm=20,
+        requires_api_key=False,
+    ),
+    "federal_register": SourceProfile(
+        name="federal_register",
+        source_label="Federal Register",
+        source_kind="official_record",
+        stability="high",
+        cache_policy="long_lived_cache_allowed",
+        default_monthly_budget=5000,
+        default_rpm=60,
+        requires_api_key=False,
+    ),
+    "arxiv": SourceProfile(
+        name="arxiv",
+        source_label="arXiv",
+        source_kind="academic_index",
+        stability="high",
+        cache_policy="long_lived_cache_allowed",
+        default_monthly_budget=5000,
+        default_rpm=30,
+        requires_api_key=False,
+    ),
+    "semantic_scholar": SourceProfile(
+        name="semantic_scholar",
+        source_label="Semantic Scholar",
+        source_kind="academic_index",
+        stability="medium",
+        cache_policy="short_lived_cache_allowed",
+        default_monthly_budget=5000,
+        default_rpm=30,
+        requires_api_key=False,
+    ),
+    "tavily": SourceProfile(
+        name="tavily",
+        source_label="Tavily Search",
+        source_kind="hosted_ai_search",
+        stability="medium",
+        cache_policy="derived_cache_allowed",
+        default_monthly_budget=1000,
+        default_rpm=30,
+        requires_api_key=True,
+    ),
+    "brave": SourceProfile(
+        name="brave",
+        source_label="Brave Search API",
+        source_kind="hosted_web_search",
+        stability="medium",
+        cache_policy="transient_results_only",
+        default_monthly_budget=1000,
+        default_rpm=30,
+        requires_api_key=True,
+    ),
+}
+
+
+def source_profile(source_name: str) -> SourceProfile:
+    """Return source policy metadata, falling back to a conservative unknown profile."""
+
+    normalized = source_name.strip().lower()
+    return SOURCE_PROFILES.get(
+        normalized,
+        SourceProfile(
+            name=normalized or "unknown",
+            source_label=source_name or "Unknown source",
+            source_kind="unknown",
+            stability="unknown",
+            cache_policy="no_cache_policy",
+            default_monthly_budget=0,
+            default_rpm=0,
+            requires_api_key=False,
+        ),
+    )
 
 
 def _has_cjk(text: str) -> bool:
@@ -286,18 +413,32 @@ def plan_query(query: str, parsed: ParsedQuery | None = None) -> QueryPlan:
     )
 
 
-def broker_source_names(configured_sources: str | None, plan: QueryPlan) -> list[str]:
+def _prepend_unique(items: list[str], prefix: list[str]) -> list[str]:
+    ordered: list[str] = []
+    for item in [*prefix, *items]:
+        if item not in ordered:
+            ordered.append(item)
+    return ordered
+
+
+def broker_source_names(
+    configured_sources: str | None,
+    plan: QueryPlan,
+    *,
+    optional_sources: list[str] | None = None,
+) -> list[str]:
     """Select source classes by scenario, while honoring explicit operator overrides."""
 
     if configured_sources:
         return [item.strip() for item in configured_sources.split(",") if item.strip()]
 
+    optional = [item.strip().lower() for item in optional_sources or [] if item.strip()]
     if plan.scenario == "policy":
-        return ["ap_news", "federal_register", "gdelt", "web"]
+        return _prepend_unique(["gdelt", "web"], ["ap_news", "federal_register", *optional])
     if plan.scenario in {"market", "news"}:
         if plan.time_range is not None:
-            return ["ap_news", "gdelt", "web"]
-        return ["ap_news", "web", "gdelt", "arxiv"]
+            return _prepend_unique(["ap_news", "gdelt", "web"], optional)
+        return _prepend_unique(["ap_news", "web", "gdelt", "arxiv"], optional)
     if plan.scenario == "academic":
         return ["arxiv", "semantic_scholar", "web"]
     return ["arxiv", "semantic_scholar", "web"]
@@ -306,52 +447,13 @@ def broker_source_names(configured_sources: str | None, plan: QueryPlan) -> list
 def describe_source_name(source_name: str) -> dict[str, str]:
     """Return stable UI-facing metadata for a retrieval source adapter."""
 
-    normalized = source_name.strip().lower()
-    descriptions = {
-        "ap_news": {
-            "source_label": "AP News",
-            "source_kind": "wire_news",
-            "stability": "high",
-        },
-        "gdelt": {
-            "source_label": "GDELT Global Knowledge Graph",
-            "source_kind": "news_index",
-            "stability": "medium",
-        },
-        "gdelt_news": {
-            "source_label": "GDELT Global Knowledge Graph",
-            "source_kind": "news_index",
-            "stability": "medium",
-        },
-        "web": {
-            "source_label": "Trusted web search",
-            "source_kind": "web_search",
-            "stability": "medium",
-        },
-        "federal_register": {
-            "source_label": "Federal Register",
-            "source_kind": "official_record",
-            "stability": "high",
-        },
-        "arxiv": {
-            "source_label": "arXiv",
-            "source_kind": "academic_index",
-            "stability": "high",
-        },
-        "semantic_scholar": {
-            "source_label": "Semantic Scholar",
-            "source_kind": "academic_index",
-            "stability": "medium",
-        },
+    profile = source_profile(source_name)
+    return {
+        "source_label": profile.source_label,
+        "source_kind": profile.source_kind,
+        "stability": profile.stability,
+        "cache_policy": profile.cache_policy,
     }
-    return descriptions.get(
-        normalized,
-        {
-            "source_label": source_name or "Unknown source",
-            "source_kind": "unknown",
-            "stability": "unknown",
-        },
-    )
 
 
 def _result_quality(result: SearchResult) -> str:

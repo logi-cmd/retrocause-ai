@@ -25,10 +25,10 @@
 
 **Files:** `retrocause/evidence_access.py`, `tests/test_evidence_access.py`
 
-- [ ] Add tests first:
+- [x] Add tests first:
   - `test_source_profiles_expose_budget_and_storage_policy`
   - `test_broker_source_names_can_include_optional_hosted_sources_when_enabled`
-- [ ] Add a frozen `SourceProfile` dataclass with fields:
+- [x] Add a frozen `SourceProfile` dataclass with fields:
   - `name`
   - `source_label`
   - `source_kind`
@@ -37,7 +37,7 @@
   - `default_monthly_budget`
   - `default_rpm`
   - `requires_api_key`
-- [ ] Add `SOURCE_PROFILES` for:
+- [x] Add `SOURCE_PROFILES` for:
   - `ap_news`
   - `gdelt`
   - `gdelt_news`
@@ -47,14 +47,14 @@
   - `semantic_scholar`
   - `tavily`
   - `brave`
-- [ ] Add `source_profile(source_name: str) -> SourceProfile`.
-- [ ] Update `describe_source_name` to use `source_profile` and include `cache_policy`.
-- [ ] Extend `broker_source_names(configured_sources, plan, *, optional_sources=None)`:
+- [x] Add `source_profile(source_name: str) -> SourceProfile`.
+- [x] Update `describe_source_name` to use `source_profile` and include `cache_policy`.
+- [x] Extend `broker_source_names(configured_sources, plan, *, optional_sources=None)`:
   - preserve explicit `configured_sources` override exactly
   - for fresh market/news queries, prepend enabled hosted sources such as `tavily` or `brave`
   - for policy queries, prefer official and wire/news sources before broad web
-- [ ] Run `pytest tests/test_evidence_access.py -q`.
-- [ ] Commit: `feat: add source profiles for retrieval policy`.
+- [x] Run `pytest tests/test_evidence_access.py -q`.
+- [x] Commit: `feat: add source profiles for retrieval policy`.
 
 ## Task 2: Cache Keys Include Scenario, Language, Source Policy, And Absolute Time
 

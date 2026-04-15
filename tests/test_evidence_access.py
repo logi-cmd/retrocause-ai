@@ -9,6 +9,7 @@ from retrocause.evidence_access import (
     plan_query,
     reset_evidence_access_state,
     result_matches_time_range,
+    source_profile,
     time_scope_key,
 )
 from datetime import date
@@ -241,11 +242,52 @@ def test_source_descriptions_explain_reliability_for_ui_trace():
         "source_label": "AP News",
         "source_kind": "wire_news",
         "stability": "high",
+        "cache_policy": "short_lived_cache_allowed",
     }
     assert web == {
         "source_label": "Trusted web search",
         "source_kind": "web_search",
         "stability": "medium",
+        "cache_policy": "short_lived_cache_allowed",
     }
     assert official["source_kind"] == "official_record"
     assert official["stability"] == "high"
+
+
+def test_source_profiles_expose_budget_and_storage_policy():
+    tavily = source_profile("tavily")
+    brave = source_profile("brave")
+    ap = describe_source_name("ap_news")
+
+    assert tavily.requires_api_key
+    assert tavily.cache_policy == "derived_cache_allowed"
+    assert tavily.default_rpm > 0
+    assert tavily.default_monthly_budget > 0
+    assert brave.requires_api_key
+    assert brave.cache_policy == "transient_results_only"
+    assert ap["cache_policy"] == "short_lived_cache_allowed"
+
+
+def test_broker_source_names_can_include_optional_hosted_sources_when_enabled():
+    market_plan = plan_query("Why did Bitcoin price fall today?")
+    policy_plan = plan_query("Why did the US announce new semiconductor export controls?")
+    override_plan = plan_query("Why did dinosaurs go extinct?")
+
+    assert broker_source_names(None, market_plan, optional_sources=["tavily", "brave"])[:5] == [
+        "tavily",
+        "brave",
+        "ap_news",
+        "gdelt",
+        "web",
+    ]
+    assert broker_source_names(None, policy_plan, optional_sources=["tavily"])[:5] == [
+        "ap_news",
+        "federal_register",
+        "tavily",
+        "gdelt",
+        "web",
+    ]
+    assert broker_source_names("web,arxiv", override_plan, optional_sources=["tavily"]) == [
+        "web",
+        "arxiv",
+    ]

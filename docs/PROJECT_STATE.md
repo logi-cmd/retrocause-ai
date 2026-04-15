@@ -75,6 +75,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Added `docs/retrieval-and-output-strategy.md` to define the retrieval-to-output pipeline, source adapter rate-limit risks, candidate hosted sources, source policies, cache requirements, run orchestration direction, and development-skill usage.
 - Wrote the SourceBroker retrieval reliability implementation plan, covering source profiles, scenario/source-policy cache keys, degraded source status classification, API/UI source trace metadata, optional Tavily/Brave adapters, docs, tests, and guardrails verification.
 - Stabilized the local Windows Next.js build by enabling Next worker threads, avoiding `spawn EPERM` during type-checking in this environment.
+- Implemented SourceBroker Task 1: source profiles now centralize labels, source kinds, stability, cache policies, default budgets/RPM, API-key requirements, and optional hosted-source ordering.
 
 ## Blockers
 
@@ -83,7 +84,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 
 ## Next Step
 
-Execute the SourceBroker retrieval reliability implementation plan task-by-task: start with source profiles and source-policy cache keys, then expose degraded-source status through API, Markdown, and UI before adding optional Tavily/Brave adapters.
+Continue the SourceBroker retrieval reliability implementation plan with Task 2: scope retrieval cache keys by source policy, scenario, language, and absolute time bucket.
 
 Release-readiness pass from the user journey:
 

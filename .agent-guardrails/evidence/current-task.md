@@ -856,3 +856,55 @@ Create the next implementation plan for retrieval reliability after documenting 
 - Tavily and Brave adapter details will need mocked HTTP tests first so CI does not depend on live external accounts.
 - The current task contract is older and broad enough to allow docs/plans/evidence updates, but the implementation pass should create or refresh a task contract if the scope changes materially.
 - Full `npm test` passes when the local API and production frontend are available for E2E and `.venv\Scripts` is first on `PATH`.
+
+## 2026-04-15 SourceBroker Task 1: Source Profiles And Policy Selection
+
+### Task
+
+Execute Task 1 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: centralize source policy metadata and let the broker include optional hosted search sources without overriding explicit operator source choices.
+
+### Files Touched
+
+- `retrocause/evidence_access.py`
+- `tests/test_evidence_access.py`
+- `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`
+- `docs/retrieval-and-output-strategy.md`
+- `docs/PROJECT_STATE.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`, `retrocause/evidence_access.py`, `tests/test_evidence_access.py`, `.agent-guardrails/task-contract.json`, and this evidence note before implementation.
+- `pytest tests\test_evidence_access.py::test_source_profiles_expose_budget_and_storage_policy tests\test_evidence_access.py::test_broker_source_names_can_include_optional_hosted_sources_when_enabled -q`
+  - TDD red result: failed because `source_profile` did not exist yet.
+- `pytest tests\test_evidence_access.py -q`
+  - First result after implementation: 13 passed and 2 failed.
+  - Failure 1: older source-description assertion needed the new `cache_policy` field.
+  - Failure 2: policy/geopolitics optional hosted source ordering put `tavily` before AP News and Federal Register.
+- `pytest tests\test_evidence_access.py -q`
+  - Result after fixes: 15 passed.
+- `pytest tests\test_evidence_access.py tests\test_api_retrieval_trace.py -q`
+  - Result: 17 passed.
+- `npm test` with `.venv\Scripts` prepended to `PATH`, API running on `127.0.0.1:8000`, and production frontend running on `localhost:3005`
+  - Result: passed.
+  - Included frontend lint, frontend build, ruff, pytest, and E2E smoke tests.
+  - Pytest result: 236 passed.
+  - E2E result: 572 passed, 0 failed, 1 skipped.
+  - The skipped item was the optional Playwright full workflow because Playwright was not installed in `.venv`.
+- `npx agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"` after committing Task 1
+  - Result: passed as `safe-to-deploy`, 90/100.
+  - Non-blocking warnings: the task spans implementation, tests, docs, and evidence, and `docs/PROJECT_STATE.md` changed by the project documentation-sync rule.
+
+### Behavior Notes
+
+- Added frozen `SourceProfile` metadata for `ap_news`, `gdelt`, `gdelt_news`, `web`, `federal_register`, `arxiv`, `semantic_scholar`, `tavily`, and `brave`.
+- `describe_source_name` now returns `cache_policy` in addition to `source_label`, `source_kind`, and `stability`.
+- `broker_source_names` now accepts `optional_sources`.
+- Explicit configured source overrides still win unchanged.
+- Fresh market/news queries can put optional hosted sources before default discovery sources.
+- Policy/geopolitics queries keep AP News and Federal Register first, then optional hosted sources, then GDELT and web.
+
+### Residual Risks
+
+- This task only adds policy metadata and ordering. It does not yet classify rate-limit failures or expose degraded source status in the API/UI.
+- Tavily and Brave are profiles only in this task; actual adapters remain later plan tasks.

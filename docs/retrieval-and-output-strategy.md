@@ -64,6 +64,19 @@ These candidates should be added behind source policies and provider budgets, no
 
 Scenario selection should change retrieval behavior, not only prompt wording.
 
+### Implemented Source Profile Baseline
+
+Task 1 of the SourceBroker reliability pass adds a source profile registry in `retrocause.evidence_access`. Each source now has stable metadata for label, source kind, stability, cache policy, default RPM, monthly budget, and whether it requires an API key.
+
+Implemented profiles:
+
+- `ap_news`, `gdelt`, `gdelt_news`, and `web` for current news and broad discovery.
+- `federal_register` for official U.S. policy records.
+- `arxiv` and `semantic_scholar` for academic context.
+- `tavily` and `brave` as optional hosted-search profiles before their adapters are added.
+
+The broker still preserves explicit operator source overrides. When optional hosted sources are enabled, fresh market/news queries can try them before default discovery sources; policy/geopolitics queries keep AP News and Federal Register before hosted broad search so official and wire/news material stay prominent.
+
 ### Market / Investment
 
 Default source mix:
