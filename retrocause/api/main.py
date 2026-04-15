@@ -292,10 +292,13 @@ class RetrievalTraceItemV2(BaseModel):
     source_label: str = ""
     source_kind: str = "unknown"
     stability: str = "unknown"
+    cache_policy: str = "no_cache_policy"
     query: str
     result_count: int
     cache_hit: bool = False
     error: Optional[str] = None
+    status: str = "ok"
+    retry_after_seconds: Optional[int] = None
 
 
 class ChallengeCheckV2(BaseModel):
@@ -776,6 +779,86 @@ def _challenge_check_phrase(refuting_count: int) -> str:
     return "no challenge evidence found"
 
 
+def _trace_value(item: object, key: str, default: object = None) -> object:
+    if isinstance(item, dict):
+        return item.get(key, default)
+    if key == "source":
+        return getattr(item, "source", getattr(item, "name", default))
+    return getattr(item, key, default)
+
+
+def _coerce_optional_int(value: object) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_result_count(value: object) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _retrieval_status_from_trace(item: object) -> str:
+    explicit = str(_trace_value(item, "status", "") or "").strip()
+    if explicit:
+        return explicit
+    if bool(_trace_value(item, "cache_hit", False)):
+        return "cached"
+    if _trace_value(item, "error"):
+        return "source_error"
+    return "ok"
+
+
+def _retrieval_trace_item_v2(item: object) -> RetrievalTraceItemV2:
+    source = str(_trace_value(item, "source", "") or "")
+    source_metadata = describe_source_name(source)
+    return RetrievalTraceItemV2(
+        source=source,
+        source_label=str(
+            _trace_value(item, "source_label", "")
+            or source_metadata.get("source_label", "")
+        ),
+        source_kind=str(
+            _trace_value(item, "source_kind", "")
+            or source_metadata.get("source_kind", "unknown")
+        ),
+        stability=str(
+            _trace_value(item, "stability", "")
+            or source_metadata.get("stability", "unknown")
+        ),
+        cache_policy=str(
+            _trace_value(item, "cache_policy", "")
+            or source_metadata.get("cache_policy", "no_cache_policy")
+        ),
+        query=str(_trace_value(item, "query", "") or ""),
+        result_count=_coerce_result_count(_trace_value(item, "result_count", 0)),
+        cache_hit=bool(_trace_value(item, "cache_hit", False)),
+        error=_trace_value(item, "error"),
+        status=_retrieval_status_from_trace(item),
+        retry_after_seconds=_coerce_optional_int(
+            _trace_value(item, "retry_after_seconds", None)
+        ),
+    )
+
+
+def _source_trace_status_label(status: str) -> str:
+    labels = {
+        "ok": "ok",
+        "cached": "cached",
+        "source_limited": "source-limited",
+        "rate_limited": "rate-limited",
+        "forbidden": "forbidden",
+        "timeout": "timeout",
+        "source_error": "source-error",
+    }
+    return labels.get(status, status.replace("_", "-") if status else "unknown")
+
+
 def _build_analysis_brief(
     result: AnalysisResult,
     chains: List[HypothesisChainV2],
@@ -839,6 +922,26 @@ def _build_analysis_brief(
         f"{len(source_values)} source type(s), {high_quality_count} high-quality evidence item(s), "
         f"{len(result.evidences)} total evidence item(s)."
     )
+    trace_statuses = [
+        _retrieval_status_from_trace(item)
+        for item in getattr(result, "retrieval_trace", [])
+    ]
+    degraded_count = sum(
+        status
+        in {
+            "source_limited",
+            "rate_limited",
+            "forbidden",
+            "timeout",
+            "source_error",
+        }
+        for status in trace_statuses
+    )
+    if trace_statuses:
+        source_coverage += (
+            f" Retrieval trace: {len(trace_statuses)} source attempt(s), "
+            f"{degraded_count} degraded or limited."
+        )
 
     return AnalysisBriefV2(
         answer=(
@@ -961,9 +1064,18 @@ def _build_markdown_research_brief(response: AnalyzeResponseV2) -> str:
         for item in response.retrieval_trace[:8]:
             label = item.source_label or item.source
             cache_note = "cache hit" if item.cache_hit else "fresh query"
+            status_note = f"status: {_source_trace_status_label(item.status)}"
+            retry_note = (
+                f", retry after {item.retry_after_seconds}s"
+                if item.retry_after_seconds is not None
+                else ""
+            )
             lines.append(
                 _markdown_bullet(
-                    f"{label}: {item.result_count} result(s), {cache_note}. Query: {item.query}"
+                    f"{label}: {item.result_count} result(s), {status_note}{retry_note}, "
+                    f"{cache_note}, source kind: {item.source_kind}, "
+                    f"stability: {item.stability}, cache policy: {item.cache_policy}. "
+                    f"Query: {item.query}"
                 )
             )
     else:
@@ -1680,14 +1792,7 @@ def _result_to_v2(
         upstream_map=_build_upstream_map(list(all_nodes_v2.values())),
         evaluation=evaluation_v2,
         retrieval_trace=[
-            RetrievalTraceItemV2(
-                source=str(item.get("source", "")),
-                **describe_source_name(str(item.get("source", ""))),
-                query=str(item.get("query", "")),
-                result_count=int(item.get("result_count", 0)),
-                cache_hit=bool(item.get("cache_hit", False)),
-                error=item.get("error"),
-            )
+            _retrieval_trace_item_v2(item)
             for item in getattr(result, "retrieval_trace", [])
         ],
         challenge_checks=challenge_checks,

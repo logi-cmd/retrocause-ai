@@ -37,6 +37,8 @@ Known limits / 已知限制：
 - Results are evidence-grounded explanations, not verified causal truth.
 - Live quality depends on source availability, model behavior, and API quota.
 - Source adapters can be rate-limited. Sustainable hosted use requires source policies, cache, provider budgets, and run orchestration.
+- Source trace rows now expose retrieval-health states such as `cached`, `rate-limited`, `source-limited`, `timeout`, and `source-error` so users can tell a source limitation from an evidence finding.
+- 来源轨迹现在会显示 `cached`、`rate-limited`、`source-limited`、`timeout`、`source-error` 等检索健康状态，帮助用户区分“来源受限”和“证据结论”。
 - Some generated labels may remain partly English in Chinese mode, but live graph nodes should keep their specific meaning instead of falling back to generic factor labels.
 - PDF/export/share/team workflows are not included yet.
 - OSS report output is a copyable Markdown research brief. Higher-end PDF, team, scheduled, and branded workflows belong in a future Pro tier.
@@ -93,7 +95,7 @@ Example questions / 示例问题：
 3. Click **Run model preflight**.
 4. Choose **Auto detect**, **Market / Investment**, **Policy / Geopolitics**, or **Postmortem** in the use-case selector.
 5. If preflight passes, click **Start analysis**.
-6. Inspect the production brief, analysis brief, source trace, challenge coverage, and value harness before trusting the result.
+6. Inspect the production brief, analysis brief, source trace, challenge coverage, and value harness before trusting the result. In source trace, treat `rate-limited`, `source-limited`, `timeout`, and `source-error` rows as retrieval-health limits rather than evidence against a cause.
 7. Click **Copy report** in the readable brief card to take the Markdown report into notes, docs, or research workflows. If the browser blocks clipboard access, use the manual-copy report box that appears.
 
 中文步骤：

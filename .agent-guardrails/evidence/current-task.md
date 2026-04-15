@@ -1011,3 +1011,59 @@ Execute Task 3 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: cl
 
 - Task 3 only enriches backend attempt metadata. Task 4 still needs to expose these fields in the V2 retrieval trace and Markdown/readable brief output.
 - Retry-after parsing handles numeric retry headers and common exception attributes; date-formatted retry headers are not parsed yet.
+
+## 2026-04-15 SourceBroker Task 4: Degraded Source Trace API And Briefs
+
+### Task
+
+Execute Task 4 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: surface degraded source trace metadata in V2 API responses and Markdown/readable brief output so users can see rate-limited, source-limited, cached, and failed sources instead of silent zero-result rows.
+
+### Files Touched
+
+- `retrocause/api/main.py`
+- `retrocause/engine.py`
+- `tests/test_comprehensive.py`
+- `README.md`
+- `docs/PROJECT_STATE.md`
+- `docs/retrieval-and-output-strategy.md`
+- `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, `retrocause/api/main.py`, `retrocause/engine.py`, `tests/test_comprehensive.py`, `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`, `.agent-guardrails/task-contract.json`, and this evidence note before implementation.
+- `pytest tests\test_comprehensive.py::test_retrieval_trace_exposes_degraded_source_metadata -q`
+  - TDD red result: failed because `_result_to_v2()` assumed each trace item was a dict and did not handle `SourceAttempt` objects or expose status metadata.
+- `pytest tests\test_comprehensive.py::test_retrieval_trace_exposes_degraded_source_metadata -q`
+  - Result after implementation: 1 passed.
+- `pytest tests\test_comprehensive.py::test_retrieval_trace_exposes_degraded_source_metadata tests\test_api_retrieval_trace.py -q`
+  - Result: 3 passed.
+- `ruff check retrocause\api\main.py retrocause\engine.py tests\test_comprehensive.py`
+  - Result: passed.
+- Started local verification services for E2E:
+  - FastAPI on `127.0.0.1:8000`.
+  - Next production frontend on `127.0.0.1:3005`.
+- `npm test` with `.venv\Scripts` prepended to `PATH`
+  - Result: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, full pytest, and E2E smoke tests.
+  - Pytest result: 242 passed.
+  - E2E result: 572 passed, 0 failed, 1 skipped.
+  - The skipped item was the optional Playwright full workflow because Playwright was not installed in `.venv`.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: `safe-to-deploy`, 90/100.
+  - Blocking errors: 0.
+  - Non-blocking warnings: this task spans `.agent-guardrails`, `docs`, `retrocause`, and `tests`, and `docs/PROJECT_STATE.md` changed by the project documentation-sync rule.
+- Committed Task 4 as `feat: expose degraded source trace metadata`.
+
+### Behavior Notes
+
+- `RetrievalTraceItemV2` now exposes `status`, `retry_after_seconds`, and `cache_policy` in addition to source label, source kind, stability, query, result count, cache hit, and error.
+- `_result_to_v2()` now normalizes both dict trace rows and `SourceAttempt` objects, preserving source-profile metadata while keeping backward-compatible defaults.
+- `Engine._compile_result()` now preserves the new `SourceAttempt` fields when compiling live pipeline results.
+- Markdown source trace rows now include a visible retrieval-health status such as `rate-limited`, `source-limited`, `cached`, `timeout`, or `source-error`, plus retry-after seconds when available.
+- Analysis brief source coverage now includes the count of source attempts and degraded or limited attempts.
+
+### Residual Risks
+
+- This task exposes backend/brief metadata. Frontend-specific bilingual badges and right-panel visual polish remain Task 7.
+- Date-formatted `Retry-After` headers are still not parsed; numeric retry seconds are preserved when available.

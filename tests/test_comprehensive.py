@@ -31,6 +31,7 @@ from retrocause.evaluation import (
     _assess_probability_coherence,
     _assess_chain_diversity,
 )
+from retrocause.evidence_access import SourceAttempt
 from retrocause.models import (
     AnalysisResult,
     CausalEdge,
@@ -406,6 +407,58 @@ def test_policy_result_with_weak_source_trace_surfaces_source_risk():
 
     assert response.production_harness is not None
     assert any(check.name == "source_risk" for check in response.production_harness.checks)
+
+
+def test_retrieval_trace_exposes_degraded_source_metadata():
+    result = _sample_result_with_one_supported_chain(
+        "Why did US Iran talks in Islamabad end without agreement?"
+    )
+    result.retrieval_trace = [
+        SourceAttempt(
+            name="ap_news",
+            query="US Iran Islamabad talks no agreement AP",
+            result_count=0,
+            cache_hit=False,
+            error="rate_limited",
+            status="rate_limited",
+            retry_after_seconds=7,
+            source_label="AP News",
+            source_kind="wire_news",
+            stability="high",
+            cache_policy="short_lived_cache_allowed",
+        ),
+        {
+            "source": "web",
+            "query": "US Iran Islamabad talks no agreement",
+            "result_count": 2,
+            "cache_hit": True,
+            "status": "cached",
+            "source_label": "Trusted web search",
+            "source_kind": "web_search",
+            "stability": "medium",
+            "cache_policy": "derived_cache_allowed",
+        },
+    ]
+
+    response = _result_to_v2(result, is_demo=False)
+
+    degraded = response.retrieval_trace[0]
+    assert degraded.source == "ap_news"
+    assert degraded.status == "rate_limited"
+    assert degraded.retry_after_seconds == 7
+    assert degraded.source_kind == "wire_news"
+    assert degraded.stability == "high"
+    assert degraded.cache_policy == "short_lived_cache_allowed"
+
+    cached = response.retrieval_trace[1]
+    assert cached.status == "cached"
+    assert cached.cache_policy == "derived_cache_allowed"
+    assert cached.cache_hit is True
+
+    assert response.markdown_brief is not None
+    assert "status: rate-limited" in response.markdown_brief
+    assert "retry after 7s" in response.markdown_brief
+    assert "cache policy: short_lived_cache_allowed" in response.markdown_brief
 
 
 def test_postmortem_without_internal_evidence_is_not_actionable():

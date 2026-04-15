@@ -78,6 +78,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Implemented SourceBroker Task 1: source profiles now centralize labels, source kinds, stability, cache policies, default budgets/RPM, API-key requirements, and optional hosted-source ordering.
 - Implemented SourceBroker Task 2: retrieval cache keys now include source policy, scenario, language, absolute time bucket, normalized scoped query, adapter name, and result count, with collector paths passing scenario/language metadata into live searches.
 - Implemented SourceBroker Task 3: source attempts now classify `ok`, `cached`, `rate_limited`, `forbidden`, `timeout`, `source_error`, and `source_limited` states with retry-after and source-profile metadata.
+- Implemented SourceBroker Task 4: V2 retrieval trace and Markdown/readable brief paths now preserve and expose source status, retry-after seconds, cache policy, source kind, and stability, including real pipeline output from `SourceAttempt`.
 
 ## Blockers
 
@@ -86,7 +87,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 
 ## Next Step
 
-Continue the SourceBroker retrieval reliability implementation plan with Task 4: surface degraded source trace metadata in the V2 API and Markdown/readable brief path so users can see rate-limited, source-limited, cached, and failed sources instead of silent zero-result rows.
+Continue the SourceBroker retrieval reliability implementation plan with Task 5: add the optional Tavily retrieval adapter behind a user-provided key, with mocked HTTP tests and no required hosted-search account for OSS users.
 
 Release-readiness pass from the user journey:
 

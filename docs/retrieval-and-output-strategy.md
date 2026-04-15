@@ -190,7 +190,7 @@ This prevents a market/news run, policy/geopolitics run, English run, Chinese ru
 
 ### Implemented Source Degradation Statuses
 
-Task 3 of the SourceBroker reliability pass gives each source attempt stable retrieval-health metadata before the API/UI mapping layer:
+Tasks 3 and 4 of the SourceBroker reliability pass give each source attempt stable retrieval-health metadata and expose it through V2 API retrieval traces plus Markdown/readable brief copy:
 
 - `ok` for a successful upstream source call
 - `cached` for a reused process-local cache hit
@@ -200,7 +200,7 @@ Task 3 of the SourceBroker reliability pass gives each source attempt stable ret
 - `source_error` for general upstream failures such as connection errors
 - `source_limited` for sources temporarily skipped because they are in cooldown after a recent failure
 
-Each attempt also carries source label, source kind, stability, and cache policy from the source profile registry. This keeps the backend trace ready for user-facing degraded-output language without introducing new causal claims.
+Each attempt also carries source label, source kind, stability, and cache policy from the source profile registry. The engine preserves these fields when compiling live pipeline results, and `_result_to_v2()` accepts both dict traces and `SourceAttempt` objects. Markdown source trace rows now say `rate-limited`, `source-limited`, `timeout`, or `source-error` directly instead of presenting degraded sources as silent zero-result rows. This is retrieval-health metadata only and does not introduce new causal claims.
 
 ## Product Output Contract
 

@@ -612,6 +612,12 @@ class RetroCauseEngine:
                 "result_count": item.result_count,
                 "cache_hit": item.cache_hit,
                 "error": item.error,
+                "status": item.status,
+                "retry_after_seconds": item.retry_after_seconds,
+                "source_label": item.source_label,
+                "source_kind": item.source_kind,
+                "stability": item.stability,
+                "cache_policy": item.cache_policy,
             }
             for item in self.collector.access_trace
         ]

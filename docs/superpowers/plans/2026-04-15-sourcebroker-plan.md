@@ -112,21 +112,22 @@
 
 ## Task 4: Surface Degraded Source Trace In API And Briefs
 
-**Files:** `retrocause/api/main.py`, `tests/test_comprehensive.py`
+**Files:** `retrocause/api/main.py`, `retrocause/engine.py`, `tests/test_comprehensive.py`
 
-- [ ] Add test first:
+- [x] Add test first:
   - `test_retrieval_trace_exposes_degraded_source_metadata`
-- [ ] Extend the V2 retrieval trace schema with:
+- [x] Extend the V2 retrieval trace schema with:
   - `status`
   - `retry_after_seconds`
   - `cache_policy`
   - `source_kind`
   - `stability`
-- [ ] Preserve the new `SourceAttempt` metadata when converting results in `_result_to_v2`.
-- [ ] Update Markdown source trace wording so limited sources read as source-limited or rate-limited, not as silent zero-result sources.
-- [ ] Ensure no new causal claim is introduced by this mapping. It only exposes retrieval health.
-- [ ] Run `pytest tests/test_comprehensive.py::test_retrieval_trace_exposes_degraded_source_metadata -q`.
-- [ ] Commit: `feat: expose degraded source trace metadata`.
+- [x] Preserve the new `SourceAttempt` metadata when converting results in `_result_to_v2`.
+- [x] Preserve the new `SourceAttempt` metadata when the engine compiles live pipeline results.
+- [x] Update Markdown source trace wording so limited sources read as source-limited or rate-limited, not as silent zero-result sources.
+- [x] Ensure no new causal claim is introduced by this mapping. It only exposes retrieval health.
+- [x] Run `pytest tests/test_comprehensive.py::test_retrieval_trace_exposes_degraded_source_metadata -q`.
+- [x] Commit: `feat: expose degraded source trace metadata`.
 
 ## Task 5: Optional Tavily Adapter
 
