@@ -174,6 +174,20 @@ Cache keys must include:
 
 For providers with restrictive result-storage terms, store only transient operational data or derived evidence permitted by the provider plan and product policy.
 
+### Implemented Search Cache Scope
+
+Task 2 of the SourceBroker reliability pass scopes the process-local search-result cache by:
+
+- source adapter name
+- source policy
+- scenario
+- language
+- absolute time bucket
+- normalized scoped query
+- max result count
+
+This prevents a market/news run, policy/geopolitics run, English run, Chinese run, or different relative-date bucket from silently reusing another run's retrieval results. Existing callers remain compatible through defaults, and collector-driven live retrieval now passes scenario and language from `plan_query()`.
+
 ## Product Output Contract
 
 Every user-facing result should answer:

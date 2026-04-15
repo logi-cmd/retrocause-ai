@@ -11,6 +11,7 @@ from retrocause.evidence_access import (
     EvidenceAccessLayer,
     EvidenceAccessPolicy,
     SourceAttempt,
+    plan_query,
     reset_evidence_access_state,
 )
 from retrocause.models import CausalEdge, CausalVariable, Evidence, EvidenceType
@@ -173,6 +174,9 @@ def _parallel_search(
     max_results: int,
     min_source_adapters: int = 1,
     time_range: str | None = None,
+    scenario: str = "unknown",
+    language: str = "unknown",
+    source_policy: str = "default",
 ) -> EvidenceAccessBatch:
     """Search adapters in priority order and stop once enough results are collected."""
     return _EVIDENCE_ACCESS.search(
@@ -182,6 +186,9 @@ def _parallel_search(
         min_source_adapters=min_source_adapters,
         time_range=time_range,
         today=_today(),
+        scenario=scenario,
+        language=language,
+        source_policy=source_policy,
     )
 
 
@@ -289,6 +296,7 @@ class EvidenceCollector:
             return []
 
         effective_time_range = time_range if time_range is not None else parse_input(query).time_range
+        plan = plan_query(query)
         query_builder = getattr(llm_client, "build_search_queries", None)
         if callable(query_builder):
             sub_queries = query_builder(query, domain)
@@ -320,6 +328,9 @@ class EvidenceCollector:
                 max_results_per_source,
                 min_source_adapters=min_source_adapters,
                 time_range=effective_time_range,
+                scenario=plan.scenario,
+                language=plan.language,
+                source_policy=plan.scenario,
             )
             self.access_trace.extend(access_batch.attempts)
             all_results = access_batch.results
@@ -433,6 +444,7 @@ class EvidenceCollector:
         new_evidence: list[Evidence] = []
         checks: list[dict] = []
         effective_time_range = time_range if time_range is not None else parse_input(query).time_range
+        plan = plan_query(query)
 
         for edge in candidate_edges:
             src_label = edge.source.replace("_", " ")
@@ -443,6 +455,9 @@ class EvidenceCollector:
                 source_adapters,
                 max_results_per_source,
                 time_range=effective_time_range,
+                scenario=plan.scenario,
+                language=plan.language,
+                source_policy=plan.scenario,
             )
             self.access_trace.extend(access_batch.attempts)
             all_results = access_batch.results
@@ -599,12 +614,16 @@ class EvidenceCollector:
     ) -> list[Evidence]:
         new_evidence: list[Evidence] = []
         effective_time_range = time_range if time_range is not None else parse_input(original_query).time_range
+        plan = plan_query(original_query)
         for sub_query in sub_queries:
             access_batch = _parallel_search(
                 sub_query,
                 source_adapters,
                 max_results_per_source,
                 time_range=effective_time_range,
+                scenario=plan.scenario,
+                language=plan.language,
+                source_policy=plan.scenario,
             )
             self.access_trace.extend(access_batch.attempts)
             all_results = access_batch.results

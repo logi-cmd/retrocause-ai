@@ -102,6 +102,87 @@ def test_access_layer_reuses_cached_adapter_results_without_new_upstream_call():
     assert second.cache_hits == 1
 
 
+def test_access_cache_key_separates_scenario_and_language():
+    reset_evidence_access_state()
+    access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
+    source = _Source("cached", [_result("cached item", "fulltext", "https://example.com/c")])
+
+    market_en = access.search(
+        "US Iran talks",
+        [source],
+        max_results=2,
+        scenario="market",
+        language="en",
+        source_policy="news",
+    )
+    policy_en = access.search(
+        "US Iran talks",
+        [source],
+        max_results=2,
+        scenario="policy",
+        language="en",
+        source_policy="news",
+    )
+    policy_zh = access.search(
+        "US Iran talks",
+        [source],
+        max_results=2,
+        scenario="policy",
+        language="zh",
+        source_policy="news",
+    )
+
+    assert len(source.calls) == 3
+    assert market_en.cache_hits == 0
+    assert policy_en.cache_hits == 0
+    assert policy_zh.cache_hits == 0
+
+
+def test_access_cache_key_reuses_same_absolute_time_bucket():
+    reset_evidence_access_state()
+    access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
+    source = _Source(
+        "cached",
+        [_dated_result("yesterday bitcoin selloff", "2026-04-12")],
+    )
+
+    first = access.search(
+        "bitcoin price drop",
+        [source],
+        max_results=2,
+        time_range="yesterday",
+        today=date(2026, 4, 13),
+        scenario="market",
+        language="en",
+        source_policy="news",
+    )
+    second = access.search(
+        "bitcoin price drop",
+        [source],
+        max_results=2,
+        time_range="yesterday",
+        today=date(2026, 4, 13),
+        scenario="market",
+        language="en",
+        source_policy="news",
+    )
+    next_day = access.search(
+        "bitcoin price drop",
+        [source],
+        max_results=2,
+        time_range="yesterday",
+        today=date(2026, 4, 14),
+        scenario="market",
+        language="en",
+        source_policy="news",
+    )
+
+    assert len(source.calls) == 2
+    assert first.cache_hits == 0
+    assert second.cache_hits == 1
+    assert next_day.cache_hits == 0
+
+
 def test_access_layer_filters_stale_results_for_yesterday_queries():
     reset_evidence_access_state()
     access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))

@@ -908,3 +908,53 @@ Execute Task 1 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: ce
 
 - This task only adds policy metadata and ordering. It does not yet classify rate-limit failures or expose degraded source status in the API/UI.
 - Tavily and Brave are profiles only in this task; actual adapters remain later plan tasks.
+
+## 2026-04-15 SourceBroker Task 2: Scoped Retrieval Cache Keys
+
+### Task
+
+Execute Task 2 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: prevent stale or cross-scenario evidence reuse by including source policy, scenario, language, absolute time bucket, normalized scoped query, adapter name, and result count in the process-local search cache key.
+
+### Files Touched
+
+- `retrocause/evidence_access.py`
+- `retrocause/collector.py`
+- `tests/test_evidence_access.py`
+- `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`
+- `docs/retrieval-and-output-strategy.md`
+- `docs/PROJECT_STATE.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`, `retrocause/evidence_access.py`, `retrocause/collector.py`, `tests/test_evidence_access.py`, `.agent-guardrails/task-contract.json`, and this evidence note before implementation.
+- `pytest tests\test_evidence_access.py::test_access_cache_key_separates_scenario_and_language tests\test_evidence_access.py::test_access_cache_key_reuses_same_absolute_time_bucket -q`
+  - TDD red result: failed because `EvidenceAccessLayer.search()` did not accept `scenario`.
+- `pytest tests\test_evidence_access.py::test_access_cache_key_separates_scenario_and_language tests\test_evidence_access.py::test_access_cache_key_reuses_same_absolute_time_bucket -q`
+  - Result after implementation: 2 passed.
+- `pytest tests\test_evidence_access.py -q`
+  - Result: 17 passed.
+- `pytest tests\test_evidence_access.py tests\test_auto_collect.py -q`
+  - Result: 31 passed.
+- `ruff check retrocause\evidence_access.py retrocause\collector.py tests\test_evidence_access.py`
+  - Result: passed.
+- `npm test` with `.venv\Scripts` prepended to `PATH`, API running on `127.0.0.1:8000`, and production frontend running on `localhost:3005`
+  - Result: passed.
+  - Included frontend lint, frontend build, ruff, pytest, and E2E smoke tests.
+  - Pytest result: 238 passed.
+  - E2E result: 572 passed, 0 failed, 1 skipped.
+  - The skipped item was the optional Playwright full workflow because Playwright was not installed in `.venv`.
+- `npx agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: passed as `safe-to-deploy`, 90/100.
+  - Non-blocking warnings: this task spans implementation, tests, docs, and evidence; `docs/PROJECT_STATE.md` changed by the project documentation-sync rule.
+
+### Behavior Notes
+
+- `EvidenceAccessLayer.search()` now accepts backward-compatible keyword-only `scenario`, `language`, and `source_policy` parameters.
+- Search cache entries are isolated by source adapter, source policy, scenario, language, absolute time bucket, normalized scoped query, and max result count.
+- Collector live retrieval paths derive scenario and language from `plan_query()` and pass them into search, so market/news, policy/geopolitics, English, Chinese, and relative-date runs do not silently share incompatible cached search results.
+
+### Residual Risks
+
+- This task still uses a process-local in-memory cache. Multi-user hosted cache persistence, per-provider storage rules, and run-level usage ledgers remain future Solo Pro / Team Lite work.
+- Source degradation is not classified yet; Task 3 remains needed before users can see rate-limited, forbidden, timeout, and cooldown statuses in retrieval traces.

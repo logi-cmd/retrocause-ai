@@ -60,14 +60,14 @@
 
 **Files:** `retrocause/evidence_access.py`, `tests/test_evidence_access.py`
 
-- [ ] Add tests first:
+- [x] Add tests first:
   - `test_access_cache_key_separates_scenario_and_language`
   - `test_access_cache_key_reuses_same_absolute_time_bucket`
-- [ ] Extend `EvidenceAccessLayer.search` keyword-only parameters:
+- [x] Extend `EvidenceAccessLayer.search` keyword-only parameters:
   - `scenario: str = "unknown"`
   - `language: str = "unknown"`
   - `source_policy: str = "default"`
-- [ ] Replace the cache key with a tuple shaped like:
+- [x] Replace the cache key with a tuple shaped like:
   - adapter name
   - source policy
   - scenario
@@ -75,10 +75,10 @@
   - absolute time scope key
   - normalized scoped query
   - max results
-- [ ] Keep existing callers compatible by using defaults.
-- [ ] Where a `QueryPlan` is already available in collection code, pass scenario, language, and source policy into `search`.
-- [ ] Run `pytest tests/test_evidence_access.py -q`.
-- [ ] Commit: `feat: scope retrieval cache by source policy`.
+- [x] Keep existing callers compatible by using defaults.
+- [x] Where a `QueryPlan` is already available in collection code, pass scenario, language, and source policy into `search`.
+- [x] Run `pytest tests/test_evidence_access.py -q`.
+- [x] Commit: `feat: scope retrieval cache by source policy`.
 
 ## Task 3: Rate-Limit And Degraded Source Classification
 

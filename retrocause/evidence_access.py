@@ -31,7 +31,9 @@ QUALITY_ORDER = {
 }
 
 _SOURCE_LAST_CALL_AT: dict[str, float] = {}
-_SOURCE_QUERY_CACHE: dict[tuple[str, str, int], tuple[float, list[SearchResult]]] = {}
+_SOURCE_QUERY_CACHE: dict[
+    tuple[str, str, str, str, str, str, int], tuple[float, list[SearchResult]]
+] = {}
 _SOURCE_COOLDOWN_UNTIL: dict[str, float] = {}
 
 
@@ -473,6 +475,10 @@ def sort_results_by_quality(results: list[SearchResult]) -> list[SearchResult]:
     return sorted(results, key=_quality_rank)
 
 
+def _normalize_cache_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text.strip().lower())
+
+
 class EvidenceAccessLayer:
     """Search aggregator and source broker boundary for evidence retrieval."""
 
@@ -488,6 +494,9 @@ class EvidenceAccessLayer:
         min_source_adapters: int = 1,
         time_range: str | None = None,
         today: date | None = None,
+        scenario: str = "unknown",
+        language: str = "unknown",
+        source_policy: str = "default",
     ) -> EvidenceAccessBatch:
         """Search multiple source adapters with cache, cooldown, and trace metadata."""
 
@@ -498,12 +507,21 @@ class EvidenceAccessLayer:
         searched_adapters = 0
         min_adapters = max(1, min(min_source_adapters, len(source_adapters)))
         scoped_query = enrich_query_with_time_context(query, time_range, today)
+        absolute_time_scope = time_scope_key(time_range, today) or "evergreen"
+        normalized_scoped_query = _normalize_cache_text(scoped_query)
+        normalized_source_policy = _normalize_cache_text(source_policy) or "default"
+        normalized_scenario = _normalize_cache_text(scenario) or "unknown"
+        normalized_language = _normalize_cache_text(language) or "unknown"
 
         for adapter in source_adapters:
             adapter_name = str(getattr(adapter, "name", adapter.__class__.__name__))
             cache_key = (
                 adapter_name,
-                f"{time_scope_key(time_range, today) or 'evergreen'}::{scoped_query.strip().lower()}",
+                normalized_source_policy,
+                normalized_scenario,
+                normalized_language,
+                absolute_time_scope,
+                normalized_scoped_query,
                 max_results,
             )
             now = time.time()
