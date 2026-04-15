@@ -85,6 +85,12 @@ class SourceAttempt:
     result_count: int
     cache_hit: bool = False
     error: str | None = None
+    status: str = "ok"
+    retry_after_seconds: int | None = None
+    source_label: str = ""
+    source_kind: str = "unknown"
+    stability: str = "unknown"
+    cache_policy: str = "no_cache_policy"
 
 
 @dataclass(frozen=True)
@@ -458,6 +464,64 @@ def describe_source_name(source_name: str) -> dict[str, str]:
     }
 
 
+def _retry_after_seconds_from_headers(headers: object) -> int | None:
+    if not headers:
+        return None
+    for key in ("retry-after", "Retry-After", "x-ratelimit-reset-after"):
+        value = None
+        if isinstance(headers, dict):
+            value = headers.get(key)
+        else:
+            getter = getattr(headers, "get", None)
+            if callable(getter):
+                value = getter(key)
+        if value is None:
+            continue
+        try:
+            return max(0, int(float(str(value).strip())))
+        except ValueError:
+            return None
+    return None
+
+
+def _http_status_code(exc: Exception) -> int | None:
+    for attr in ("status_code", "status"):
+        value = getattr(exc, attr, None)
+        if isinstance(value, int):
+            return value
+    response = getattr(exc, "response", None)
+    if response is None:
+        return None
+    value = getattr(response, "status_code", None) or getattr(response, "status", None)
+    return value if isinstance(value, int) else None
+
+
+def _retry_after_seconds(exc: Exception) -> int | None:
+    value = getattr(exc, "retry_after", None) or getattr(exc, "retry_after_seconds", None)
+    if value is not None:
+        try:
+            return max(0, int(float(str(value).strip())))
+        except ValueError:
+            return None
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None) if response is not None else None
+    return _retry_after_seconds_from_headers(headers)
+
+
+def classify_source_error(exc: Exception) -> tuple[str, str | None, int | None]:
+    """Map upstream adapter failures into stable retrieval-health statuses."""
+
+    status_code = _http_status_code(exc)
+    retry_after = _retry_after_seconds(exc)
+    if status_code == 429:
+        return "rate_limited", "rate_limited", retry_after
+    if status_code in {401, 403}:
+        return "forbidden", "forbidden", retry_after
+    if isinstance(exc, TimeoutError) or "timeout" in exc.__class__.__name__.lower():
+        return "timeout", "timeout", retry_after
+    return "source_error", "source_error", retry_after
+
+
 def _result_quality(result: SearchResult) -> str:
     return str((result.metadata or {}).get("content_quality", "snippet"))
 
@@ -477,6 +541,32 @@ def sort_results_by_quality(results: list[SearchResult]) -> list[SearchResult]:
 
 def _normalize_cache_text(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip().lower())
+
+
+def _source_attempt(
+    adapter_name: str,
+    query: str,
+    result_count: int,
+    *,
+    status: str = "ok",
+    cache_hit: bool = False,
+    error: str | None = None,
+    retry_after_seconds: int | None = None,
+) -> SourceAttempt:
+    profile = source_profile(adapter_name)
+    return SourceAttempt(
+        name=adapter_name,
+        query=query,
+        result_count=result_count,
+        cache_hit=cache_hit,
+        error=error,
+        status=status,
+        retry_after_seconds=retry_after_seconds,
+        source_label=profile.source_label,
+        source_kind=profile.source_kind,
+        stability=profile.stability,
+        cache_policy=profile.cache_policy,
+    )
 
 
 class EvidenceAccessLayer:
@@ -529,10 +619,11 @@ class EvidenceAccessLayer:
             if cached and now - cached[0] <= self.policy.query_cache_ttl:
                 adapter_results = cached[1]
                 attempts.append(
-                    SourceAttempt(
-                        name=adapter_name,
-                        query=scoped_query,
-                        result_count=len(adapter_results),
+                    _source_attempt(
+                        adapter_name,
+                        scoped_query,
+                        len(adapter_results),
+                        status="cached",
                         cache_hit=True,
                     )
                 )
@@ -545,13 +636,14 @@ class EvidenceAccessLayer:
 
             cooldown_until = _SOURCE_COOLDOWN_UNTIL.get(adapter_name, 0.0)
             if cooldown_until > now:
-                errors[adapter_name] = "cooldown"
+                errors[adapter_name] = "source_limited"
                 attempts.append(
-                    SourceAttempt(
-                        name=adapter_name,
-                        query=scoped_query,
-                        result_count=0,
-                        error="cooldown",
+                    _source_attempt(
+                        adapter_name,
+                        scoped_query,
+                        0,
+                        status="source_limited",
+                        error="source_limited",
                     )
                 )
                 continue
@@ -565,14 +657,16 @@ class EvidenceAccessLayer:
                     if result_matches_time_range(result, time_range, today)
                 ]
             except Exception as exc:
-                error_name = exc.__class__.__name__
-                errors[adapter_name] = error_name
+                status, error_name, retry_after_seconds = classify_source_error(exc)
+                errors[adapter_name] = status
                 attempts.append(
-                    SourceAttempt(
-                        name=adapter_name,
-                        query=scoped_query,
-                        result_count=0,
+                    _source_attempt(
+                        adapter_name,
+                        scoped_query,
+                        0,
+                        status=status,
                         error=error_name,
+                        retry_after_seconds=retry_after_seconds,
                     )
                 )
                 logger.warning(
@@ -588,10 +682,11 @@ class EvidenceAccessLayer:
             _SOURCE_LAST_CALL_AT[adapter_name] = time.time()
             _SOURCE_QUERY_CACHE[cache_key] = (time.time(), adapter_results)
             attempts.append(
-                SourceAttempt(
-                    name=adapter_name,
-                    query=scoped_query,
-                    result_count=len(adapter_results),
+                _source_attempt(
+                    adapter_name,
+                    scoped_query,
+                    len(adapter_results),
+                    status="ok",
                 )
             )
             searched_adapters += 1

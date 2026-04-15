@@ -24,7 +24,7 @@ class _Source(BaseSourceAdapter):
         name: str,
         results: list[SearchResult],
         *,
-        fail: bool = False,
+        fail: bool | Exception = False,
     ):
         self._name = name
         self._results = results
@@ -41,9 +41,23 @@ class _Source(BaseSourceAdapter):
 
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         self.calls.append(query)
+        if isinstance(self._fail, Exception):
+            raise self._fail
         if self._fail:
             raise ConnectionError("source unavailable")
         return self._results[:max_results]
+
+
+class _Response:
+    def __init__(self, status_code: int, headers: dict[str, str] | None = None):
+        self.status_code = status_code
+        self.headers = headers or {}
+
+
+class _HttpError(Exception):
+    def __init__(self, status_code: int, headers: dict[str, str] | None = None):
+        super().__init__(f"HTTP {status_code}")
+        self.response = _Response(status_code, headers)
 
 
 def _result(title: str, quality: str, url: str) -> SearchResult:
@@ -215,8 +229,40 @@ def test_access_layer_records_source_errors_and_continues_to_next_adapter():
     batch = access.search("policy shock", [broken, healthy], max_results=1)
 
     assert [item.name for item in batch.attempts] == ["broken", "healthy"]
-    assert batch.errors == {"broken": "ConnectionError"}
+    assert batch.errors == {"broken": "source_error"}
+    assert batch.attempts[0].status == "source_error"
     assert [result.title for result in batch.results] == ["healthy item"]
+
+
+def test_access_layer_classifies_rate_limited_sources():
+    reset_evidence_access_state()
+    access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
+    limited = _Source("tavily", [], fail=_HttpError(429, {"retry-after": "7"}))
+    healthy = _Source("web", [_result("healthy item", "fulltext", "https://example.com/h")])
+
+    batch = access.search("latest market shock", [limited, healthy], max_results=1)
+
+    assert batch.errors == {"tavily": "rate_limited"}
+    assert batch.attempts[0].status == "rate_limited"
+    assert batch.attempts[0].retry_after_seconds == 7
+    assert batch.attempts[0].source_label == "Tavily Search"
+    assert batch.attempts[0].source_kind == "hosted_ai_search"
+    assert batch.attempts[1].status == "ok"
+    assert [result.title for result in batch.results] == ["healthy item"]
+
+
+def test_access_layer_classifies_forbidden_sources():
+    reset_evidence_access_state()
+    access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
+    forbidden = _Source("brave", [], fail=_HttpError(403))
+
+    batch = access.search("policy shock", [forbidden], max_results=1)
+
+    assert batch.errors == {"brave": "forbidden"}
+    assert batch.attempts[0].status == "forbidden"
+    assert batch.attempts[0].retry_after_seconds is None
+    assert batch.attempts[0].source_label == "Brave Search API"
+    assert batch.attempts[0].cache_policy == "transient_results_only"
 
 
 def test_access_layer_cools_down_recently_failed_sources():
@@ -230,10 +276,28 @@ def test_access_layer_cools_down_recently_failed_sources():
     first = access.search("policy shock", [broken, healthy], max_results=1)
     second = access.search("policy shock updated", [broken, healthy], max_results=1)
 
-    assert first.errors == {"broken": "ConnectionError"}
-    assert second.errors == {"broken": "cooldown"}
+    assert first.errors == {"broken": "source_error"}
+    assert second.errors == {"broken": "source_limited"}
     assert len(broken.calls) == 1
     assert [result.title for result in second.results] == ["healthy item"]
+
+
+def test_access_layer_marks_cooldown_as_source_limited():
+    reset_evidence_access_state()
+    access = EvidenceAccessLayer(
+        EvidenceAccessPolicy(query_cache_ttl=60, source_error_cooldown_seconds=30)
+    )
+    broken = _Source("broken", [], fail=ConnectionError("source unavailable"))
+
+    first = access.search("policy shock", [broken], max_results=1)
+    second = access.search("policy shock updated", [broken], max_results=1)
+
+    assert first.attempts[0].status == "source_error"
+    assert second.errors == {"broken": "source_limited"}
+    assert second.attempts[0].status == "source_limited"
+    assert second.attempts[0].error == "source_limited"
+    assert second.attempts[0].source_label == "broken"
+    assert len(broken.calls) == 1
 
 
 def test_query_planner_detects_language_time_entities_and_scenario():

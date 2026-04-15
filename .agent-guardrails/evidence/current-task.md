@@ -958,3 +958,56 @@ Execute Task 2 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: pr
 
 - This task still uses a process-local in-memory cache. Multi-user hosted cache persistence, per-provider storage rules, and run-level usage ledgers remain future Solo Pro / Team Lite work.
 - Source degradation is not classified yet; Task 3 remains needed before users can see rate-limited, forbidden, timeout, and cooldown statuses in retrieval traces.
+
+## 2026-04-15 SourceBroker Task 3: Degraded Source Classification
+
+### Task
+
+Execute Task 3 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: classify upstream source failures and cache/cooldown states into stable retrieval-health statuses that can later be surfaced in the API/UI.
+
+### Files Touched
+
+- `retrocause/evidence_access.py`
+- `tests/test_evidence_access.py`
+- `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`
+- `docs/retrieval-and-output-strategy.md`
+- `docs/PROJECT_STATE.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`, `retrocause/evidence_access.py`, `tests/test_evidence_access.py`, `.agent-guardrails/task-contract.json`, and this evidence note before implementation.
+- `pytest tests\test_evidence_access.py::test_access_layer_classifies_rate_limited_sources tests\test_evidence_access.py::test_access_layer_classifies_forbidden_sources tests\test_evidence_access.py::test_access_layer_marks_cooldown_as_source_limited -q`
+  - TDD red result: failed because `EvidenceAccessBatch.errors` still contained raw exception class names and `SourceAttempt` had no `status`.
+- `pytest tests\test_evidence_access.py::test_access_layer_classifies_rate_limited_sources tests\test_evidence_access.py::test_access_layer_classifies_forbidden_sources tests\test_evidence_access.py::test_access_layer_marks_cooldown_as_source_limited -q`
+  - Result after implementation: 3 passed.
+- `pytest tests\test_evidence_access.py -q`
+  - First result after implementation: 19 passed and 1 failed because an older assertion still expected `ConnectionError` instead of `source_error`.
+- `pytest tests\test_evidence_access.py -q`
+  - Result after updating the old assertion: 20 passed.
+- `ruff check retrocause\evidence_access.py tests\test_evidence_access.py`
+  - Result: passed.
+- `pytest tests\test_evidence_access.py tests\test_auto_collect.py tests\test_api_retrieval_trace.py -q`
+  - Result: 36 passed.
+- `npm test` with `.venv\Scripts` prepended to `PATH`, API running on `127.0.0.1:8000`, and production frontend running on `localhost:3005`
+  - Result: passed.
+  - Included frontend lint, frontend build, ruff, pytest, and E2E smoke tests.
+  - Pytest result: 241 passed.
+  - E2E result: 572 passed, 0 failed, 1 skipped.
+  - The skipped item was the optional Playwright full workflow because Playwright was not installed in `.venv`.
+- `npx agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: passed as `safe-to-deploy`, 90/100.
+  - Non-blocking warnings: this task spans implementation, tests, docs, and evidence; `docs/PROJECT_STATE.md` changed by the project documentation-sync rule.
+
+### Behavior Notes
+
+- `SourceAttempt` now includes `status`, `retry_after_seconds`, `source_label`, `source_kind`, `stability`, and `cache_policy`.
+- `classify_source_error()` maps HTTP 429 to `rate_limited`, HTTP 401/403 to `forbidden`, timeout-like failures to `timeout`, and general upstream failures to `source_error`.
+- Cooldown skips are now represented as `source_limited` instead of the internal word `cooldown`.
+- Cache hits are represented as `cached`, successful source calls as `ok`, and attempts carry source-profile metadata for later API/UI display.
+- `EvidenceAccessBatch.errors` now stores stable status categories instead of raw exception class names for classified source failures.
+
+### Residual Risks
+
+- Task 3 only enriches backend attempt metadata. Task 4 still needs to expose these fields in the V2 retrieval trace and Markdown/readable brief output.
+- Retry-after parsing handles numeric retry headers and common exception attributes; date-formatted retry headers are not parsed yet.

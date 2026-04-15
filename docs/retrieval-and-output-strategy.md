@@ -188,6 +188,20 @@ Task 2 of the SourceBroker reliability pass scopes the process-local search-resu
 
 This prevents a market/news run, policy/geopolitics run, English run, Chinese run, or different relative-date bucket from silently reusing another run's retrieval results. Existing callers remain compatible through defaults, and collector-driven live retrieval now passes scenario and language from `plan_query()`.
 
+### Implemented Source Degradation Statuses
+
+Task 3 of the SourceBroker reliability pass gives each source attempt stable retrieval-health metadata before the API/UI mapping layer:
+
+- `ok` for a successful upstream source call
+- `cached` for a reused process-local cache hit
+- `rate_limited` for HTTP 429-style provider limits, including parsed `Retry-After` seconds when available
+- `forbidden` for HTTP 401/403-style auth or permission failures
+- `timeout` for timeout exceptions
+- `source_error` for general upstream failures such as connection errors
+- `source_limited` for sources temporarily skipped because they are in cooldown after a recent failure
+
+Each attempt also carries source label, source kind, stability, and cache policy from the source profile registry. This keeps the backend trace ready for user-facing degraded-output language without introducing new causal claims.
+
 ## Product Output Contract
 
 Every user-facing result should answer:

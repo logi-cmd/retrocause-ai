@@ -84,19 +84,19 @@
 
 **Files:** `retrocause/evidence_access.py`, `tests/test_evidence_access.py`
 
-- [ ] Add tests first:
+- [x] Add tests first:
   - `test_access_layer_classifies_rate_limited_sources`
   - `test_access_layer_classifies_forbidden_sources`
   - `test_access_layer_marks_cooldown_as_source_limited`
-- [ ] Extend `SourceAttempt` with:
+- [x] Extend `SourceAttempt` with:
   - `status`
   - `retry_after_seconds`
   - `source_label`
   - `source_kind`
   - `stability`
   - `cache_policy`
-- [ ] Add `classify_source_error(exc: Exception) -> tuple[str, str | None, int | None]`.
-- [ ] Classify stable statuses:
+- [x] Add `classify_source_error(exc: Exception) -> tuple[str, str | None, int | None]`.
+- [x] Classify stable statuses:
   - `ok`
   - `cached`
   - `rate_limited`
@@ -104,11 +104,11 @@
   - `timeout`
   - `source_error`
   - `source_limited`
-- [ ] Extract retry-after seconds from common exception attributes and response headers when present.
-- [ ] Store stable status categories in `EvidenceAccessBatch.errors` instead of raw class names for newly classified cases.
-- [ ] Keep old general `ConnectionError` behavior readable by mapping it to `source_error`.
-- [ ] Run `pytest tests/test_evidence_access.py -q`.
-- [ ] Commit: `feat: classify degraded retrieval sources`.
+- [x] Extract retry-after seconds from common exception attributes and response headers when present.
+- [x] Store stable status categories in `EvidenceAccessBatch.errors` instead of raw class names for newly classified cases.
+- [x] Keep old general `ConnectionError` behavior readable by mapping it to `source_error`.
+- [x] Run `pytest tests/test_evidence_access.py -q`.
+- [x] Commit: `feat: classify degraded retrieval sources`.
 
 ## Task 4: Surface Degraded Source Trace In API And Briefs
 
