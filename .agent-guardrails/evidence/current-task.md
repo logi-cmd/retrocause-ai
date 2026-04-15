@@ -1223,6 +1223,10 @@ Execute Task 7 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: ma
   - E2E result: 572 passed, 0 failed, 1 skipped.
   - The skipped item was the optional Playwright full workflow because Playwright was not installed in `.venv`.
 - `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: `safe-to-deploy`, 95/100.
+  - Blocking errors: 0.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed by the project documentation-sync rule.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
   - Result: `safe-to-deploy`, 90/100.
   - Blocking errors: 0.
   - Non-blocking warnings: this uncommitted task view spans implementation, tests, docs, and evidence; `docs/PROJECT_STATE.md` changed by the project documentation-sync rule.
@@ -1285,3 +1289,53 @@ Execute Task 8 from `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md`: up
 
 - This pass is documentation and verification only; it does not add hosted run orchestration, persistent cache policy enforcement, uploaded evidence, or saved-run history.
 - Source trace states help users understand retrieval health, but users still need to inspect evidence before acting on a causal explanation.
+
+## 2026-04-15 SourceBroker Dogfood: Three Production Scenarios
+
+### Task
+
+Dogfood the completed SourceBroker reliability pass across one market, one policy/geopolitics, and one postmortem question using the OpenRouter DeepSeek V3 live path. The goal was to check whether the product output exposes reviewability, evidence count, source trace status, and next actions clearly enough for a user.
+
+### Files Touched
+
+- `docs/PROJECT_STATE.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, `start.py`, `scripts/e2e_test.py`, `retrocause/api/main.py`, `.agent-guardrails/task-contract.json`, and this evidence note before updating docs.
+- Ran provider preflight through the FastAPI TestClient with OpenRouter `deepseek/deepseek-chat-v3-0324`.
+  - Result: `ok`, `can_run_analysis=True`.
+- Ran `/api/analyze/v2` live dogfood for `Why did Bitcoin move today?` with `scenario_override=market`.
+  - Result: HTTP 200, `analysis_mode=live`, `freshness_status=recent`, scenario `market`.
+  - Output: 3 chains, 4 evidence items, 18 retrieval trace rows, all trace statuses `ok`.
+  - Harness: `product_harness.status=ready_for_review`, score 1.0; `production_harness.status=ready_for_brief`, score 1.0.
+  - Markdown brief length: 5749 characters.
+- Ran `/api/analyze/v2` live dogfood for `Why did the United States and Iran fail to reach an agreement after the Islamabad talks?` with `scenario_override=policy`.
+  - Result: HTTP 200, `analysis_mode=live`, `freshness_status=fresh`, scenario `policy_geopolitics`.
+  - Output: 8 chains, 13 evidence items, 5 retrieval trace rows, all trace statuses `ok`.
+  - Harness: `product_harness.status=ready_for_review`, score 1.0; `production_harness.status=ready_for_brief`, score 1.0.
+  - Markdown brief length: 6579 characters.
+- Ran `/api/analyze/v2` live dogfood for `Why did a SaaS product launch fail to convert trial users into paid customers?` with `scenario_override=postmortem`.
+  - Result: HTTP 200, `analysis_mode=live`, `freshness_status=fresh`, scenario `postmortem`.
+  - Output: 6 chains, 13 evidence items, 5 retrieval trace rows, all trace statuses `ok`.
+  - Harness: `product_harness.status=ready_for_review`, score 1.0; `production_harness.status=ready_for_brief`, score 1.0.
+  - Markdown brief length: 6130 characters.
+- `npm test` with `.venv\Scripts` prepended to `PATH`
+  - Result: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, full pytest, and E2E smoke tests.
+  - Pytest result: 248 passed.
+  - E2E result: 572 passed, 0 failed, 1 skipped.
+  - The skipped item was the optional Playwright full workflow because Playwright was not installed in `.venv`.
+
+### Behavior Notes
+
+- The happy-path SourceBroker output is usable across all three production scenarios: the user gets live mode, evidence counts, source trace rows, top reasons, Markdown brief, and reviewable harness status.
+- The dogfood did not naturally trigger rate-limited, source-limited, timeout, forbidden, or source-error states. All observed trace rows were `ok`.
+- The policy and postmortem runs emitted query-planning fallback logs when search-query decomposition returned invalid structured output, but the fallback still produced successful live results.
+
+### Residual Risks
+
+- This dogfood validates the normal live path, not the degraded-source UX under real provider failure.
+- A follow-up degraded-source drill should intentionally simulate 429, forbidden, timeout, and cooldown states through existing mocked adapters or a small test harness so the user-facing bad-path output can be inspected without waiting for real providers to fail.
+- The market run returned `freshness_status=recent` rather than `fresh`, which is acceptable for review but should be highlighted to users before any trade or investment use.
