@@ -2,123 +2,161 @@
 
 **English:** Ask "why did this happen?" and inspect an evidence-backed causal map.
 
-**中文：** 输入一个“为什么会这样？”的问题，得到带证据、反证、来源轨迹和因果链的可检查解释。
+**中文：** 输入一个“为什么会这样？”的问题，查看带证据、反证检查、来源轨迹和不确定性提示的因果解释。
 
-RetroCause is an open-source causal explanation workspace for complex events. It is not a truth oracle and it is not a production causal-inference system. Its goal is to make AI explanations easier to inspect: users can see proposed reasons, supporting evidence, challenge checks, uncertainty signals, and retrieval-source health instead of receiving one opaque paragraph.
+RetroCause is an open-source causal explanation workspace for complex events. It is not a truth oracle and it is not a production causal-inference system. Its goal is to make AI-assisted explanations inspectable: users can see proposed reasons, supporting evidence, challenge checks, uncertainty signals, and retrieval-source health instead of receiving one opaque paragraph.
 
-RetroCause 是一个开源的因果解释工作台，适合研究复杂事件的“原因链”。它不是因果真理机器，也不是生产级科学因果推断系统。它的目标是让 AI 输出更可检查：用户可以看到原因、证据、反证检查、不确定性和检索来源健康状态，而不是只看到一段不可追踪的总结。
+RetroCause 是一个开源的因果解释工作台，用来研究复杂事件的“原因链”。它不是因果真理机器，也不是生产级科学因果推断系统。它的目标是让 AI 输出更可检查：用户可以看到原因、证据、反证检查、不确定性和检索来源健康状态，而不是只看到一段不可追踪的总结。
 
 ![RetroCause live evidence board](docs/images/golden-us-iran-live-ui.png)
 
-## What You Get / 你会看到什么
-
-- **Evidence-backed causal chains / 带证据的因果链：** competing explanations with probabilities and linked evidence.
-- **Readable brief / 阅读版简报：** a structured in-app report with the likely explanation, top reasons, challenge coverage, gaps, evidence coverage, and source-health summary.
-- **Markdown research brief / Markdown 研究简报：** copy a portable report with the question, likely explanation, reasons, challenge coverage, evidence, and source trace.
-- **Copy fallback / 复制降级：** if browser clipboard permissions block one-click copy, the app opens a manual-copy text area.
-- **Source trace / 来源轨迹：** each live run shows which sources were queried, how many results were found, whether cache was used, and whether a source was limited or degraded.
-- **Source health summary / 来源健康摘要：** the readable brief summarizes checked sources, successful sources, cached sources, degraded sources, stable-source coverage, and whether the result is still reviewable.
-- **Challenge coverage / 反证覆盖：** checked causal edges show whether refuting or context evidence was found. If a checked edge has no attached refuting evidence, the brief says that directly instead of showing ambiguous `0 challenge` wording.
-- **Provider preflight / 模型预检：** test whether the selected model and API key can return valid JSON before running a full analysis.
-- **Value harness / 结果价值检查：** the UI tells you whether a result is ready for review, needs more evidence, or is blocked by provider/model setup.
-- **Production brief modes / 生产级简报模式：** auto-detect or choose Market / Investment, Policy / Geopolitics, or Postmortem so the output explains what a user can decide, what evidence supports it, what could change the view, and what is not ready yet.
-- **Demo transparency / Demo 透明标记：** demo, partial-live, and live modes are labeled explicitly.
-
 ## Current Status / 当前状态
 
-**English:** RetroCause is a research-grade alpha published as `v0.1.0-alpha.4` at [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai). The browser app, API, tests, provider preflight, challenge coverage, Markdown research brief, copy fallback, source-health summary, value harness, scenario-aware production brief harness, and SourceBroker retrieval-health pass work locally.
+RetroCause is a research-grade OSS alpha. The current priority is to finish the OSS version before adding more Pro behavior. Future Pro should be planned as a separate full-stack Rust rewrite, not as more hosted features bolted onto this Python/FastAPI + Next.js alpha.
 
-**中文：** RetroCause 当前是 research-grade alpha，已在 [github.com/logi-cmd/retrocause-ai](https://github.com/logi-cmd/retrocause-ai) 发布 `v0.1.0-alpha.4`。本地浏览器应用、API、测试、模型预检、反证覆盖、Markdown 研究简报、复制降级、来源健康摘要、结果价值检查、场景化生产级简报，以及 SourceBroker 检索健康状态都已经可用。
+RetroCause 目前是 research-grade OSS alpha。当前优先级是先把 OSS 版本做好，再考虑 Pro。未来 Pro 应该作为独立的全栈 Rust 重构来规划，而不是继续在当前 Python/FastAPI + Next.js alpha 上堆托管功能。
 
-Known limits / 已知限制：
+What works locally:
+
+- FastAPI backend and Next.js browser app
+- demo / partial-live / live result labeling
+- provider preflight for OpenAI-compatible models
+- evidence-backed causal chains
+- readable brief and copyable Markdown research brief
+- challenge/refutation coverage
+- SourceBroker retrieval trace with cached, rate-limited, source-limited, timeout, and source-error states
+- scenario-aware brief modes for market, policy/geopolitics, and postmortem questions
+- local run metadata, usage ledger, saved runs, and pasted uploaded evidence
+- full local verification through `npm test`
+
+本地已经可用：
+
+- FastAPI 后端和 Next.js 浏览器应用
+- demo / partial-live / live 结果标记
+- OpenAI-compatible 模型预检
+- 带证据的因果链
+- 可阅读简报和可复制 Markdown 研究简报
+- 反证 / challenge coverage
+- SourceBroker 来源轨迹，包括缓存、限流、来源受限、超时、来源错误等状态
+- 面向市场、政策 / 地缘政治、复盘问题的场景化简报
+- 本地 run metadata、usage ledger、saved runs、粘贴式 uploaded evidence
+- 通过 `npm test` 的完整本地验证
+
+Known limits:
 
 - Results are evidence-grounded explanations, not verified causal truth.
 - Live quality depends on source availability, model behavior, API quota, and provider rate limits.
-- Source adapters can be rate-limited. Sustainable hosted use requires source policies, cache, provider budgets, and run orchestration.
-- Source trace rows expose retrieval-health states such as `cached`, `rate-limited`, `source-limited`, `timeout`, and `source-error`. Treat these as source/retrieval limits, not as evidence against a cause.
-- Some generated labels may remain partly English in Chinese mode, but live graph nodes should keep their specific meaning instead of falling back to generic factor labels.
-- PDF/DOCX export, saved runs, scheduled watch topics, team review, and branded reports are not included in OSS.
+- Source trace rows describe retrieval health. They are not evidence for or against a cause by themselves.
+- Saved runs and uploaded evidence are local alpha features. They are not hosted storage, team sharing, ACLs, or secure document management.
+- PDF/DOCX export, scheduled watch topics, team review, branded reports, and hosted queues are not part of the OSS alpha.
+- Some generated labels may remain partly English in Chinese mode, but live graph nodes should keep their specific meaning.
 
-- 结果是“有证据锚定的解释”，不是已经被证明的因果真理。
+已知限制：
+
+- 结果是“证据锚定的解释”，不是已经被证明的因果真理。
 - Live 模式质量取决于来源可用性、模型行为、API 额度和 provider 限流。
-- 检索源适配器可能被限流。可持续的托管版本需要来源策略、缓存、provider 预算和运行编排。
-- 来源轨迹会显示 `cached`、`rate-limited`、`source-limited`、`timeout`、`source-error` 等检索健康状态。它们表示“来源或检索受限”，不是“某个原因被证伪”。
-- 中文模式下，部分模型生成的长标签可能仍保留英文；但 live 因果图节点会保留具体含义，而不是退回成泛化的“因素”标签。
-- OSS 当前不包含 PDF/DOCX 导出、历史保存、定时追踪、团队审阅或品牌化报告。
+- 来源轨迹描述的是检索健康状态，它本身不是支持或反驳某个原因的证据。
+- saved runs 和 uploaded evidence 是本地 alpha 功能，不是托管存储、团队共享、ACL 或安全文档管理。
+- PDF/DOCX 导出、定时主题、团队审阅、品牌化报告、托管队列不属于当前 OSS alpha。
+- 中文模式下，部分模型生成的长标签可能仍保留英文，但 live graph 节点应保留具体含义。
 
 ## Quick Start / 快速开始
 
 ### 1. Install / 安装
 
+Use Python 3.10+ and Node.js. From the repository root:
+
 ```bash
 pip install -e ".[dev]"
-cd frontend
 npm install
-cd ..
+npm --prefix frontend install
 ```
 
-### 2. Start the app / 启动应用
+使用 Python 3.10+ 和 Node.js。在仓库根目录执行：
+
+```bash
+pip install -e ".[dev]"
+npm install
+npm --prefix frontend install
+```
+
+### 2. Start / 启动
 
 ```bash
 python start.py
 ```
 
-Then open / 然后打开：
+Open:
 
-- Frontend / 前端: `http://localhost:3005`
-- Backend API / 后端 API: `http://localhost:8000`
+- Frontend: `http://localhost:3005`
+- Backend API: `http://localhost:8000`
 
-### 3. Try demo mode / 先试 Demo
+打开：
 
-Open the homepage and submit a question without an API key. RetroCause will show clearly labeled demo output so you can inspect the interface safely.
+- 前端：`http://localhost:3005`
+- 后端 API：`http://localhost:8000`
 
-打开首页，不填 API key 直接提交问题。RetroCause 会显示明确标记的 demo 输出，你可以先体验界面、证据墙和因果链。
+### 3. Try Demo Mode / 先试 Demo
 
-Example questions / 示例问题：
+Submit a question without an API key. RetroCause will show clearly labeled demo output so you can inspect the interface safely.
+
+不填 API key 也可以提交问题。RetroCause 会显示明确标记的 demo 输出，方便先检查界面、证据墙和因果链。
+
+Example questions:
 
 - Why did SVB collapse?
 - Why did the 2008 financial crisis happen?
 - Why is rent so high in New York?
-- 美国和伊朗在伊斯兰堡谈判结束，未达成协议的原因是什么？
-- 为什么比特币今天价格下跌？
+- Why did Bitcoin move today?
+- Why did a SaaS product launch fail to convert trial users?
 
-### 4. Run live analysis / 跑真实分析
+示例问题：
+
+- SVB 为什么倒闭？
+- 2008 年金融危机的原因是什么？
+- 纽约房租为什么这么高？
+- 比特币今天为什么波动？
+- 一个 SaaS 产品发布后为什么没能把试用用户转成付费用户？
+
+### 4. Run Live Analysis / 跑真实分析
 
 1. Open **Model settings** on the homepage.
-2. Paste your OpenRouter API key.
+2. Paste your OpenRouter or OpenAI-compatible API key.
 3. Click **Run model preflight**.
-4. Choose **Auto detect**, **Market / Investment**, **Policy / Geopolitics**, or **Postmortem** in the use-case selector.
+4. Choose **Auto detect**, **Market / Investment**, **Policy / Geopolitics**, or **Postmortem**.
 5. If preflight passes, click **Start analysis**.
 6. Inspect the production brief, analysis brief, source trace, challenge coverage, and value harness before trusting the result.
-7. In source trace, treat `rate-limited`, `source-limited`, `timeout`, and `source-error` rows as retrieval-health limits. They tell you what source failed or degraded, not whether the proposed cause is true or false.
-8. Click **Copy report** in the readable brief card to take the Markdown report into notes, docs, or research workflows. If the browser blocks clipboard access, use the manual-copy report box that appears.
+7. Use **Copy report** to export the Markdown research brief.
 
-中文步骤：
+步骤：
 
-1. 打开首页的 **模型与密钥设置**。
-2. 粘贴你的 OpenRouter API key。
-3. 点击 **运行模型预检**。
-4. 在使用场景选择器里选择 **自动识别**、**市场 / 投资**、**政策 / 地缘政治** 或 **复盘**。
-5. 预检通过后点击 **开始分析**。
-6. 先检查生产级简报、分析简报、来源轨迹、反证覆盖和 Value Harness，再决定是否相信结果。
-7. 在来源轨迹里，`rate-limited`、`source-limited`、`timeout`、`source-error` 表示检索健康问题。它们说明哪个来源失败或降级，不代表某个原因本身为真或为假。
-8. 在分析结论卡片中点击 **复制报告**，把 Markdown 结果带进笔记、文档、投研或政策分析流程。如果浏览器拦截剪贴板权限，请使用自动展开的手动复制文本框。
+1. 打开首页的 **Model settings**。
+2. 粘贴 OpenRouter 或 OpenAI-compatible API key。
+3. 点击 **Run model preflight**。
+4. 选择 **Auto detect**、**Market / Investment**、**Policy / Geopolitics** 或 **Postmortem**。
+5. 预检通过后点击 **Start analysis**。
+6. 先检查 production brief、analysis brief、source trace、challenge coverage 和 value harness，再决定是否信任结果。
+7. 使用 **Copy report** 导出 Markdown 研究简报。
 
-API keys are only needed for real analysis. Without a key, the app remains usable in demo mode.
+API keys are only needed for live analysis. Without a key, the app remains usable in demo mode.
 
-真实分析需要 API key。没有 key 时，应用仍可用 demo 模式体验。
+只有真实分析需要 API key。没有 key 时，应用仍可用 demo 模式体验。
 
 ## Optional Hosted Search Sources / 可选托管检索源
 
-RetroCause OSS works without hosted-search accounts. Optional hosted adapters are only registered when you provide keys before starting the app:
+RetroCause OSS works without hosted-search accounts. Optional hosted adapters are only registered when you provide keys before starting the app.
 
-```bash
+RetroCause OSS 不依赖托管检索账号。只有在启动前提供 key 时，可选托管适配器才会注册。
+
+Windows CMD:
+
+```bat
 set TAVILY_API_KEY=your_tavily_key
 set BRAVE_SEARCH_API_KEY=your_brave_key
 python start.py
 ```
 
-PowerShell example:
+PowerShell:
 
 ```powershell
 $env:TAVILY_API_KEY = "your_tavily_key"
@@ -126,17 +164,33 @@ $env:BRAVE_SEARCH_API_KEY = "your_brave_key"
 python start.py
 ```
 
-- `TAVILY_API_KEY` enables Tavily Search as an optional source.
-- `BRAVE_SEARCH_API_KEY` enables Brave Search as an optional source.
+- `TAVILY_API_KEY` enables Tavily Search.
+- `BRAVE_SEARCH_API_KEY` enables Brave Search.
 - If those variables are absent, RetroCause uses the built-in OSS source adapters.
 - Hosted providers may enforce rate limits or storage rules. RetroCause exposes those limits in source trace instead of hiding them.
 
-RetroCause OSS 不依赖托管检索账号。只有在启动前提供 key 时，可选托管适配器才会注册：
-
 - `TAVILY_API_KEY` 启用 Tavily Search。
 - `BRAVE_SEARCH_API_KEY` 启用 Brave Search。
-- 未设置这些变量时，RetroCause 使用内置 OSS 检索源继续运行。
-- 托管 provider 可能有额度、限流或存储规则。RetroCause 会把这些限制显示在来源轨迹里，而不是假装检索成功。
+- 未设置这些变量时，RetroCause 使用内置 OSS 检索源。
+- 托管 provider 可能有额度、限流或存储规则。RetroCause 会把这些限制显示在 source trace 里，而不是假装检索成功。
+
+## Local Workflow Features / 本地工作流功能
+
+The OSS alpha includes small local workflow features because they make inspection easier:
+
+- Run status: every V2 analysis response includes a local `run_id`, status, run steps, and usage ledger.
+- Saved runs: recent run payloads can be reopened from the browser UI.
+- Uploaded evidence: pasted notes can be stored locally and reused as user-provided evidence.
+
+OSS alpha 包含一些小型本地工作流功能，因为它们能让检查过程更清楚：
+
+- Run status：每个 V2 分析响应包含本地 `run_id`、状态、步骤和 usage ledger。
+- Saved runs：最近的运行结果可以在浏览器 UI 中重新打开。
+- Uploaded evidence：用户粘贴的笔记可以存入本地 evidence store，作为用户提供的证据复用。
+
+These are local inspectability features. They are not hosted Pro infrastructure.
+
+这些是本地可检查性功能，不是 hosted Pro 基础设施。
 
 ## API Usage / API 用法
 
@@ -156,11 +210,24 @@ curl -X POST http://localhost:8000/api/providers/preflight \
   -d "{\"model\":\"openrouter\",\"explicit_model\":\"deepseek/deepseek-chat-v3-0324\",\"api_key\":\"YOUR_KEY\"}"
 ```
 
-Windows PowerShell note / Windows PowerShell 注意：
+Saved runs:
 
-For Chinese queries, send UTF-8 JSON bytes. Plain string request bodies can corrupt Chinese text on some Windows consoles.
+```bash
+curl http://localhost:8000/api/runs
+curl http://localhost:8000/api/runs/run_example
+```
 
-中文问题请用 UTF-8 bytes 发送 JSON。某些 Windows 控制台直接发送字符串 body 时，中文可能变成 `????????`。
+Uploaded evidence:
+
+```bash
+curl -X POST http://localhost:8000/api/evidence/upload \
+  -H "Content-Type: application/json" \
+  -d "{\"query\":\"Why did the launch underperform?\",\"content\":\"User interviews point to unclear onboarding.\",\"title\":\"Interview notes\"}"
+```
+
+Windows PowerShell note: for Chinese queries, send UTF-8 JSON bytes. Plain string request bodies can corrupt Chinese text on some Windows consoles.
+
+Windows PowerShell 注意：中文问题建议用 UTF-8 JSON bytes 发送。某些 Windows 控制台直接发送字符串 body 时，中文可能被破坏。
 
 ## Development / 开发
 
@@ -175,7 +242,7 @@ This runs:
 - frontend lint
 - frontend build
 - `ruff check retrocause/`
-- `pytest tests/`
+- `pytest tests/ --basetemp=.pytest-tmp`
 - full-stack E2E smoke tests
 
 ## Tech Stack / 技术栈
@@ -185,7 +252,8 @@ This runs:
 - Causal graph: NetworkX
 - Probabilistic reasoning groundwork: NumPyro / JAX
 - Evidence sources: web search adapters, AP News, Federal Register, GDELT, ArXiv, Semantic Scholar, optional Tavily, optional Brave Search
-- Retrieval strategy: see [`docs/retrieval-and-output-strategy.md`](docs/retrieval-and-output-strategy.md)
+- Retrieval strategy: [`docs/retrieval-and-output-strategy.md`](docs/retrieval-and-output-strategy.md)
+- Pro direction note: [`docs/pro-workflow-spec.md`](docs/pro-workflow-spec.md)
 
 ## When To Use It / 适合什么场景
 
@@ -201,17 +269,17 @@ RetroCause 适合需要“解释事件原因，并检查推理链”的场景：
 - 市场或政策事件解释
 - 地缘政治 / 新闻因果简报
 - 公司或竞品复盘
-- 证据锚定解释界面的研究 demo
+- 证据锚定解释 UX 的研究 demo
 
-## OSS vs Pro Boundary / OSS 和 Pro 边界
+## OSS vs Future Pro / OSS 与未来 Pro
 
-**OSS:** local, inspectable analysis for individual researchers and builders. OSS includes the evidence board, source trace, challenge coverage, value harness, scenario-aware single-run production briefs, optional user-key hosted search adapters, and a copyable Markdown research brief.
+**OSS:** local, inspectable analysis for individual researchers and builders. OSS includes the evidence board, source trace, challenge coverage, value harness, scenario-aware single-run briefs, optional user-key hosted search adapters, local saved runs, pasted uploaded evidence, and a copyable Markdown research brief.
 
-**Pro direction:** hosted reliability for individuals and small teams. Pro should justify payment through run queues, quota management, cache reuse, saved runs, uploaded evidence, scheduled watch topics, PDF/DOCX reports, lightweight team review, source-policy controls, and higher-trust operating workflows. Enterprise private deployment is not a near-term goal.
+**Future Pro:** deferred until OSS is solid. Future Pro should be designed as a separate full-stack Rust rewrite focused on hosted reliability, durable queues, workspace storage, exports, scheduled watch topics, review workflows, and source-policy controls.
 
-**OSS：** 面向个人研究者和开发者，重点是本地可运行、可检查、可复制。OSS 包含证据墙、来源轨迹、反证覆盖、结果价值检查、场景化单次生产级简报、用户自带 key 的可选托管检索源，以及可复制的 Markdown 研究简报。
+**OSS：** 面向个人研究者和开发者，重点是本地可运行、可检查、可复制。OSS 包含证据墙、来源轨迹、反证覆盖、value harness、场景化单次简报、用户自带 key 的可选托管检索源、本地 saved runs、粘贴式 uploaded evidence、可复制 Markdown 研究简报。
 
-**Pro 方向：** 面向个人和小团队的托管可靠性。付费价值应来自运行队列、额度管理、缓存复用、历史保存、上传资料、定时主题追踪、PDF/DOCX 报告、轻量团队审阅、来源策略控制和更高可信的运营流程。企业私有部署不是近期目标。
+**未来 Pro：** 等 OSS 稳定后再规划。未来 Pro 应作为独立全栈 Rust 重构，重点是托管可靠性、持久队列、工作区存储、导出、定时主题、审阅流程和来源策略控制。
 
 ## License / 许可证
 

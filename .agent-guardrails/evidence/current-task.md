@@ -1436,3 +1436,391 @@ Add a deterministic degraded-source drill regression so the bad path is checked 
 
 - This is deterministic API/brief regression coverage, not browser visual dogfood.
 - The next useful UX check is to render a degraded trace in the browser and inspect whether the right-side status labels, colors, and retry-after copy are obvious enough for a first-time user.
+
+## 2026-04-16 Pro Workflow Slice: Run Orchestration, Degraded Source Dogfood, Uploaded Evidence, Saved Runs
+
+### Task
+
+Implement and dogfood the next Pro workflow slices in order: lightweight local run orchestration, browser-level degraded-source dogfood, minimal uploaded evidence, and saved runs.
+
+### Files Touched
+
+- `.agent-guardrails/task-contract.json`
+- `retrocause/api/main.py`
+- `retrocause/evidence_store.py`
+- `frontend/src/app/page.tsx`
+- `scripts/e2e_test.py`
+- `tests/test_comprehensive.py`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-workflow-spec.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, `.agent-guardrails/task-contract.json`, `retrocause/api/main.py`, `retrocause/evidence_store.py`, `frontend/src/app/page.tsx`, `scripts/e2e_test.py`, `tests/test_comprehensive.py`, `docs/pro-workflow-spec.md`, and this evidence note before or during implementation.
+- Read and followed the user-named skills:
+  - `C:\Users\97504\.codex\skills\gstack\SKILL.md`
+  - `C:\Users\97504\.codex\skills\multi-user-agent-testing\SKILL.md`
+  - `C:\Users\97504\.codex\superpowers\skills\test-driven-development\SKILL.md`
+- `agent-guardrails plan --task "Implement and dogfood the next Pro workflow slices in order: Run Orchestration, browser-level Degraded Source dogfood, minimal Uploaded Evidence, and Saved Runs." --allow-paths "retrocause/api/main.py,retrocause/evidence_store.py,frontend/src/app/page.tsx,tests/,scripts/e2e_test.py,docs/,.agent-guardrails/evidence/,.agent-guardrails/task-contract.json" --required-commands "npm test" --evidence ".agent-guardrails/evidence/current-task.md" --risk-level medium --lang zh-CN`
+  - Result: refreshed the task contract with the implementation, tests, docs, E2E, and evidence scope.
+- `pytest tests\test_comprehensive.py::test_run_orchestration_metadata_and_saved_run_round_trip tests\test_comprehensive.py::test_uploaded_evidence_minimal_store_round_trip tests\test_comprehensive.py::test_frontend_and_e2e_expose_pro_workflow_slices -q --basetemp=.pytest-tmp`
+  - TDD red result before implementation: failed for missing `run_id`, missing `/api/evidence/upload`, and missing frontend test ids.
+- `pytest tests\test_comprehensive.py::test_run_orchestration_metadata_and_saved_run_round_trip tests\test_comprehensive.py::test_uploaded_evidence_minimal_store_round_trip tests\test_comprehensive.py::test_frontend_and_e2e_expose_pro_workflow_slices -q --basetemp=.pytest-tmp`
+  - Result after implementation: 3 passed.
+- `ruff check retrocause\api\main.py retrocause\evidence_store.py tests\test_comprehensive.py scripts\e2e_test.py`
+  - Result: passed.
+- `npm --prefix frontend run lint`
+  - Result: passed.
+- `python scripts\e2e_test.py`
+  - Initial result: failed because the degraded-source browser fixture referenced `stream_payload["data"]` after the helper returned a stream event wrapper.
+  - Final result after fixing the fixture reference: passed, 606 passed / 0 failed / 0 skipped.
+- `npm test`
+  - First result: command timed out at 120 seconds before producing a useful result.
+  - Final result with a longer timeout: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, full pytest, and E2E smoke/browser tests.
+  - Pytest result: 254 passed.
+  - E2E result: 606 passed, 0 failed, 0 skipped.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: `safe-to-deploy`, 95/100.
+  - Blocking errors: 0.
+  - Non-blocking warnings: state-management/docs continuity warnings because `docs/PROJECT_STATE.md` and nearby docs/evidence files changed intentionally for project-state synchronization.
+
+### Behavior Notes
+
+- V2 analysis responses now include a local `run_id`, `run_status`, run steps, and a provider/source usage ledger.
+- Saved run payloads are persisted locally through `RETROCAUSE_RUN_STORE_PATH` or `.retrocause/saved_runs.json`, capped to the most recent 50 records.
+- New endpoints expose saved run history:
+  - `GET /api/runs`
+  - `GET /api/runs/{run_id}`
+- Minimal uploaded evidence is available through `POST /api/evidence/upload`, stored through `EvidenceStore`, and marked with uploaded/user-provided metadata.
+- `RETROCAUSE_EVIDENCE_STORE_PATH` can redirect the local evidence store for tests or isolated runs.
+- The homepage exposes:
+  - run orchestration status and usage ledger
+  - pasted uploaded evidence panel
+  - saved runs panel with reopen behavior
+- Browser-level degraded-source dogfood now renders simulated `rate_limited` and `cached` source trace rows in Playwright and asserts the visible source-trace labels.
+- `gstack browse` reported `NEEDS_SETUP` for the local browse binary, so the browser-level dogfood was executed through the existing Playwright E2E harness instead of a gstack browse session.
+
+### Security, Auth, And Secrets
+
+- No new external credentials, auth flows, or provider secrets were added.
+- Uploaded evidence is local plaintext project data in this alpha slice; it should not be treated as a hosted secure document library.
+- The uploaded evidence endpoint is intentionally minimal and local; hosted user accounts, team workspaces, ACLs, retention, and file scanning remain out of scope.
+
+### Dependency And Performance Impact
+
+- No package or lockfile changes were made.
+- Saved runs write small JSON records to a local file and cap history at 50 records.
+- Uploaded evidence writes to the existing local evidence-store pattern.
+- Browser dogfood uses existing Playwright-based E2E infrastructure.
+
+### Maintainability And Continuity
+
+- The implementation reuses existing V2 response shapes, evidence-store persistence, homepage sections, and E2E script instead of introducing a new queue service or database.
+- The Pro workflow spec now distinguishes the local inspectable alpha slice from full hosted Pro behavior.
+- Project state now records that degraded-source browser dogfood has representative coverage, while broader visual QA remains useful.
+
+### Residual Risks
+
+- Run orchestration is metadata around synchronous local runs, not a real hosted queue with workers, concurrency control, retry scheduling, or cooldown execution.
+- Saved runs are local JSON records, not durable multi-user storage.
+- Uploaded evidence accepts pasted text only; PDF/DOCX/CSV parsing, snippet-level citation extraction, dedupe, and team libraries remain future work.
+- The degraded-source browser dogfood covers representative `rate_limited` and `cached` rows; visual QA for all source bad-path states across responsive layouts remains useful.
+
+## 2026-04-16 Product Direction Update: OSS First, Future Pro Rust Rewrite
+
+### Task
+
+Record the user decision to finish the OSS version first, defer further Pro implementation, and treat future Pro as a separate full-stack Rust rewrite. Continue updating documentation on every behavior, API, UI, or pipeline change.
+
+### Files Touched
+
+- `docs/PROJECT_STATE.md`
+- `docs/pro-workflow-spec.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `README.md`, `docs/PROJECT_STATE.md`, `docs/pro-workflow-spec.md`, `.agent-guardrails/task-contract.json`, and this evidence note before editing.
+- `npm test`
+  - Result: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, full pytest, and E2E smoke/browser tests.
+  - Pytest result: 254 passed.
+  - E2E result: 606 passed, 0 failed, 0 skipped.
+- Clean-copy OSS smoke run from Git-managed files only
+  - Smoke path: `C:\Users\97504\AppData\Local\Temp\retrocause-oss-smoke-gitfiles-20260416-183444`.
+  - Initial broad `robocopy` attempts timed out, so the smoke used `git ls-files` to copy 184 tracked files into a clean temporary directory without `.git`, `node_modules`, local caches, or local `.env` files.
+  - `pip install -e ".[dev]"` in the clean smoke copy passed. Pip defaulted to user installation because normal site-packages was not writable and warned that `retrocause.exe` is not on PATH.
+  - `npm install` in the clean smoke copy passed, adding the root Playwright dependency path documented by the README.
+  - `npm --prefix frontend install` in the clean smoke copy passed.
+  - Started the clean-copy backend on `127.0.0.1:8000` and frontend on `localhost:3005`; the frontend returned HTTP 200 and the backend port was listening. `/health` returned 404 because this app exposes root status at `/`, not a `/health` route.
+  - `npm test` in the clean smoke copy passed: 254 pytest tests passed, and E2E reported 606 passed / 0 failed / 0 skipped.
+  - `python scripts\e2e_test.py` in the clean smoke copy passed: 606 passed / 0 failed / 0 skipped.
+  - `python -m pytest tests\test_comprehensive.py::test_provider_preflight_classifies_missing_api_key -q --basetemp=.pytest-tmp` in the clean smoke copy passed.
+  - `python -m pytest tests\test_comprehensive.py::test_multi_user_persona_outputs_are_actionable -q --basetemp=.pytest-tmp` in the clean smoke copy passed.
+- Current working-tree final verification after restoring the editable install to `D:\opencode\retrocause-ai`
+  - `pip install -e ".[dev]"` passed in the current workspace to restore the editable install from the smoke-copy path back to the working tree. Pip repeated the user-install / `retrocause.exe` PATH warning.
+  - Restarted current-workspace services for browser E2E: backend PID 34732 on port 8000 and frontend PID 32212 on port 3005.
+  - `http://localhost:3005` returned HTTP 200.
+  - `http://127.0.0.1:8000/` returned HTTP 200 with `{"status":"ok","message":"RetroCause API is running"}`.
+  - `npm test` passed in the current workspace: frontend lint/build passed, `ruff check retrocause/` passed, 254 pytest tests passed, and E2E reported 606 passed / 0 failed / 0 skipped.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"` after final working-tree verification
+  - Result: `safe-to-deploy`, 95/100.
+  - Blocking errors: 0.
+  - Non-blocking warnings: expected continuity/state warnings because this release-readiness pass intentionally updates `docs/PROJECT_STATE.md`, the OSS readiness plan, and the current evidence note while staying within the docs/evidence contract.
+- Multi-user/persona testing pass before handing the app to the user for manual testing
+  - Read and followed `C:\Users\97504\.codex\skills\multi-user-agent-testing\SKILL.md`.
+  - Started local services for real browser/API operations: backend listening on port 8000 with PID 19936; frontend listening on port 3005 with PID 22264.
+  - `http://127.0.0.1:8000/` returned HTTP 200.
+  - `http://localhost:3005` returned HTTP 200.
+  - `python -m pytest tests\test_comprehensive.py::test_multi_user_persona_outputs_are_actionable tests\test_comprehensive.py::test_multi_user_reviewer_can_audit_degraded_source_states tests\test_comprehensive.py::test_degraded_source_drill_surfaces_all_limited_states_for_review -q --basetemp=.pytest-tmp`
+    - Result: passed, 3 passed.
+    - Covered no-key/demo new user behavior, invalid-key blocked-model behavior, reviewer degraded-source auditing, and deterministic degraded-source statuses.
+  - `python scripts\e2e_test.py`
+    - Result: passed, 606 passed / 0 failed / 0 skipped.
+    - Covered backend connectivity, V2/V1 API compatibility, evidence/upstream integrity, edge cases, frontend delivery, full Playwright UI workflow, degraded-source browser labels, language toggle, node interactions, and console health.
+  - `npm test`
+    - Result: passed.
+    - Included frontend lint/build, `ruff check retrocause/`, full pytest, and E2E smoke/browser tests.
+    - Pytest result: 254 passed.
+    - E2E result: 606 passed, 0 failed, 0 skipped.
+- Fresh user copy setup
+  - Initial `robocopy` approach timed out twice, likely due local workspace cache or directory traversal behavior. Switched to a Git-file-list copy to mirror a clean clone without `.git`, node_modules, caches, `.venv`, or local `.env`.
+  - Smoke path: `C:\Users\97504\AppData\Local\Temp\retrocause-oss-smoke-gitfiles-20260416-183444`.
+  - Copied 184 Git-managed files.
+  - Stopped the existing current-workspace dev server on ports 8000 and 3005 before starting smoke services, so browser E2E would hit the clean copy rather than the old app process.
+- `pip install -e ".[dev]"` in the clean smoke copy
+  - Result: passed.
+  - Note: pip defaulted to user installation because normal site-packages was not writable and warned that `retrocause.exe` is not on PATH.
+- `npm install` in the clean smoke copy
+  - Result: passed.
+  - Added 2 root packages, audited 3 packages, 0 vulnerabilities.
+- `npm --prefix frontend install` in the clean smoke copy
+  - Result: passed.
+  - Added 358 frontend packages, audited 359 packages, 0 vulnerabilities.
+- Started clean-copy backend/frontend services
+  - Backend command: `python -B -m uvicorn retrocause.api.main:app --host 127.0.0.1 --port 8000`.
+  - Frontend command: `npm run dev -- -p 3005`.
+  - Frontend `http://localhost:3005` returned HTTP 200. Backend port 8000 was listening; `/health` returned 404 because this app does not define a health route.
+- `npm test` in the clean smoke copy
+  - Result: passed.
+  - Rootdir shown in pytest output: `C:\Users\97504\AppData\Local\Temp\retrocause-oss-smoke-gitfiles-20260416-183444`.
+  - Included frontend lint/build, `ruff check retrocause/`, full pytest, and E2E smoke/browser tests.
+  - Pytest result: 254 passed.
+  - E2E result: 606 passed, 0 failed, 0 skipped.
+- `python scripts\e2e_test.py` in the clean smoke copy
+  - Result: passed.
+  - E2E result: 606 passed, 0 failed, 0 skipped.
+- `python -m pytest tests\test_comprehensive.py::test_provider_preflight_classifies_missing_api_key -q --basetemp=.pytest-tmp` in the clean smoke copy
+  - Result: passed, 1 passed.
+- `python -m pytest tests\test_comprehensive.py::test_multi_user_persona_outputs_are_actionable -q --basetemp=.pytest-tmp` in the clean smoke copy
+  - Result: passed, 1 passed.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: `safe-to-deploy`, 95/100.
+  - Blocking errors: 0.
+  - Non-blocking warnings: expected docs/state continuity warnings because the task intentionally updates `docs/PROJECT_STATE.md` and the current evidence note.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`
+  - Result: `safe-to-deploy`, 95/100.
+  - Blocking errors: 0.
+  - Non-blocking warnings: expected docs/state continuity warnings because this task intentionally updates `docs/PROJECT_STATE.md`, `docs/pro-workflow-spec.md`, and the current evidence note.
+
+### Behavior Notes
+
+- Project state now says OSS stabilization is the near-term implementation focus.
+- The local run/saved/uploaded-evidence slice is documented as OSS inspectability work, not a commitment to build hosted Pro on the current Python/Next stack.
+- Pro workflow docs now state that further Pro implementation should wait for OSS release readiness and restart as a full-stack Rust architecture plan.
+- The working rules now explicitly remind future agents to keep docs synchronized on every behavior/API/UI/pipeline change.
+
+### Security, Dependency, Performance, And Continuity Notes
+
+- Security/auth/secrets: documentation only; no credentials, auth flows, permissions, or sensitive-data handling changed.
+- Dependencies: no package, lockfile, or runtime dependency changes.
+- Performance/load: documentation only; no runtime path, latency, storage, or load behavior changed.
+- Maintainability tradeoff: this intentionally narrows near-term scope by stopping incremental hosted-Pro work in the current alpha stack, while preserving the existing OSS implementation and docs.
+- Continuity: this updates the project direction rather than changing code behavior; it reuses the existing project-state and Pro workflow docs as the source of truth.
+
+### Residual Risks
+
+- The future Rust Pro architecture is not specified yet; it should get a dedicated plan only after OSS release readiness is complete.
+- Current code still contains local inspectability slices that resemble Pro concepts, so future docs and UI copy should keep distinguishing local OSS features from hosted Pro promises.
+
+## 2026-04-16 OSS Release Readiness: README Cleanup And Plan
+
+### Task
+
+Start the OSS release-readiness pass by fixing first-time user documentation, removing mojibake from the public README, keeping Pro as a future Rust rewrite, and saving a concrete readiness plan.
+
+### Files Touched
+
+- `README.md`
+- `docs/PROJECT_STATE.md`
+- `docs/superpowers/plans/2026-04-16-oss-release-readiness.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands Run
+
+- Read `AGENTS.md`, `README.md`, `pyproject.toml`, `package.json`, `start.py`, `docs/PROJECT_STATE.md`, `.agent-guardrails/task-contract.json`, and this evidence note before editing.
+- Read the user-named `using-superpowers` skill and relevant workflow skills:
+  - `C:\Users\97504\.codex\superpowers\skills\using-superpowers\SKILL.md`
+  - `C:\Users\97504\.codex\superpowers\skills\writing-plans\SKILL.md`
+  - `C:\Users\97504\.codex\skills\gstack\qa\SKILL.md`
+  - `C:\Users\97504\.codex\skills\gstack\document-release\SKILL.md`
+  - `C:\Users\97504\.codex\superpowers\skills\verification-before-completion\SKILL.md`
+- `agent-guardrails plan --task "OSS release-readiness pass: prioritize the OSS version, fix first-time user documentation, keep Pro as a future Rust rewrite, and document every change." --allow-paths "README.md,docs/,.agent-guardrails/evidence/,.agent-guardrails/task-contract.json" --required-commands "npm test" --evidence ".agent-guardrails/evidence/current-task.md" --risk-level low --lang zh-CN`
+  - Result: refreshed the task contract for README/docs/evidence-only OSS readiness work.
+- `npm test`
+  - Result: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, full pytest, and E2E smoke/browser tests.
+  - Pytest result: 254 passed.
+  - E2E result: 606 passed, 0 failed, 0 skipped.
+
+### Behavior Notes
+
+- Rewrote `README.md` as clean bilingual public documentation.
+- Added the missing root `npm install` step because root `package.json` owns the Playwright dependency used by `npm test`.
+- Updated README feature/status copy to include local saved runs and pasted uploaded evidence, while clearly marking them as local OSS inspectability features rather than hosted Pro infrastructure.
+- Added a public note that future Pro is deferred until OSS is solid and should be a separate full-stack Rust rewrite.
+- Added `docs/superpowers/plans/2026-04-16-oss-release-readiness.md` with concrete steps for README verification, clean install smoke, first-run browser smoke, preflight path checks, and release-candidate gate.
+
+### Security, Dependency, Performance, And Continuity Notes
+
+- Security/auth/secrets: documentation only; no credentials, auth flows, permissions, or sensitive-data handling changed.
+- Dependencies: no package or lockfile changes; README now documents the existing root npm dependency installation step.
+- Performance/load: documentation and planning only; no runtime path, latency, storage, or load behavior changed.
+- Maintainability tradeoff: replaced the mojibake README instead of trying to patch corrupted bilingual lines one by one, because the public entry point needed to be readable end to end.
+- Continuity: reused existing docs and the current FastAPI/Next OSS stack; no runtime architecture or API behavior changed.
+- Guardrails continuity note: the only remaining warnings are state/documentation synchronization warnings for the docs/evidence files that this task was explicitly allowed to update.
+
+### Residual Risks
+
+- The README command path has now passed a clean-copy smoke run, but it used this machine's already-available Python dependencies where satisfied. A completely fresh machine may still spend longer downloading Python scientific dependencies.
+- The gstack `/qa` workflow expects a clean working tree and one-commit-per-fix loop, so it was not run in this dirty in-progress workspace; browser verification remains covered by existing Playwright E2E until the tree is cleaned or committed.
+
+## 2026-04-16 Chinese Intraday A-Share Failure Fix
+
+### Task
+
+Investigate and fix the manual live failure for the query `芯原股份今日午后股价为什么直线跳水？`, while keeping the OSS version focused and leaving the local app runnable for another manual test.
+
+### Root Cause
+
+- Manual browser testing reached the live finance/today pipeline, but the server logs showed `build_search_queries` rejected invalid LLM decomposition, fell back, then GDELT requests failed with JSON/rate-limit errors and the SSE stream timed out after 400 seconds.
+- Deterministic routing checks showed the parser correctly inferred `domain=finance`, `time_range=today`, and `scenario=market`.
+- The failure was downstream of parsing: fallback search queries translated the event into generic English phrases like `today price drop selloff...` without the company anchor `芯原股份`, and the source broker tried AP News/GDELT before web search for Chinese time-sensitive market questions.
+
+### Files Touched
+
+- `retrocause/llm.py`
+- `retrocause/evidence_access.py`
+- `tests/test_query_routing.py`
+- `tests/test_evidence_access.py`
+- `docs/PROJECT_STATE.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Changes
+
+- Added CJK finance fallback translations for intraday stock-price questions, including `今日`, `午后`, `股价`, `直线跳水`, and related stock/selloff terms.
+- Added a small CJK finance entity extractor for company anchors such as `芯原股份`, using common suffixes like `股份`, `集团`, `科技`, `银行`, `证券`, and similar company-name endings.
+- Updated invalid-query detection so an English-only rewrite for a Chinese finance question is rejected if it drops the extracted company anchor.
+- Updated heuristic fallback search queries so Chinese finance queries preserve the company anchor alongside searchable English market terms.
+- Updated source brokering so Chinese time-sensitive market/news plans use `web`, `gdelt`, `ap_news` ordering, while English market/news behavior remains AP/GDELT/web.
+- Added focused regressions for the exact A-share query and for web-first Chinese intraday market routing.
+
+### Commands Run
+
+- `python -m pytest tests\test_query_routing.py::test_cjk_a_share_stock_query_preserves_company_anchor -q --basetemp=.pytest-tmp`
+  - Red result before implementation: failed because fallback queries did not contain searchable stock-price terms and lost the company-specific retrieval anchor.
+- `python -m pytest tests\test_query_routing.py -q --basetemp=.pytest-tmp`
+  - Result after query fallback fix: passed, 14 passed.
+- `ruff check retrocause\llm.py tests\test_query_routing.py`
+  - Result: passed.
+- `python -m pytest tests\test_query_routing.py tests\test_evidence_access.py -q --basetemp=.pytest-tmp`
+  - Result after source-routing fix: passed, 39 passed.
+- Restarted local services after the fix.
+  - Backend `http://127.0.0.1:8000/` returned HTTP 200.
+  - Frontend `http://localhost:3005` returned HTTP 200.
+- `npm test`
+  - Result: passed.
+  - Included frontend lint, frontend build, `ruff check retrocause/`, full pytest, and browser E2E.
+  - Pytest result: 257 passed.
+  - E2E result: 606 passed, 0 failed, 0 skipped.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "python -m pytest tests\test_query_routing.py tests\test_evidence_access.py -q --basetemp=.pytest-tmp" --commands-run "npm test"`
+  - Result: `safe-to-deploy`, 95/100.
+  - Blocking errors: 0.
+  - Non-blocking warnings: expected state/docs continuity warnings because `docs/PROJECT_STATE.md` and the current evidence note were intentionally updated.
+  - CLI note: the check output recognized one required command at a time when multiple `--commands-run` values were supplied, so the focused pytest and `npm test` were also checked individually. Each individual check returned `safe-to-deploy`, 95/100, with only the same non-blocking docs/state warnings.
+
+### Security, Dependency, Performance, And Continuity Notes
+
+- Security/auth/secrets: no secrets, auth flows, permission scopes, cookies, browser storage, or API-key handling were changed. The manual user's key was not inspected or copied.
+- Dependencies: no package, lockfile, or dependency changes.
+- Performance/load: this reduces avoidable latency for Chinese A-share questions by querying web search before slower or less suitable AP/GDELT paths; no new network adapters or background workers were added.
+- Maintainability tradeoff: the fix reuses existing query fallback, invalid-query detection, source broker, and regression tests instead of introducing a new China-market source abstraction.
+- Continuity: existing English market/news source ordering remains unchanged; Chinese time-sensitive market/news routing intentionally changes to web-first because the observed failure was local-market evidence retrieval, not parsing.
+
+### Residual Risks
+
+- Live answer quality for A-share questions still depends on available web/GDELT evidence and configured optional hosted search keys.
+- Without a dedicated Chinese finance data/news adapter, the OSS path can still return partial or degraded source states during provider rate limits, but it should no longer begin from generic companyless queries or AP/GDELT-first routing for this class of question.
+
+## 2026-04-16 Alpha.5 Release Closeout
+
+### Task
+
+Complete the `v0.1.0-alpha.5` release-readiness closeout for the current OSS candidate: verify the actual command results, restore `agent-guardrails`, synchronize the project-state wording with reality, and prepare the release branch for reviewable commits and tag creation.
+
+### Files Touched
+
+- `docs/PROJECT_STATE.md`
+- `.agent-guardrails/evidence/current-task.md`
+- `.agent-guardrails/task-contract.json`
+- repo-local guardrails helper files created by setup under `.agent-guardrails/` and `.codex/`
+
+### Commands Run
+
+- Read `AGENTS.md`, `docs/PROJECT_STATE.md`, `README.md`, `pyproject.toml`, `.agent-guardrails/task-contract.json`, and the current evidence note before editing.
+- `cmd /c npm.cmd test`
+  - Result: passed.
+  - Included frontend lint/build, `python -m ruff check retrocause/`, full pytest, and `python scripts/e2e_test.py`.
+  - Pytest result: 257 passed.
+  - E2E result: 606 passed, 0 failed, 0 skipped.
+- `python -m pytest tests\test_query_routing.py tests\test_evidence_access.py -q --basetemp=.pytest-tmp`
+  - First result with the system `python`: failed during collection because that interpreter did not have `streamlit_agraph` installed.
+  - Follow-up using the repo virtualenv on `PATH` while keeping the required command shape:
+    - `$env:PATH=(Resolve-Path .venv\Scripts).Path + ';' + $env:PATH; python -m pytest tests\test_query_routing.py tests\test_evidence_access.py -q --basetemp=.pytest-tmp`
+    - Result: passed, 39 passed.
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails setup . --agent codex --lang zh-CN`
+  - Result in sandbox: failed when setup tried to write agent integration files outside the workspace.
+  - Result with escalated permissions: passed.
+  - Wrote repo-local helper/config files including `.agent-guardrails/config.json`, `.agent-guardrails/prompts/IMPLEMENT_PROMPT.md`, `.agent-guardrails/tasks/TASK_TEMPLATE.md`, and `.codex/instructions.md`.
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --commands-run "python -m pytest tests\test_query_routing.py tests\test_evidence_access.py -q --basetemp=.pytest-tmp" --commands-run "npm test" --lang zh-CN`
+  - Result in sandbox: blocked because the guardrails CLI could not read git diff metadata (`spawnSync git EPERM`).
+  - Result with escalated permissions: `safe-to-deploy`, 95/100.
+  - Note: the CLI still only counted one `--commands-run` at a time, so it reported one command as missing even though both had been run.
+- Separate guardrails checks to document the multi-command instability:
+  - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --commands-run "python -m pytest tests\test_query_routing.py tests\test_evidence_access.py -q --basetemp=.pytest-tmp" --lang zh-CN`
+    - Result: `safe-to-deploy`, 95/100, with the expected non-blocking docs/state warnings and `npm test` shown as the only missing command.
+  - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --commands-run "npm test" --lang zh-CN`
+    - Result: `safe-to-deploy`, 95/100, with the expected non-blocking docs/state warnings and the focused pytest command shown as the only missing command.
+
+### Behavior Notes
+
+- The alpha.5 candidate is now documented honestly as locally verified and guardrails-verified enough to review, while still distinguishing non-blocking warnings from a perfect clean bill.
+- `docs/PROJECT_STATE.md` no longer overclaims that the next tag is ready purely because of earlier local state; it now states the current candidate passed local verification and should only be tagged after the required guardrails step succeeds in the current workspace.
+- The release closeout now has an explicit record that `agent-guardrails` required installation/setup recovery in this environment.
+
+### Security, Dependency, Performance, And Continuity Notes
+
+- Security/auth/secrets: no application auth flow changed. No secrets, API keys, browser cookies, `.retrocause/` runtime data, or local evidence payloads were added to version control. The release review confirmed `.retrocause/` remains ignored and local-only.
+- Dependencies: no application dependency or lockfile was added for the product itself. The release closeout used transient `npx -p agent-guardrails` plus a repo-local npm cache to avoid the default protected user cache path.
+- Performance/load: no runtime product path changed in this closeout pass. The only operational change is that release verification now has a reproducible guardrails path in this environment.
+- Understandability: this pass keeps the release boundary explicit: the shipped alpha includes local inspectability slices, not hosted Pro storage or queues. The evidence note also records the Python interpreter mismatch so future runs know why the focused pytest command needed the repo virtualenv on `PATH`.
+- Continuity: reused the existing release-readiness documents, task contract, and guardrails evidence workflow instead of introducing a separate release script or alternate checklist. The only intentional continuity break is replacing the earlier “guardrails missing” blocker with the recovered setup plus a documented multi-command check limitation.
+
+### Residual Risks
+
+- `agent-guardrails check` still has a CLI limitation where multiple `--commands-run` values are not all counted in one invocation; release evidence must continue to note the separate per-command checks until the tool is fixed.
+- The focused pytest command depends on the project virtualenv being first on `PATH` in this machine because the system Anaconda `python` lacks optional app dependencies such as `streamlit_agraph`.
+- Tagging and GitHub prerelease publication still depend on git remote restoration, remote tag fetch, and push/auth succeeding from this clone.

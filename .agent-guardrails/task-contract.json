@@ -1,16 +1,26 @@
 {
   "schemaVersion": 3,
-  "task": "Add multi-user/persona regression coverage for user-value outputs and stabilize the browser E2E harness when hydration leaves the submit button disabled.",
+  "task": "Prepare OSS v0.1.0-alpha.5 release-readiness with local run metadata, saved runs, pasted uploaded evidence, degraded-source browser dogfood, README/project-state/pro-boundary docs, and Chinese intraday A-share retrieval reliability; verify focused query/source tests, npm test, and guardrails before tagging.",
   "preset": "generic",
-  "createdAt": "2026-04-16T04:49:25.176Z",
+  "createdAt": "2026-04-16T11:29:14.992Z",
   "allowedPaths": [
+    "README.md",
+    "package.json",
+    "frontend/src/app/globals.css",
+    "frontend/src/app/layout.tsx",
+    "frontend/src/app/page.tsx",
+    "retrocause/api/main.py",
+    "retrocause/evidence_store.py",
+    "retrocause/llm.py",
+    "retrocause/evidence_access.py",
+    "scripts/e2e_test.py",
     "tests/",
     "docs/",
     ".agent-guardrails/evidence/",
-    ".agent-guardrails/task-contract.json",
-    "scripts/e2e_test.py"
+    ".agent-guardrails/task-contract.json"
   ],
   "requiredCommands": [
+    "python -m pytest tests\\test_query_routing.py tests\\test_evidence_access.py -q --basetemp=.pytest-tmp",
     "npm test"
   ],
   "evidencePaths": [
@@ -18,28 +28,24 @@
   ],
   "intendedFiles": [],
   "protectedPaths": [],
-  "allowedChangeTypes": [
-    "tests",
-    "docs",
-    "guardrails-internal"
-  ],
-  "riskLevel": "low",
+  "allowedChangeTypes": [],
+  "riskLevel": "medium",
   "requiresReviewNotes": false,
   "validationProfile": "standard",
   "securityRequirements": [
-    "Mention auth, secrets, permissions, and sensitive-data handling explicitly."
+    "明确说明认证、密钥、权限以及敏感数据处理相关影响。"
   ],
   "dependencyRequirements": [
-    "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
+    "明确说明新增或升级的依赖、lockfile 变化以及依赖影响。"
   ],
   "performanceRequirements": [
     "Mention performance, latency, or load impact in evidence."
   ],
   "understandingRequirements": [
-    "Explain the main tradeoffs so future maintainers can follow the change."
+    "解释主要权衡点，方便后续维护者快速理解这次改动。"
   ],
   "continuityRequirements": [
-    "Mention reuse targets and any deliberate continuity break in evidence."
+    "说明复用目标，以及任何刻意打破现有连续性的地方。"
   ],
   "acknowledgedSkips": [],
   "patternSummary": "",
@@ -69,10 +75,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "8c415e88-5735-411b-9d74-b9c44cbebc8e",
-    "createdAt": "2026-04-16T04:49:25.175Z",
+    "sessionId": "461d8ca0-d84b-42a4-b9a8-2a172a79b1d2",
+    "createdAt": "2026-04-16T11:29:14.991Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add multi-user/persona regression coverage for user-value outputs and stabilize the browser E2E harness when hydration leaves the submit button disabled.",
+    "taskRequest": "Prepare OSS v0.1.0-alpha.5 release-readiness with local run metadata, saved runs, pasted uploaded evidence, degraded-source browser dogfood, README/project-state/pro-boundary docs, and Chinese intraday A-share retrieval reliability; verify focused query/source tests, npm test, and guardrails before tagging.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],
@@ -84,40 +90,41 @@
       "连续性要求"
     ],
     "requiredCommandsSuggested": [
+      "python -m pytest tests\\test_query_routing.py tests\\test_evidence_access.py -q --basetemp=.pytest-tmp",
       "npm test"
     ],
     "evidencePathSuggested": ".agent-guardrails/evidence/current-task.md",
     "riskDimensions": {
       "securityRequirements": [
-        "Mention auth, secrets, permissions, and sensitive-data handling explicitly."
+        "明确说明认证、密钥、权限以及敏感数据处理相关影响。"
       ],
       "dependencyRequirements": [
-        "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
+        "明确说明新增或升级的依赖、lockfile 变化以及依赖影响。"
       ],
       "performanceRequirements": [
         "Mention performance, latency, or load impact in evidence."
       ],
       "understandingRequirements": [
-        "Explain the main tradeoffs so future maintainers can follow the change."
+        "解释主要权衡点，方便后续维护者快速理解这次改动。"
       ],
       "continuityRequirements": [
-        "Mention reuse targets and any deliberate continuity break in evidence."
+        "说明复用目标，以及任何刻意打破现有连续性的地方。"
       ]
     },
     "finishCheckHints": [
-      "Report the commands you actually ran: npm test",
-      "Keep the evidence note current: .agent-guardrails/evidence/current-task.md",
-      "Keep security, dependency, performance, understanding, and continuity concerns explicit in the evidence note and review summary.",
-      "Finish with agent-guardrails check --review before handing off or merging."
+      "记录你实际执行过的命令：python -m pytest tests\\test_query_routing.py tests\\test_evidence_access.py -q --basetemp=.pytest-tmp, npm test",
+      "保持证据说明为最新：.agent-guardrails/evidence/current-task.md",
+      "在证据说明和 review 摘要里明确写出这些风险维度：安全、依赖、性能、可理解性、连续性。",
+      "交付或合并前，用 `agent-guardrails check --review` 做最后检查。"
     ],
     "riskSignals": [],
     "archaeologyNotes": [],
     "nextActions": [
-      "Implement the smallest change that fits the contract.",
-      "Run required commands: npm test",
-      "Update evidence: .agent-guardrails/evidence/current-task.md",
-      "Keep security, dependency, performance, understanding, continuity concerns explicit in the evidence note and review summary.",
-      "Run agent-guardrails check --review before completing the task."
+      "先完成符合契约的最小改动。",
+      "运行要求的命令：python -m pytest tests\\test_query_routing.py tests\\test_evidence_access.py -q --basetemp=.pytest-tmp, npm test",
+      "更新证据文件：.agent-guardrails/evidence/current-task.md",
+      "在证据说明和 review 摘要里明确写出这些风险维度：安全、依赖、性能、可理解性、连续性。",
+      "完成任务前运行 `agent-guardrails check --review`。"
     ],
     "roughIntent": null
   }

@@ -4,7 +4,9 @@
 
 RetroCause OSS proves the inspectable core: a user can ask why an event happened, inspect causal chains, review evidence, check challenge coverage, and copy a Markdown research brief.
 
-RetroCause Pro should monetize the repeated workflow around that core for individuals and small teams. The paid value is not "more AI text." The paid value is faster trusted delivery, saved context, uploaded evidence, source reliability, stakeholder-ready outputs, and operating reliability for people who must explain events more than once.
+RetroCause Pro should eventually monetize the repeated workflow around that core for individuals and small teams. The paid value is not "more AI text." The paid value is faster trusted delivery, saved context, uploaded evidence, source reliability, stakeholder-ready outputs, and operating reliability for people who must explain events more than once.
+
+Current product decision: finish the OSS version first. Do not continue turning the current Python/FastAPI + Next.js alpha into hosted Pro. Future Pro should be planned as a separate full-stack Rust rewrite after OSS release readiness is solid.
 
 Pro is not an enterprise private-deployment product in the near term. Enterprise deployment, SSO, document-level ACLs, custom connectors, and data-residency commitments should remain out of scope unless a concrete paid customer justifies that maintenance burden.
 
@@ -36,6 +38,7 @@ OSS should keep these capabilities:
 - product value harness
 - copyable Markdown research brief
 - tests and inspectable code paths
+- local lightweight run metadata, saved-run history, and pasted uploaded evidence when they improve inspectability
 
 OSS should not default to:
 
@@ -48,6 +51,7 @@ OSS should not default to:
 - paid domain/source packs
 - enterprise private deployment
 - SSO, document-level ACLs, custom enterprise connectors, or data-residency commitments
+- hosted Pro architecture in the current alpha stack
 
 ## Pro MVP
 
@@ -140,24 +144,29 @@ This also defines the OSS/Pro boundary:
 
 ## Implementation Phases
 
+These phases are product-shape notes, not an instruction to keep implementing Pro in the current OSS alpha stack. Further Pro work should wait until the OSS version is release-ready, then restart with a Rust full-stack architecture plan.
+
 ### Phase 1: Run Queue, Quota, And Source Policy
 
 - Add `run_id`, run status, run steps, and usage ledger.
 - Add provider budget metadata and source fallback/cooldown behavior.
 - Add source policy presets for market, policy/geopolitics, and postmortem.
 - Add cache keys that include scenario and absolute time buckets.
+- Current local alpha status: the app now returns `run_id`, completed run status, run steps, and a usage ledger for synchronous V2 runs. It does not yet provide a hosted queue, durable cooldown scheduler, or concurrency controls.
 
 ### Phase 2: Saved Runs
 
 - Add persistence for run payloads and metadata.
 - Add a run history page.
 - Add duplicate and compare actions.
+- Current local alpha status: the app persists recent run payloads locally and exposes `/api/runs` plus `/api/runs/{run_id}` with a homepage reopen panel. Duplicate, compare, sharing, and hosted retention policies remain future work.
 
 ### Phase 3: Uploaded Evidence
 
 - Add personal uploaded evidence.
 - Add a simple small-team workspace library.
 - Keep enterprise connectors and document-level ACL out of scope.
+- Current local alpha status: the app accepts pasted user evidence through `/api/evidence/upload`, stores it in the local evidence store with uploaded/user-owned metadata, and can retrieve it in later evidence search. File uploads, parsing, workspace libraries, and ACLs remain future work.
 
 ### Phase 4: Report Export
 
@@ -190,4 +199,4 @@ This also defines the OSS/Pro boundary:
 
 ## Current Decision
 
-For the current alpha, keep Pro as a documented product direction only. The next Pro-facing implementation should start with lightweight run orchestration, provider budgets, source policies, cache, and uploaded evidence for personal/small-team use. Do not write enterprise private-deployment code until a concrete paid customer justifies the maintenance cost.
+For the current alpha, stop adding Pro implementation depth and finish the OSS version first. The implemented local slice covers run metadata, usage ledger, pasted uploaded evidence, saved-run persistence, and degraded-source browser dogfood because those improve OSS inspectability; it is not a hosted Pro queue or team workspace. Future Pro should be revisited as a separate full-stack Rust rewrite after OSS release readiness. Do not write enterprise private-deployment code or hosted Pro infrastructure in this stack without an explicit planning reset.

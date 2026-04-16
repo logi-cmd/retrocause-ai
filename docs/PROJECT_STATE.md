@@ -8,7 +8,7 @@ RetroCause is a runnable, inspectable causal explanation product for "why did th
 
 ## Current Status
 
-The OSS version is **published as an alpha prerelease** and the SourceBroker retrieval reliability pass is implemented locally. The current retrieval strategy now explicitly treats rate limits as a product/workflow problem with central hosted quota, user-owned quota, and source-specific quota separated in the docs.
+The OSS version is **published as an alpha prerelease** and is now the only near-term implementation focus. The SourceBroker retrieval reliability pass is implemented locally, and the current local app also has small inspectability-oriented workflow slices: run metadata, a usage ledger, minimal uploaded evidence, saved-run history, and browser dogfood for degraded source rows.
 
 What is done:
 
@@ -27,24 +27,28 @@ What is done:
 - clean public GitHub repo published at `https://github.com/logi-cmd/retrocause-ai`
 - GitHub prerelease `v0.1.0-alpha.4`
 - SourceBroker reliability pass: source profiles, scenario/language/time-aware cache keys, degraded-source classification, API/brief/UI source-health status, and optional user-key Tavily/Brave adapters
+- lightweight local run workflow: `run_id`, run status/steps, source/provider usage ledger, saved-run endpoints/UI, and minimal pasted uploaded evidence stored as user-owned evidence
 
 What is not done:
 
 - stable `v0.1.0` release
 - first-time OSS release polish beyond the current bilingual README and alpha prerelease
-- Solo Pro / Team Lite hosted workflows that would make the product directly useful in repeated paid workflows
+- hosted Solo Pro / Team Lite workflows such as durable cloud queues, team libraries, PDF/DOCX export, scheduled watch topics, review links, and saved-run comparison
+- Pro implementation work in this codebase; future Pro should be planned as a separate full-stack Rust rewrite after the OSS version is solid
 
 ## Current Focus
 
 Stabilize quality-first live evidence retrieval, especially for time-sensitive market/news queries where relative windows such as `today` and `yesterday` must not reuse stale evidence.
 
-Current UX focus: validate the general Production Brief Harness across real market, policy/geopolitics, and postmortem questions. OSS now supports scenario-aware single-run briefs with freshness/source-quality gating; Pro workflow depth should focus on individuals and small teams: run queues, quota ownership, cache reuse, saved runs, uploaded evidence, scheduled watch topics, PDF/DOCX export, and lightweight team review. Enterprise private deployment is not a near-term target.
+Current UX focus: finish the OSS version before adding more Pro behavior. Validate the general Production Brief Harness across real market, policy/geopolitics, and postmortem questions, then do an OSS release-readiness pass from a fresh user journey. Future Pro workflow depth should be designed after OSS stabilization and should be a separate full-stack Rust rewrite rather than an incremental hosted extension of this alpha codebase.
 
-Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md` and has been executed through code, frontend, export, and regression cleanup. The retrieval/output strategy is captured in `docs/retrieval-and-output-strategy.md`. The SourceBroker reliability implementation plan is saved at `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md` and has been executed through documentation/full verification.
+Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md` and has been executed through code, frontend, export, and regression cleanup. The retrieval/output strategy is captured in `docs/retrieval-and-output-strategy.md`. The SourceBroker reliability implementation plan is saved at `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md` and has been executed through documentation/full verification. The local workflow slice is intentionally OSS inspectability work, not a commitment to build hosted Pro on this stack.
 
 ## Working Rules
 
 - Keep project documentation synchronized with every behavior, API, UI, or pipeline change. At minimum, update the current task evidence note; when user-visible behavior changes, also update README or the relevant docs page.
+- Until the OSS version is release-ready, prioritize OSS stabilization over new Pro feature work.
+- Treat future Pro as a separate full-stack Rust rewrite. Do not grow this Python/Next alpha into the future hosted Pro architecture without an explicit planning reset.
 
 ## Done Recently
 
@@ -89,16 +93,26 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Added multi-user/persona regression coverage for user-value outputs: no-key new users get a demo/readable brief path, invalid-key users get `blocked_by_model` with preflight next action, and reviewer users can audit degraded source states such as `rate_limited` and `forbidden` in the source trace and Markdown brief.
 - Stabilized the browser E2E harness to wait for hydrated demo cards and an enabled submit button before interacting with the page, preventing false failures from stale or not-yet-hydrated local app state.
 - Documented the OpenCLI source-adapter lesson for RetroCause: OpenCLI avoids shared hosted bottlenecks mostly through local/browser/user-owned execution and bounded deterministic adapters, while RetroCause still needs run orchestration, quota ownership labeling, cache, source policies, and transparent partial results for multi-user reliability.
+- Added lightweight local run orchestration metadata to V2 analysis responses, including run id/status, run steps, saved-run persistence, and a provider/source usage ledger.
+- Added minimal uploaded evidence support through a local evidence-store endpoint and homepage panel for pasted evidence, source names, and user-owned quota labeling.
+- Added saved-runs listing/reopen support through `/api/runs`, `/api/runs/{run_id}`, and a homepage saved-runs panel.
+- Added browser-level degraded-source dogfood in the E2E harness by rendering simulated `rate_limited` and `cached` source trace rows and asserting the visible browser labels.
+- Decided to finish the OSS version first and defer further Pro implementation; future Pro should be a separate full-stack Rust rewrite, with every behavior/API/UI/pipeline change continuing to update docs and the current-task evidence note.
+- Started the OSS release-readiness pass by rewriting `README.md` as clean bilingual first-time user documentation, adding the missing root `npm install`, documenting local saved runs/uploaded evidence accurately, and saving `docs/superpowers/plans/2026-04-16-oss-release-readiness.md`.
+- Verified the first-time OSS path from a clean temporary copy: copied Git-managed files only, ran README install commands, started backend/frontend from the copy, passed clean-copy `npm test`, passed explicit browser E2E, and passed focused no-key / invalid-key preflight tests.
+- Fixed a Chinese intraday A-share live-analysis failure path: CJK finance fallback retrieval now preserves company anchors such as `芯原股份`, adds searchable stock-price/plunge terms, rejects generic rewrites that drop the company, and routes Chinese time-sensitive market/news queries to web-first sources before GDELT/AP fallbacks.
+- Prepared the local `v0.1.0-alpha.5` candidate with run metadata, saved runs, pasted uploaded evidence, degraded-source browser dogfood, README/Pro-boundary cleanup, and the Chinese A-share retrieval fix. Local `npm test` passes; tag/publish is still gated on `agent-guardrails` being installed and passing.
 
 ## Blockers
 
-- The OSS product can now export a Markdown research brief and show retrieval-health states, but the brief format still needs real-user polish across more live domains.
-- Degraded-source states now have deterministic API/brief regression coverage, but the remaining gap is visual/browser dogfood of those bad-path states in the right-side source trace.
-- Direct monetization should stay Pro-oriented but lightweight: hosted operation, run queues, quota ownership, cache reuse, uploaded evidence, saved runs, PDF/DOCX, scheduled watch topics, lightweight team review, source controls, and saved comparisons.
+- The OSS product can now export a Markdown research brief, show retrieval-health states, reopen local saved runs, has a clean bilingual README, and passes a clean-copy install/test smoke. The brief format still needs real-user polish across more live domains.
+- Degraded-source states now have deterministic API/brief regression coverage plus browser-level source-trace dogfood for representative rate-limited/cached rows; wider visual QA across all bad-path states remains useful.
+- Direct monetization design should be deferred until OSS is solid; future Pro should be revisited as a full-stack Rust architecture rather than incremental hosted work in the current alpha stack.
+- `agent-guardrails` is currently unavailable in this workspace (`agent-guardrails` and `npx -y agent-guardrails` both fail to locate the executable). Run `npx agent-guardrails setup`, then rerun the release guardrails check before tagging `v0.1.0-alpha.5`.
 
 ## Next Step
 
-Run visual/browser dogfood for degraded-source states, then start the smallest lightweight run-orchestration slice: run ids/status, source/provider usage ledger, queued/cooling-down states, and explicit central-vs-user-owned quota labels.
+The `v0.1.0-alpha.5` candidate has passed local verification through `npm test`, including frontend lint/build, backend ruff, full pytest, and browser E2E. It is not ready to tag until the required `agent-guardrails check` runs successfully after installing or restoring the guardrails CLI.
 
 Release-readiness pass from the user journey:
 
