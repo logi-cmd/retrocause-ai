@@ -3,10 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
+from datetime import datetime, timezone
+from pathlib import Path
 import threading
 import json
 import logging
+import os
 import queue
+from uuid import uuid4
 
 from retrocause.app.demo_data import (
     PROVIDERS,
@@ -14,6 +18,7 @@ from retrocause.app.demo_data import (
     topic_aware_demo_result,
 )
 from retrocause.evidence_access import describe_source_name
+from retrocause.evidence_store import EvidenceStore
 from retrocause.models import AnalysisResult
 
 logger = logging.getLogger(__name__)
@@ -42,6 +47,51 @@ class ProviderPreflightRequest(BaseModel):
     model: str = "openrouter"
     api_key: Optional[str] = None
     explicit_model: Optional[str] = None
+
+
+class UploadedEvidenceRequest(BaseModel):
+    query: str
+    content: str
+    title: str = ""
+    source_name: str = "uploaded evidence"
+    domain: str = "general"
+    time_scope: Optional[str] = None
+
+
+class UploadedEvidenceResponse(BaseModel):
+    evidence_id: str
+    stored: bool
+    source_tier: str
+    extraction_method: str
+
+
+class RunStepV2(BaseModel):
+    id: str
+    label: str
+    status: str
+    detail: str = ""
+
+
+class UsageLedgerItemV2(BaseModel):
+    category: str
+    name: str
+    quota_owner: str
+    status: str
+    count: int = 0
+    detail: str = ""
+
+
+class SavedRunSummaryV2(BaseModel):
+    run_id: str
+    query: str
+    run_status: str
+    analysis_mode: str
+    created_at: str
+    scenario_key: str = "general"
+
+
+class SavedRunListResponse(BaseModel):
+    runs: List[SavedRunSummaryV2] = []
 
 
 class HarnessCheckV2(BaseModel):
@@ -373,6 +423,10 @@ class AnalyzeResponseV2(BaseModel):
     """
 
     query: str
+    run_id: Optional[str] = None
+    run_status: str = "completed"
+    run_steps: List[RunStepV2] = []
+    usage_ledger: List[UsageLedgerItemV2] = []
     # True when the engine could not run real analysis and demo data was returned
     is_demo: bool = False
     demo_topic: Optional[str] = None
@@ -540,6 +594,8 @@ def _is_live_failure(error_msg: str | None) -> bool:
             "authentication",
             "permission",
             "user not found",
+            "connection error",
+            "apiconnectionerror",
             "timed out",
             "empty result",
             "rate limit",
@@ -586,6 +642,157 @@ def _preflight_user_action(failure_code: str | None) -> str:
 
 def _harness_check(check_id: str, label: str, status: str, detail: str = "") -> HarnessCheckV2:
     return HarnessCheckV2(id=check_id, label=label, status=status, detail=detail)
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _create_run_id() -> str:
+    return f"run_{uuid4().hex[:12]}"
+
+
+def _run_store_path() -> Path:
+    configured_path = os.environ.get("RETROCAUSE_RUN_STORE_PATH")
+    if configured_path:
+        return Path(configured_path)
+    return Path.cwd() / ".retrocause" / "saved_runs.json"
+
+
+def _load_saved_run_records() -> list[dict]:
+    path = _run_store_path()
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    return data if isinstance(data, list) else []
+
+
+def _save_saved_run_records(records: list[dict]) -> None:
+    path = _run_store_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _run_step(step_id: str, label: str, status: str, detail: str = "") -> RunStepV2:
+    return RunStepV2(id=step_id, label=label, status=status, detail=detail)
+
+
+def _build_run_steps(response: AnalyzeResponseV2, saved: bool) -> list[RunStepV2]:
+    analysis_status = "failed" if response.error and not response.chains else "completed"
+    brief_status = "completed" if response.markdown_brief or response.analysis_brief else "skipped"
+    return [
+        _run_step("queued", "Run accepted", "completed", "Local run record was created."),
+        _run_step(
+            "analysis",
+            "Analysis pipeline",
+            analysis_status,
+            response.error or f"{len(response.chains)} causal chain(s) returned.",
+        ),
+        _run_step(
+            "brief",
+            "Reviewable brief",
+            brief_status,
+            "Markdown/readable brief available." if brief_status == "completed" else "No brief output.",
+        ),
+        _run_step(
+            "saved",
+            "Saved run",
+            "completed" if saved else "failed",
+            "Run payload persisted locally." if saved else "Run payload was not saved.",
+        ),
+    ]
+
+
+def _quota_owner_for_source(item: RetrievalTraceItemV2) -> str:
+    if item.cache_hit or item.status == "cached":
+        return "cache_reuse"
+    if item.source.startswith("uploaded") or item.source_kind == "uploaded":
+        return "user_owned"
+    return "source_specific"
+
+
+def _build_usage_ledger(
+    response: AnalyzeResponseV2,
+    request: AnalyzeRequest,
+) -> list[UsageLedgerItemV2]:
+    provider_cfg, model_name = _resolve_provider_model(request.model, request.explicit_model)
+    provider_label = provider_cfg.get("label", request.model) if provider_cfg else request.model
+    ledger = [
+        UsageLedgerItemV2(
+            category="model_provider",
+            name=model_name,
+            quota_owner="user_owned" if request.api_key else "local_demo",
+            status=response.analysis_mode,
+            count=len(response.chains),
+            detail=provider_label,
+        )
+    ]
+    ledger.extend(
+        UsageLedgerItemV2(
+            category="retrieval_source",
+            name=item.source_label or item.source,
+            quota_owner=_quota_owner_for_source(item),
+            status=item.status,
+            count=item.result_count,
+            detail=item.cache_policy,
+        )
+        for item in response.retrieval_trace
+    )
+    uploaded_count = sum(1 for item in response.evidences if item.source_tier == "uploaded")
+    if uploaded_count:
+        ledger.append(
+            UsageLedgerItemV2(
+                category="uploaded_evidence",
+                name="Uploaded evidence library",
+                quota_owner="user_owned",
+                status="attached",
+                count=uploaded_count,
+                detail="User-provided evidence is stored locally.",
+            )
+        )
+    return ledger
+
+
+def _persist_saved_run(response: AnalyzeResponseV2) -> bool:
+    if not response.run_id:
+        return False
+    records = _load_saved_run_records()
+    records = [record for record in records if record.get("run_id") != response.run_id]
+    scenario_key = response.scenario.key if response.scenario else "general"
+    created_at = _utc_now_iso()
+    records.insert(
+        0,
+        {
+            "run_id": response.run_id,
+            "query": response.query,
+            "run_status": response.run_status,
+            "analysis_mode": response.analysis_mode,
+            "created_at": created_at,
+            "scenario_key": scenario_key,
+            "response": response.model_dump(mode="json"),
+        },
+    )
+    _save_saved_run_records(records[:50])
+    return True
+
+
+def _finalize_run_response(
+    response: AnalyzeResponseV2,
+    request: AnalyzeRequest,
+    run_id: str,
+) -> AnalyzeResponseV2:
+    response.run_id = run_id
+    response.run_status = "failed" if response.error and not response.chains else "completed"
+    response.usage_ledger = _build_usage_ledger(response, request)
+    saved = _persist_saved_run(response)
+    response.run_steps = _build_run_steps(response, saved=saved)
+    if saved:
+        # Persist once more so the saved payload includes the completed saved step.
+        _persist_saved_run(response)
+    return response
 
 
 def _empty_live_failure_response(
@@ -911,7 +1118,13 @@ def _build_analysis_brief(
         1
         for ev in result.evidences
         if getattr(ev, "extraction_method", "")
-        in {"llm_fulltext_trusted", "llm_fulltext", "llm_trusted", "store_cache"}
+        in {
+            "llm_fulltext_trusted",
+            "llm_fulltext",
+            "llm_trusted",
+            "store_cache",
+            "uploaded_evidence",
+        }
     )
     if high_quality_count == 0:
         missing.append("No trusted full-text or cached high-quality evidence is attached.")
@@ -1830,6 +2043,52 @@ async def list_providers():
     }
 
 
+@app.get("/api/runs", response_model=SavedRunListResponse)
+async def list_saved_runs():
+    summaries = [
+        SavedRunSummaryV2(
+            run_id=str(record.get("run_id", "")),
+            query=str(record.get("query", "")),
+            run_status=str(record.get("run_status", "unknown")),
+            analysis_mode=str(record.get("analysis_mode", "unknown")),
+            created_at=str(record.get("created_at", "")),
+            scenario_key=str(record.get("scenario_key", "general")),
+        )
+        for record in _load_saved_run_records()
+        if record.get("run_id")
+    ]
+    return SavedRunListResponse(runs=summaries)
+
+
+@app.get("/api/runs/{run_id}")
+async def get_saved_run(run_id: str):
+    for record in _load_saved_run_records():
+        if record.get("run_id") == run_id:
+            return record
+    raise HTTPException(status_code=404, detail="Saved run not found")
+
+
+@app.post("/api/evidence/upload", response_model=UploadedEvidenceResponse)
+async def upload_evidence(request: UploadedEvidenceRequest):
+    content = request.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded evidence content is empty")
+    evidence = EvidenceStore().add_uploaded_evidence(
+        query=request.query,
+        domain=request.domain,
+        title=request.title,
+        content=content,
+        source_name=request.source_name,
+        time_scope=request.time_scope,
+    )
+    return UploadedEvidenceResponse(
+        evidence_id=evidence.id,
+        stored=True,
+        source_tier=evidence.source_tier,
+        extraction_method=evidence.extraction_method,
+    )
+
+
 @app.post("/api/providers/preflight", response_model=ProviderPreflightResponse)
 async def preflight_provider(request: ProviderPreflightRequest):
     provider_cfg, model_name = _resolve_provider_model(request.model, request.explicit_model)
@@ -2058,6 +2317,7 @@ async def analyze_query(request: AnalyzeRequest):
 @app.post("/api/analyze/v2", response_model=AnalyzeResponseV2)
 async def analyze_query_v2(request: AnalyzeRequest):
     try:
+        run_id = _create_run_id()
         is_demo = True
         demo_topic: Optional[str] = None
         result: AnalysisResult | None = None
@@ -2096,10 +2356,14 @@ async def analyze_query_v2(request: AnalyzeRequest):
                 is_demo = False
 
         if result is None and request.api_key and _is_live_failure(error_msg):
-            return _empty_live_failure_response(
-                request.query,
-                error_msg or "Live analysis failed.",
-                scenario_override=request.scenario_override,
+            return _finalize_run_response(
+                _empty_live_failure_response(
+                    request.query,
+                    error_msg or "Live analysis failed.",
+                    scenario_override=request.scenario_override,
+                ),
+                request,
+                run_id,
             )
 
         if result is None:
@@ -2117,7 +2381,7 @@ async def analyze_query_v2(request: AnalyzeRequest):
             scenario_override=request.scenario_override,
         )
         resp.error = error_msg if is_demo and request.api_key else None
-        return resp
+        return _finalize_run_response(resp, request, run_id)
 
     except Exception as e:
         import traceback
@@ -2128,6 +2392,8 @@ async def analyze_query_v2(request: AnalyzeRequest):
 
 @app.post("/api/analyze/v2/stream")
 async def analyze_query_v2_stream(request: AnalyzeRequest):
+    run_id = _create_run_id()
+
     def generate():
         eq: queue.Queue[dict | None] = queue.Queue()
 
@@ -2213,6 +2479,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                         is_demo=False,
                         scenario_override=request.scenario_override,
                     )
+                    resp = _finalize_run_response(resp, request, run_id)
                     eq.put({"type": "done", "is_demo": False, "data": resp.model_dump(mode="json")})
                 elif request.api_key and _is_live_failure(error_msg):
                     resp = _empty_live_failure_response(
@@ -2220,6 +2487,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                         error_msg or "Live analysis failed.",
                         scenario_override=request.scenario_override,
                     )
+                    resp = _finalize_run_response(resp, request, run_id)
                     eq.put(
                         {
                             "type": "done",
@@ -2238,6 +2506,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                         demo_topic=demo_topic,
                         scenario_override=request.scenario_override,
                     )
+                    resp = _finalize_run_response(resp, request, run_id)
                     eq.put(
                         {
                             "type": "done",

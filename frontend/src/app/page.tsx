@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { Caveat } from "next/font/google";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import {
   getLocalizedMockData,
@@ -184,8 +183,37 @@ type ApiProviderPreflight = {
   checks: ApiHarnessCheck[];
 };
 
+type ApiRunStep = {
+  id: string;
+  label: string;
+  status: string;
+  detail: string;
+};
+
+type ApiUsageLedgerItem = {
+  category: string;
+  name: string;
+  quota_owner: string;
+  status: string;
+  count: number;
+  detail: string;
+};
+
+type ApiSavedRunSummary = {
+  run_id: string;
+  query: string;
+  run_status: string;
+  analysis_mode: string;
+  created_at: string;
+  scenario_key: string;
+};
+
 type AnalyzeResponseV2 = {
   query: string;
+  run_id?: string | null;
+  run_status?: string;
+  run_steps?: ApiRunStep[];
+  usage_ledger?: ApiUsageLedgerItem[];
   is_demo: boolean;
   demo_topic: string | null;
   analysis_mode: "live" | "partial_live" | "demo";
@@ -837,13 +865,6 @@ function makePlaceholderChain(query: string, locale: "zh" | "en"): CausalChain {
   };
 }
 
-const caveat = Caveat({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-caveat",
-  display: "swap",
-});
-
 // Color palette for different node types
 const STICKY_COLORS = [
   "sticky-yellow",
@@ -1287,6 +1308,15 @@ export default function Home() {
   const [scenario, setScenario] = useState<ApiScenario | null>(null);
   const [productionBrief, setProductionBrief] = useState<ApiProductionBrief | null>(null);
   const [productionHarness, setProductionHarness] = useState<ApiProductionHarness | null>(null);
+  const [runId, setRunId] = useState<string | null>(null);
+  const [runStatus, setRunStatus] = useState("demo");
+  const [runSteps, setRunSteps] = useState<ApiRunStep[]>([]);
+  const [usageLedger, setUsageLedger] = useState<ApiUsageLedgerItem[]>([]);
+  const [savedRuns, setSavedRuns] = useState<ApiSavedRunSummary[]>([]);
+  const [savedRunsStatus, setSavedRunsStatus] = useState("");
+  const [uploadedEvidenceTitle, setUploadedEvidenceTitle] = useState("");
+  const [uploadedEvidenceText, setUploadedEvidenceText] = useState("");
+  const [uploadedEvidenceStatus, setUploadedEvidenceStatus] = useState("");
   const [providerPreflight, setProviderPreflight] = useState<ApiProviderPreflight | null>(null);
   const [providerPreflightLoading, setProviderPreflightLoading] = useState(false);
   const [pipelineEval, setPipelineEval] = useState<AnalyzeResponseV2["evaluation"]>(null);
@@ -1899,6 +1929,121 @@ export default function Home() {
 
   const selectedNote = notes.find((n) => n.id === selectedNodeId);
 
+  const applySavedPayload = useCallback((payload: AnalyzeResponseV2) => {
+    setRunId(payload.run_id ?? null);
+    setRunStatus(payload.run_status ?? payload.analysis_mode);
+    setRunSteps(payload.run_steps ?? []);
+    setUsageLedger(payload.usage_ledger ?? []);
+    setLastQuery(payload.query);
+    setCurrentQuery(payload.query);
+    setAvailableChains(payload.chains);
+    setRecommendedChainId(payload.recommended_chain_id);
+    const recommended =
+      payload.chains.find((chain) => chain.chain_id === payload.recommended_chain_id) ??
+      payload.chains[0];
+    setSelectedChainId(recommended?.chain_id ?? null);
+    setEvidencePool(payload.evidences);
+    setRetrievalTrace(payload.retrieval_trace ?? []);
+    setChallengeChecks(payload.challenge_checks ?? []);
+    setAnalysisBrief(payload.analysis_brief ?? null);
+    setMarkdownBrief(payload.markdown_brief ?? null);
+    setProductHarness(payload.product_harness ?? null);
+    setScenario(payload.scenario ?? null);
+    setProductionBrief(payload.production_brief ?? null);
+    setProductionHarness(payload.production_harness ?? null);
+    setPipelineEval(payload.evaluation ?? null);
+    setUncertaintyReport(payload.uncertainty_report ?? null);
+    setActiveChain(
+      recommended
+        ? toLocalChain(recommended, locale, payload.evidences)
+        : makePlaceholderChain(payload.query, locale)
+    );
+    setAnalysisMode({
+      isDemo: payload.is_demo,
+      demoTopic: payload.demo_topic,
+      loading: false,
+      mode: payload.analysis_mode,
+      freshnessStatus: payload.freshness_status,
+      timeRange: payload.time_range ?? null,
+      partialLiveReasons: payload.partial_live_reasons ?? [],
+    });
+    setSelectedNodeId(null);
+    setSelectedFocusEdgeId(null);
+    setSelectedEvidenceId(null);
+    setStatusNote(buildAnalysisStatusNote(payload, locale));
+  }, [locale]);
+
+  const refreshSavedRuns = useCallback(async () => {
+    setSavedRunsStatus(locale === "en" ? "Loading saved runs..." : "正在加载历史运行...");
+    try {
+      const response = await fetch(`${API_BASE}/api/runs`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = (await response.json()) as { runs: ApiSavedRunSummary[] };
+      setSavedRuns(payload.runs ?? []);
+      setSavedRunsStatus(
+        payload.runs?.length
+          ? locale === "en" ? "Saved runs loaded." : "历史运行已加载。"
+          : locale === "en" ? "No saved runs yet." : "暂无历史运行。"
+      );
+    } catch (error) {
+      setSavedRunsStatus(
+        error instanceof Error
+          ? error.message
+          : locale === "en" ? "Could not load saved runs." : "无法加载历史运行。"
+      );
+    }
+  }, [locale]);
+
+  const loadSavedRun = useCallback(async (targetRunId: string) => {
+    setSavedRunsStatus(locale === "en" ? "Opening saved run..." : "正在打开历史运行...");
+    try {
+      const response = await fetch(`${API_BASE}/api/runs/${targetRunId}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = (await response.json()) as { response: AnalyzeResponseV2 };
+      applySavedPayload(payload.response);
+      setSavedRunsStatus(locale === "en" ? "Saved run opened." : "历史运行已打开。");
+    } catch (error) {
+      setSavedRunsStatus(
+        error instanceof Error
+          ? error.message
+          : locale === "en" ? "Could not open saved run." : "无法打开历史运行。"
+      );
+    }
+  }, [applySavedPayload, locale]);
+
+  const uploadEvidence = useCallback(async () => {
+    const content = uploadedEvidenceText.trim();
+    if (!content) return;
+    setUploadedEvidenceStatus(locale === "en" ? "Uploading evidence..." : "正在上传证据...");
+    try {
+      const response = await fetch(`${API_BASE}/api/evidence/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: currentQuery || lastQuery || uploadedEvidenceTitle || "uploaded evidence",
+          title: uploadedEvidenceTitle || "Uploaded evidence",
+          content,
+          source_name: uploadedEvidenceTitle || "uploaded evidence",
+          domain: scenario?.key === "postmortem" ? "postmortem" : "general",
+        }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = (await response.json()) as { evidence_id: string };
+      setUploadedEvidenceStatus(
+        locale === "en"
+          ? `Stored ${payload.evidence_id}. It can be reused as user-owned evidence.`
+          : `已保存 ${payload.evidence_id}，后续可作为用户自有证据复用。`
+      );
+      setUploadedEvidenceText("");
+    } catch (error) {
+      setUploadedEvidenceStatus(
+        error instanceof Error
+          ? error.message
+          : locale === "en" ? "Evidence upload failed." : "证据上传失败。"
+      );
+    }
+  }, [currentQuery, lastQuery, locale, scenario?.key, uploadedEvidenceText, uploadedEvidenceTitle]);
+
   const runProviderPreflight = useCallback(async () => {
     setProviderPreflightLoading(true);
     setProviderPreflight(null);
@@ -1959,6 +2104,10 @@ export default function Home() {
     setScenario(null);
     setProductionBrief(null);
     setProductionHarness(null);
+    setRunId(null);
+    setRunStatus("running");
+    setRunSteps([]);
+    setUsageLedger([]);
     setPipelineEval(null);
     setUncertaintyReport(null);
     setSelectedNodeId(null);
@@ -1990,6 +2139,10 @@ export default function Home() {
     const processPayload = (payload: AnalyzeResponseV2) => {
       if (activeRequestIdRef.current !== requestId) return;
       if (payload.chains.length === 0) {
+        setRunId(payload.run_id ?? null);
+        setRunStatus(payload.run_status ?? payload.analysis_mode);
+        setRunSteps(payload.run_steps ?? []);
+        setUsageLedger(payload.usage_ledger ?? []);
         setAvailableChains([]);
         setRecommendedChainId(null);
         setSelectedChainId(null);
@@ -2032,6 +2185,10 @@ export default function Home() {
       const recommended = payload.chains.find((chain) => chain.chain_id === payload.recommended_chain_id) ?? payload.chains[0];
       if (!recommended) throw new Error("No chains returned");
 
+      setRunId(payload.run_id ?? null);
+      setRunStatus(payload.run_status ?? payload.analysis_mode);
+      setRunSteps(payload.run_steps ?? []);
+      setUsageLedger(payload.usage_ledger ?? []);
       setAvailableChains(payload.chains);
       setRecommendedChainId(payload.recommended_chain_id);
       setSelectedChainId(recommended.chain_id);
@@ -2108,6 +2265,10 @@ export default function Home() {
       setScenario(null);
       setProductionBrief(null);
       setProductionHarness(null);
+      setRunId(null);
+      setRunStatus("demo");
+      setRunSteps([]);
+      setUsageLedger([]);
       setPipelineEval(null);
       setUncertaintyReport(null);
       setEvidenceQualityFilter("all");
@@ -2240,7 +2401,7 @@ export default function Home() {
   return (
     <div
       ref={boardRef}
-      className={`${caveat.variable} font-caveat evidence-board no-select`}
+      className="font-caveat evidence-board no-select"
       style={{
         position: "relative",
         width: "100vw",
@@ -2674,6 +2835,144 @@ export default function Home() {
           >
             {analysisMode.loading ? t("header.status.processing") : t("query.submit")}
           </button>
+          <div
+            data-testid="run-orchestration-status"
+            style={{
+              marginTop: "9px",
+              padding: "8px 9px",
+              border: "1px solid rgba(49, 95, 131, 0.14)",
+              borderRadius: "8px",
+              background: "rgba(255,255,255,0.54)",
+              color: "#5c4a32",
+              fontSize: "0.56rem",
+              lineHeight: 1.45,
+            }}
+          >
+            <strong style={{ color: "#315f83" }}>
+              {locale === "en" ? "Run orchestration" : "运行编排"}
+            </strong>
+            <div>
+              {locale === "en" ? "Status" : "状态"}: {runStatus}
+              {runId ? ` / ${runId}` : ""}
+            </div>
+            {runSteps.slice(0, 4).map((step) => (
+              <div key={step.id}>
+                {step.status.toUpperCase()} - {step.label}
+              </div>
+            ))}
+            {usageLedger.slice(0, 3).map((item) => (
+              <div key={`${item.category}-${item.name}`}>
+                {item.category}: {item.quota_owner} / {item.status}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="compact-item" data-testid="upload-evidence-panel">
+          <div className="compact-label">{locale === "en" ? "Uploaded evidence" : "上传证据"}</div>
+          <input
+            value={uploadedEvidenceTitle}
+            onChange={(event) => setUploadedEvidenceTitle(event.target.value)}
+            placeholder={locale === "en" ? "Source title" : "来源标题"}
+            className="analyst-input"
+          />
+          <textarea
+            value={uploadedEvidenceText}
+            onChange={(event) => setUploadedEvidenceText(event.target.value)}
+            placeholder={
+              locale === "en"
+                ? "Paste a short note, CSV excerpt, ticket, or source snippet."
+                : "粘贴短笔记、CSV 摘要、工单或来源片段。"
+            }
+            className="analyst-textarea"
+            style={{
+              marginTop: "7px",
+              width: "100%",
+              minHeight: "74px",
+              resize: "vertical",
+              border: "1px solid var(--analyst-border)",
+              borderRadius: "8px",
+              padding: "8px",
+              background: "rgba(255,255,255,0.70)",
+              color: "var(--analyst-ink)",
+              fontSize: "0.64rem",
+              lineHeight: 1.45,
+            }}
+          />
+          <button
+            type="button"
+            onClick={uploadEvidence}
+            disabled={!uploadedEvidenceText.trim()}
+            style={{
+              marginTop: "7px",
+              width: "100%",
+              padding: "8px 10px",
+              borderRadius: "8px",
+              border: "1px solid rgba(49, 95, 131, 0.24)",
+              background: "rgba(255,255,255,0.66)",
+              color: "#315f83",
+              cursor: uploadedEvidenceText.trim() ? "pointer" : "not-allowed",
+              fontSize: "0.58rem",
+              fontWeight: 800,
+            }}
+          >
+            {locale === "en" ? "Store evidence" : "保存证据"}
+          </button>
+          {uploadedEvidenceStatus && (
+            <div style={{ marginTop: "6px", fontSize: "0.54rem", color: "#7a6b55", lineHeight: 1.4 }}>
+              {uploadedEvidenceStatus}
+            </div>
+          )}
+        </div>
+
+        <div className="compact-item" data-testid="saved-runs-panel">
+          <div className="compact-label">{locale === "en" ? "Saved runs" : "历史运行"}</div>
+          <button
+            type="button"
+            onClick={refreshSavedRuns}
+            style={{
+              width: "100%",
+              padding: "7px 9px",
+              borderRadius: "8px",
+              border: "1px solid rgba(49, 95, 131, 0.22)",
+              background: "rgba(255,255,255,0.66)",
+              color: "#315f83",
+              cursor: "pointer",
+              fontSize: "0.56rem",
+              fontWeight: 800,
+            }}
+          >
+            {locale === "en" ? "Refresh saved runs" : "刷新历史运行"}
+          </button>
+          {savedRuns.slice(0, 3).map((run) => (
+            <button
+              type="button"
+              key={run.run_id}
+              onClick={() => loadSavedRun(run.run_id)}
+              style={{
+                width: "100%",
+                marginTop: "7px",
+                padding: "7px 8px",
+                borderRadius: "8px",
+                border: "1px solid rgba(160,140,110,0.14)",
+                background: "rgba(255,255,255,0.48)",
+                color: "#5c4a32",
+                cursor: "pointer",
+                textAlign: "left",
+                fontSize: "0.56rem",
+                lineHeight: 1.35,
+              }}
+            >
+              <strong>{run.run_status}</strong> / {run.analysis_mode}
+              <br />
+              {run.query}
+            </button>
+          ))}
+          {savedRunsStatus && (
+            <div style={{ marginTop: "6px", fontSize: "0.54rem", color: "#7a6b55", lineHeight: 1.4 }}>
+              {savedRunsStatus}
+            </div>
+          )}
         </div>
 
         <h2 className="panel-title">{t("panel.hypotheses")}</h2>

@@ -216,7 +216,10 @@
   --color-info:            var(--info);
   --color-info-bg:         var(--info-bg);
 
-  --font-sans: "IBM Plex Sans", sans-serif;
+  --font-sans: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  --font-caveat: "Comic Sans MS", "Segoe Print", cursive;
 }
 
 body {

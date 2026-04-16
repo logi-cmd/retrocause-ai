@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from uuid import uuid4
 from pathlib import Path
 
 from retrocause.api.main import (
@@ -19,6 +20,7 @@ from retrocause.api.main import (
     _build_product_harness,
     _detect_production_scenario,
     _result_to_v2,
+    app,
 )
 from retrocause.app.demo_data import (
     PROVIDERS,
@@ -32,6 +34,7 @@ from retrocause.evaluation import (
     _assess_chain_diversity,
 )
 from retrocause.evidence_access import SourceAttempt
+from retrocause.evidence_store import EvidenceStore
 from retrocause.models import (
     AnalysisResult,
     CausalEdge,
@@ -45,11 +48,101 @@ from retrocause.pipeline import Pipeline, PipelineContext
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+TEST_STORE_ROOT = REPO_ROOT / ".tmp-tests"
 
 
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+def _isolated_test_store_path(filename: str) -> Path:
+    TEST_STORE_ROOT.mkdir(exist_ok=True)
+    return TEST_STORE_ROOT / f"{uuid4().hex}_{filename}"
+
+
+def test_run_orchestration_metadata_and_saved_run_round_trip(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    run_store_path = _isolated_test_store_path("saved_runs.json")
+    monkeypatch.setenv("RETROCAUSE_RUN_STORE_PATH", str(run_store_path))
+
+    client = TestClient(app)
+    response = client.post("/api/analyze/v2", json={"query": "Why did SVB collapse?"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["run_id"].startswith("run_")
+    assert payload["run_status"] == "completed"
+    assert {step["id"] for step in payload["run_steps"]} >= {
+        "queued",
+        "analysis",
+        "brief",
+        "saved",
+    }
+    assert any(
+        item["category"] == "model_provider"
+        and item["quota_owner"] in {"local_demo", "user_owned"}
+        for item in payload["usage_ledger"]
+    )
+
+    saved_list = client.get("/api/runs")
+    assert saved_list.status_code == 200
+    runs = saved_list.json()["runs"]
+    assert runs[0]["run_id"] == payload["run_id"]
+    assert runs[0]["query"] == "Why did SVB collapse?"
+
+    saved_detail = client.get(f"/api/runs/{payload['run_id']}")
+    assert saved_detail.status_code == 200
+    assert saved_detail.json()["response"]["query"] == "Why did SVB collapse?"
+
+
+def test_uploaded_evidence_minimal_store_round_trip(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    store_path = _isolated_test_store_path("evidence_store.json")
+    monkeypatch.setenv("RETROCAUSE_EVIDENCE_STORE_PATH", str(store_path))
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/evidence/upload",
+        json={
+            "query": "Why did trial users fail to convert after launch?",
+            "domain": "postmortem",
+            "title": "Launch notes",
+            "source_name": "internal launch review",
+            "content": "Trial users hit onboarding errors after the launch and support tickets doubled.",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["evidence_id"].startswith("uploaded_")
+    assert payload["stored"] is True
+
+    results = EvidenceStore(path=store_path).search(
+        "trial users onboarding errors launch conversion",
+        "postmortem",
+    )
+    assert len(results) == 1
+    assert results[0].extraction_method == "uploaded_evidence"
+    assert results[0].source_tier == "uploaded"
+    assert results[0].stance_basis == "user_upload"
+
+
+def test_frontend_and_e2e_expose_pro_workflow_slices():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    e2e_source = (REPO_ROOT / "scripts" / "e2e_test.py").read_text(encoding="utf-8")
+
+    assert 'data-testid="run-orchestration-status"' in page_source
+    assert 'data-testid="upload-evidence-panel"' in page_source
+    assert 'data-testid="saved-runs-panel"' in page_source
+    assert "/api/evidence/upload" in page_source
+    assert "/api/runs" in page_source
+    assert "Degraded Source Browser Dogfood" in e2e_source
+    assert "source-trace-status" in e2e_source
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
