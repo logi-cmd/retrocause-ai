@@ -2087,3 +2087,48 @@ Run a complete functionality pass after the alpha.5 release using deterministic 
 - A true live Chinese finance run with a real provider/search key was not exercised, so live source quality remains unverified in this pass.
 - The Python E2E browser section did not run under the current virtualenv because Python `playwright` is not installed; JS Playwright manual probes partially covered that gap.
 - Temporary screenshots/logs were left under local QA cache paths and excluded from version control.
+
+## 2026-04-17 Project Documentation Status Sync
+
+### Scope
+
+Answer whether project documentation was synchronized after `v0.1.0-alpha.5`, and fix the stale project-state summary found during the check.
+
+### Files Updated
+
+- `docs/PROJECT_STATE.md`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands / Evidence
+
+- `git status --short --branch`
+  - Result: branch `codex/sourcebroker-reliability-task1` was clean before this documentation sync.
+- `git log --oneline -6`
+  - Result: latest relevant commits include `fb77775 test: record full functionality QA`, `530690f chore: record alpha.5 post-release hygiene`, `dc6ffc3 docs: close out alpha.5 release readiness`, `58f9343 fix: preserve company anchors in chinese market queries`, `c7376e5 test: auto-start local services for browser dogfood`, and `3be545b feat: persist local run history and uploaded evidence`.
+- `Select-String -Path docs\PROJECT_STATE.md,.agent-guardrails\evidence\current-task.md -Pattern 'alpha.5|QA|guardrails|v0.1.0-alpha.5|mobile|NaN|prerelease' -Context 1,1`
+  - Result: evidence already recorded the alpha.5 release and QA findings, but `docs/PROJECT_STATE.md` still mentioned `v0.1.0-alpha.4` as the latest prerelease and still described alpha.5 as blocked on guardrails/tagging.
+
+### Result
+
+- `docs/PROJECT_STATE.md` now says the current GitHub prerelease is `v0.1.0-alpha.5`.
+- The stale guardrails/tagging blocker was replaced with current post-release known gaps.
+- The next-step section now points at the actual next OSS stabilization work: mobile panel overlap, graph SVG `NaN`, no-key/demo source-trace clarity, README first-run validation, and live Chinese finance verification.
+
+### Residual Risks
+
+- This was a documentation-only status sync, not a product fix.
+- README was not changed because its current-status section already describes local alpha features and Pro boundaries accurately enough for this check.
+- Full verification was not rerun because no product code changed; run guardrails before claiming this documentation sync complete.
+
+### Completion Check
+
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN`
+  - Result: `safe-to-deploy`, 100/100, no blocking review issues.
+  - Note: the CLI still printed the old task-contract required command hints because this sync is documentation-only and did not rerun product tests. The full functionality QA immediately before this sync already recorded focused pytest and `npm test` passing.
+
+### Post-Commit Guardrails
+
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN`
+  - Result: `safe-to-deploy`, 95/100.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed, expected for this status-sync task.
+  - CLI hints still list the old release-task required commands as missing; this documentation sync did not change product behavior, and the prior QA evidence records focused pytest plus `npm test` passing.

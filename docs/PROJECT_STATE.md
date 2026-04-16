@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-04-16
+Last updated: 2026-04-17
 
 ## Goal
 
@@ -25,7 +25,7 @@ What is done:
 - refreshed live golden-case screenshot under `docs/images/golden-us-iran-live-ui.png`
 - automated validation through the root `npm test` command
 - clean public GitHub repo published at `https://github.com/logi-cmd/retrocause-ai`
-- GitHub prerelease `v0.1.0-alpha.4`
+- GitHub prerelease `v0.1.0-alpha.5`
 - SourceBroker reliability pass: source profiles, scenario/language/time-aware cache keys, degraded-source classification, API/brief/UI source-health status, and optional user-key Tavily/Brave adapters
 - lightweight local run workflow: `run_id`, run status/steps, source/provider usage ledger, saved-run endpoints/UI, and minimal pasted uploaded evidence stored as user-owned evidence
 
@@ -38,9 +38,9 @@ What is not done:
 
 ## Current Focus
 
-Stabilize quality-first live evidence retrieval, especially for time-sensitive market/news queries where relative windows such as `today` and `yesterday` must not reuse stale evidence.
+Stabilize the published `v0.1.0-alpha.5` OSS prerelease from real user feedback. The next quality pass should focus on mobile/narrow viewport usability, graph rendering stability, no-key demo/source-trace clarity, README first-run validation, and live Chinese finance query behavior with real provider/search keys.
 
-Current UX focus: finish the OSS version before adding more Pro behavior. Validate the general Production Brief Harness across real market, policy/geopolitics, and postmortem questions, then do an OSS release-readiness pass from a fresh user journey. Future Pro workflow depth should be designed after OSS stabilization and should be a separate full-stack Rust rewrite rather than an incremental hosted extension of this alpha codebase.
+Current UX focus: keep the OSS version useful and inspectable before adding more Pro behavior. Validate the general Production Brief Harness across real market, policy/geopolitics, postmortem, and Chinese finance questions. Future Pro workflow depth should be designed after OSS stabilization and should be a separate full-stack Rust rewrite rather than an incremental hosted extension of this alpha codebase.
 
 Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md` and has been executed through code, frontend, export, and regression cleanup. The retrieval/output strategy is captured in `docs/retrieval-and-output-strategy.md`. The SourceBroker reliability implementation plan is saved at `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md` and has been executed through documentation/full verification. The local workflow slice is intentionally OSS inspectability work, not a commitment to build hosted Pro on this stack.
 
@@ -101,23 +101,25 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Started the OSS release-readiness pass by rewriting `README.md` as clean bilingual first-time user documentation, adding the missing root `npm install`, documenting local saved runs/uploaded evidence accurately, and saving `docs/superpowers/plans/2026-04-16-oss-release-readiness.md`.
 - Verified the first-time OSS path from a clean temporary copy: copied Git-managed files only, ran README install commands, started backend/frontend from the copy, passed clean-copy `npm test`, passed explicit browser E2E, and passed focused no-key / invalid-key preflight tests.
 - Fixed a Chinese intraday A-share live-analysis failure path: CJK finance fallback retrieval now preserves company anchors such as `芯原股份`, adds searchable stock-price/plunge terms, rejects generic rewrites that drop the company, and routes Chinese time-sensitive market/news queries to web-first sources before GDELT/AP fallbacks.
-- Prepared the local `v0.1.0-alpha.5` candidate with run metadata, saved runs, pasted uploaded evidence, degraded-source browser dogfood, README/Pro-boundary cleanup, and the Chinese A-share retrieval fix. Local `npm test` passes; tag/publish is still gated on `agent-guardrails` being installed and passing.
+- Published `v0.1.0-alpha.5` as a GitHub prerelease with local run metadata, saved runs, pasted uploaded evidence, degraded-source browser dogfood, README/Pro-boundary cleanup, and the Chinese A-share retrieval fix.
+- Completed a post-release full functionality QA pass: focused query/evidence pytest passed, root `npm test` passed, guardrails passed, desktop demo/API/local inspectability worked, and mobile/narrow viewport defects were recorded for the next stabilization pass.
 
-## Blockers
+## Known Gaps
 
 - The OSS product can now export a Markdown research brief, show retrieval-health states, reopen local saved runs, has a clean bilingual README, and passes a clean-copy install/test smoke. The brief format still needs real-user polish across more live domains.
 - Degraded-source states now have deterministic API/brief regression coverage plus browser-level source-trace dogfood for representative rate-limited/cached rows; wider visual QA across all bad-path states remains useful.
 - Direct monetization design should be deferred until OSS is solid; future Pro should be revisited as a full-stack Rust architecture rather than incremental hosted work in the current alpha stack.
-- `agent-guardrails` is currently unavailable in this workspace (`agent-guardrails` and `npx -y agent-guardrails` both fail to locate the executable). Run `npx agent-guardrails setup`, then rerun the release guardrails check before tagging `v0.1.0-alpha.5`.
+- Mobile/narrow viewport panel controls can be unreliable because overlapping right-panel/header elements may intercept clicks intended for left-panel controls.
+- Mobile/narrow viewport graph rendering can emit repeated SVG path `NaN` console errors after query/refresh, although the page remains usable.
+- Demo/no-key finance questions remain source-opaque when `retrieval_trace=[]`; the output is readable, but not evidence-inspectable enough.
+- A true live Chinese finance run with real provider/search keys still needs verification after the anchor-preservation fix.
 
 ## Next Step
 
-The `v0.1.0-alpha.5` candidate has passed local verification through `npm test`, including frontend lint/build, backend ruff, full pytest, and browser E2E. It is not ready to tag until the required `agent-guardrails check` runs successfully after installing or restoring the guardrails CLI.
+Start a new OSS stabilization task from the post-release QA findings:
 
-Release-readiness pass from the user journey:
-
-1. new GitHub visitor can install and launch without ambiguity
-2. first live run has a clear preflight path
-3. degraded output tells the user what to fix next
-4. a strong output makes the reasons, evidence, counterpoints, and gaps obvious
-5. docs state honestly that OSS is an inspectable alpha / release candidate, with Markdown research brief export planned for OSS and higher-end report/share/team depth reserved for Pro
+1. fix mobile/narrow viewport panel overlap and ambiguous collapse controls
+2. fix graph SVG `NaN` rendering state after query/refresh
+3. improve no-key/demo source-trace clarity so source-opaque results do not look more inspectable than they are
+4. rerun README first-run validation from a clean clone
+5. exercise a live Chinese finance query with real provider/search keys and record source quality
