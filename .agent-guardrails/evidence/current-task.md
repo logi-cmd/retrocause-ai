@@ -1882,3 +1882,208 @@ Verify the already-published `v0.1.0-alpha.5` GitHub prerelease, clean local ign
 - Some ignored local cache directories remain on disk because of Windows ACL ownership from earlier runs, but they are untracked and excluded from git status noise.
 - `.retrocause/` remains local user-owned runtime data and should continue to be preserved unless a future task explicitly asks to reset local app state.
 - Next work should start from a new task/plan, with the best OSS stabilization entry points being real user feedback, README first-run verification, Chinese finance live-query behavior, and degraded-source UX polish.
+
+## 2026-04-16 Independent Chinese A-Share QA
+
+### Task
+
+Act as a Chinese-speaking finance user and test the local RetroCause product on `http://localhost:3005` / `http://127.0.0.1:8000` for the query `为什么芯原股份今天下午股价直线跳水？`, plus one typo/variant query, focusing on run metadata, source trace visibility, demo/partial-live labeling, and whether the company anchor survives in API/UI outputs or source/query traces.
+
+### Commands Run
+
+- `Invoke-WebRequest` / `Invoke-RestMethod` against:
+  - `http://127.0.0.1:8000/openapi.json`
+  - `http://127.0.0.1:8000/api/runs`
+  - `http://127.0.0.1:8000/api/analyze/v2`
+  - `http://127.0.0.1:8000/api/runs/{run_id}`
+- Playwright browser runs against `http://localhost:3005` to inspect page text, model settings, and query submission paths.
+- `python -m pytest tests\\test_query_routing.py tests\\test_evidence_access.py -q --basetemp=.pytest-tmp`
+- `npm test`
+- `agent-guardrails check --base-ref HEAD~1`
+
+### Findings
+
+- No-key submission on the Chinese A-share question completed as `analysis_mode=demo` with `run_status=completed`.
+- The demo API response preserved the company anchor in the saved query. Codepoint inspection for `run_c44ec1001e00` matched `为什么芯原股份今天下午股价直线跳水？`.
+- The demo response had `retrieval_trace=[]` and `challenge_checks=[]`, so it did not expose a source trace for inspection.
+- Submissions with a fake key (`sk-test`) returned `analysis_mode=partial_live`, `run_status=failed`, and an actionable provider-auth failure (`Missing Authentication header`).
+- Partial-live saved runs corrupted the Chinese query into question marks. Codepoint inspection for `run_dce74882e682` and `run_166ee71584b1` returned only `?` characters.
+- The browser UI reflected the same split: demo state remained visible, the history panel surfaced `failed / partial_live` rows, and the failed query text appeared as question marks instead of the original Chinese anchor.
+
+### Security, Dependency, Performance, And Continuity Notes
+
+- Security/auth/secrets: no real API keys were used; `sk-test` was a dummy key for boundary testing only. No secrets were disclosed or copied.
+- Dependencies: no dependency or lockfile changes.
+- Performance/load: this was an inspection-only QA pass and did not add runtime load; the only command-heavy step was local validation.
+- Understandability: the key takeaway is that demo preserves the Chinese anchor while partial-live currently loses it, and source trace visibility is absent in both paths tested here.
+- Continuity: no source files were modified; the task stayed at the product/API surface and browser layer, as requested.
+
+### Residual Risks
+
+- I did not obtain a successful live source trace for this scenario because the fake-key path failed during provider auth and the no-key path stayed in demo mode.
+- The typo/variant query path should be rechecked with a real provider key if the goal is to verify live source-trace anchor preservation rather than failure-mode behavior.
+
+## 2026-04-16 Local Inspectability QA Pass
+
+### Task
+
+Act as an independent researcher and verify the local inspectability workflow in the running app: paste a short evidence note about a failed launch, run or inspect analysis, reopen saved runs, and confirm the API/UI reads as local run metadata rather than hosted storage.
+
+### Evidence Gathered
+
+- Homepage loaded at `http://localhost:3005` with the title `RetroCause — Evidence-Backed Causal Explorer`.
+- Backend API responded at `http://127.0.0.1:8000/api/runs` and `http://127.0.0.1:8000/api/runs/{run_id}` with local run metadata.
+- `POST /api/evidence/upload` returned `{"stored":true,"source_tier":"uploaded","extraction_method":"uploaded_evidence"}`.
+- UI save path confirmed a local upload message: `已保存 uploaded_f9e83f00c515，后续可作为用户自有证据复用。`
+- UI history refresh loaded clickable saved runs, and opening one changed the page to `状态: completed / run_c89363cca785` with `历史运行已打开。`
+- Opened saved run `run_c89363cca785` showed a local demo record with `run_steps` including `queued`, `analysis`, `brief`, and `saved`, plus `usage_ledger` marked `local_demo / demo`.
+- The opened run detail endpoint said `Run payload persisted locally.` and the UI exposed `COPY REPORT` / `阅读版简报` style review surfaces rather than a hosted-storage claim.
+
+### Commands Run
+
+- `Invoke-WebRequest http://localhost:3005`
+- `Invoke-WebRequest http://127.0.0.1:8000/api/runs`
+- Playwright browser sessions against `http://localhost:3005` to:
+  - paste a short failed-launch note
+  - save uploaded evidence
+  - click `开始分析`
+  - refresh history
+  - open a saved run from history
+- `Invoke-WebRequest http://127.0.0.1:8000/api/runs/run_35ea06938cdd`
+- `Invoke-WebRequest http://127.0.0.1:8000/api/runs/run_c89363cca785`
+- `Invoke-WebRequest http://127.0.0.1:8000/api/evidence/upload`
+
+### Findings
+
+- The upload flow is local and inspectable, not hosted. The UI says the note is saved as user-owned evidence, and the API says `stored:true` with `source_tier:"uploaded"`.
+- Saved runs are reopenable from the UI. Clicking a history item reloaded a saved run and surfaced `run_id`, `run_steps`, and `usage_ledger` in the visible detail pane.
+- The `/api/runs/{run_id}` endpoint exposes the same local run metadata as the UI, which makes the storage model inspectable from both surfaces.
+- The demo fallback can still look a little like a prior causal answer if analysis fails, but the run detail and endpoint still preserve the local metadata trail.
+
+### Residual Risks
+
+- The browser path is partially localized, so Unicode pasted through PowerShell can mangle into `?` in this environment. ASCII input worked cleanly.
+- The history list is not obvious until the user clicks `刷新历史运行`, so first-time discoverability could still be better.
+
+---
+
+## Mobile QA note: constrained viewport, query + controls
+
+### Date
+
+2026-04-16
+
+### Scenario
+
+Narrow viewport browser QA against `http://localhost:3005` and `http://127.0.0.1:8000` as a constrained-device user. Goal: submit a demo query, inspect the result, try panel collapse/expand, zoom, language toggle, and refresh/back behavior without changing source.
+
+### Commands Run
+
+- `Invoke-WebRequest http://localhost:3005`
+- `Invoke-WebRequest http://127.0.0.1:8000`
+- Playwright browser sessions at `390x844` viewport to:
+  - enter `Why did rent stay so high in New York?`
+  - inspect the demo result and visible control labels
+  - test zoom `+`
+  - test language toggle `��` / `EN`
+  - test panel collapse / expand behavior
+  - test page reload state retention
+- `agent-guardrails check --base-ref HEAD~1`
+
+### Key Observations
+
+- The demo query path is usable from the keyboard: the textarea accepts input and the page remains stable enough to inspect the demo brief.
+- At `390px` wide, the visible collapse toggle for the left panel can be present but pointer-blocked by the right panel/header, so touch-style clicking is unreliable.
+- After collapsing the left panel, the language toggle drifts off the right edge of the viewport, so it is not touch-visible without panning.
+- The zoom control is reachable and updates from `100%` to `110%` without breaking the layout.
+- Reloading the page preserves the compact UI state instead of resetting to a fresh top-of-page view.
+
+### Evidence Types
+
+- Navigation trail: `http://localhost:3005/` with a mobile viewport and reload.
+- Input evidence: `Why did rent stay so high in New York?`
+- UI state evidence: demo brief text, `100% -> 110%`, `EN` / `��`, `HIDE`, `Brief`.
+- Technical evidence: Playwright click interception on the left collapse toggle and network capture showing only the startup provider request, not a live analyze request.
+- Visual / viewport notes: screenshots at `390x844` showed the top bar crowding and the language toggle moving offscreen after collapse.
+
+---
+
+## 2026-04-16 Full Functionality Test Synthesis
+
+### Task
+
+Run a complete functionality pass after the alpha.5 release using deterministic tests plus multi-persona browser/API dogfood. No product code changes were made.
+
+### Commands Run
+
+- `$env:PATH=(Resolve-Path .venv\Scripts).Path + ';' + $env:PATH; python -m pytest tests\test_query_routing.py tests\test_evidence_access.py -q --basetemp=.pytest-tmp`
+  - Result: passed, 39 passed.
+- `$env:PATH=(Resolve-Path .venv\Scripts).Path + ';' + $env:PATH; cmd /c npm.cmd test`
+  - Result: passed.
+  - Frontend lint: passed.
+  - Frontend production build: passed.
+  - `python -m ruff check retrocause/`: passed.
+  - Full pytest: passed, 257 passed.
+  - `python scripts/e2e_test.py`: passed with 572 pass, 0 fail, 1 skip.
+  - Skip note: the Python E2E browser section skipped because the active virtualenv lacks the Python `playwright` package.
+- `cmd /c npx.cmd playwright --version`
+  - Result: JS Playwright available, version 1.59.1.
+- Manual API probes against `http://127.0.0.1:8000`
+  - `/` returned `{"status":"ok","message":"RetroCause API is running"}`.
+  - `/api/providers` returned provider metadata.
+  - `/api/providers/preflight` with no key returned `missing_api_key` and `can_run_analysis=false`.
+  - `/api/evidence/upload` returned `stored=true`, `source_tier=uploaded`, and `extraction_method=uploaded_evidence`.
+  - `/api/analyze/v2` returned demo analysis with `run_id`, `run_status=completed`, 4 run steps, and 1 usage-ledger entry.
+  - `/api/runs` listed saved runs; `/api/runs/{run_id}` reopened saved run metadata.
+- JS Playwright browser probes against a fresh frontend on `http://localhost:3006`
+  - Desktop 1440x900: product surface visible, query submission produced result-like text, no horizontal overflow, no page errors, no critical console errors.
+  - Mobile 390x844: product surface visible, query submission produced result-like text, no horizontal overflow, refresh survived, no page errors.
+  - Mobile 390x844 produced repeated SVG path console errors: `<path> attribute d: Expected number, "M NaN 300 C NaN Na..."`.
+- Node UTF-8 partial-live probe for `为什么芯原股份今天下午股价直线跳水？`
+  - Result: response and saved run both preserved correct Unicode codepoints for `芯原股份` even when fake-key provider auth failed into `partial_live`.
+
+### Persona Coverage
+
+- First-time no-key user:
+  - Confirmed the no-key demo path is usable and safely labeled as demo.
+  - Found that demo output can still feel more authoritative than its source trail supports.
+- Power-user researcher:
+  - Confirmed uploaded evidence round-trips through local storage.
+  - Confirmed saved runs can be reopened with run steps and usage ledger.
+  - Found that saved-run history is discoverable only after manually refreshing history.
+- Chinese finance user:
+  - Confirmed demo mode preserves Chinese query text.
+  - Initially observed all-`?` query text in a scripted partial-live pass, but coordinator re-tested with Node UTF-8 JSON and found the backend preserved the Chinese company anchor correctly. Treat the all-`?` result as a Windows/client encoding artifact, not a confirmed product bug.
+  - Confirmed no-key Chinese finance demo remains source-opaque because `retrieval_trace=[]`.
+- Constrained-device user:
+  - Confirmed the small viewport can load, accept input, show demo output, zoom, and refresh.
+  - Confirmed a real mobile layout defect: at 390px wide, right-panel/header elements can intercept pointer clicks meant for left-panel controls.
+  - Confirmed a related mobile UX defect: after panel collapse, the language toggle can drift offscreen and duplicate `Hide` labels are ambiguous.
+
+### Confirmed Findings
+
+- Major: mobile/narrow viewport panel controls are unreliable because overlapping right-panel/header elements intercept clicks on left-panel controls. This affects touch-first users trying to reclaim space.
+- Major: mobile/narrow viewport graph rendering emits repeated SVG path `NaN` console errors after query/refresh. The page remains usable, but graph rendering state is not clean.
+- Medium: demo mode is honest enough to avoid silent live claims, but the chain can look too authoritative relative to empty or absent source trace.
+- Medium: no-key/demo finance questions have no source trace to inspect (`retrieval_trace=[]`), so they are readable but not evidence-inspectable.
+- Minor: saved-run history requires a manual `刷新历史运行` click before recent runs become visible.
+- Minor: model/key setup foregrounds provider configuration and can make no-key users think they are blocked before trying demo mode.
+
+### Rejected Or Unconfirmed Findings
+
+- Rejected as product bug: Chinese company anchor loss in partial-live saved runs. A bad PowerShell/browser automation path produced mojibake or all-`?` text, but Node-generated UTF-8 JSON preserved the query and saved run codepoints correctly.
+- Unconfirmed: a fresh analysis not creating a saved run. Direct API probing showed new V2 demo analyses are saved and reopenable; the UI discoverability gap remains real because the history panel may need manual refresh.
+
+### Security, Dependency, Performance, And Continuity Notes
+
+- Security/auth/secrets: no real API keys were used. Fake key `sk-test` was used only to exercise provider-auth failure. No secrets were printed or copied.
+- Dependencies: no product dependency or lockfile changes were made. JS Playwright was already available from the root dependency set; Python Playwright is absent from the virtualenv, explaining the E2E skip.
+- Performance/load: local tests started one backend process and one fresh frontend process. No external live search/provider load was intentionally exercised beyond fake-key auth failure.
+- Understandability: the main user-facing risk is not backend correctness but clarity: demo/source-opaque states need stronger copy, and mobile controls need a layout fix.
+- Continuity: this was a QA-only pass using existing test scripts, API endpoints, and browser flows; no product code was modified.
+
+### Residual Risks
+
+- A true live Chinese finance run with a real provider/search key was not exercised, so live source quality remains unverified in this pass.
+- The Python E2E browser section did not run under the current virtualenv because Python `playwright` is not installed; JS Playwright manual probes partially covered that gap.
+- Temporary screenshots/logs were left under local QA cache paths and excluded from version control.
