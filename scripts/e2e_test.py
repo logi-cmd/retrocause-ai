@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
+import atexit
 import httpx
 import json
 import os
+from pathlib import Path
+import subprocess
 import sys
 import time
 
@@ -16,6 +19,9 @@ except ImportError:
 BASE = os.environ.get("RETROCAUSE_E2E_BASE", "http://127.0.0.1:8000")
 FRONTEND = os.environ.get("RETROCAUSE_E2E_FRONTEND", "http://localhost:3005")
 TIMEOUT = 30
+ROOT_DIR = Path(__file__).resolve().parents[1]
+FRONTEND_DIR = ROOT_DIR / "frontend"
+STARTED_PROCESSES: list[subprocess.Popen] = []
 
 passed = 0
 failed = 0
@@ -36,6 +42,74 @@ def skip(name: str, reason: str = ""):
     global skipped
     skipped += 1
     print(f"  SKIP  {name} -- {reason}")
+
+
+def _is_url_ready(url: str) -> bool:
+    try:
+        response = httpx.get(url, timeout=2)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+def _start_process(args: list[str], cwd: Path) -> subprocess.Popen:
+    process = subprocess.Popen(
+        args,
+        cwd=cwd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    STARTED_PROCESSES.append(process)
+    return process
+
+
+def _cleanup_started_processes() -> None:
+    for process in STARTED_PROCESSES:
+        if process.poll() is None:
+            process.terminate()
+    time.sleep(0.5)
+    for process in STARTED_PROCESSES:
+        if process.poll() is None:
+            process.kill()
+
+
+def _wait_for_url(url: str, label: str, timeout_seconds: int = 90) -> None:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if _is_url_ready(url):
+            return
+        time.sleep(1)
+    raise RuntimeError(f"{label} did not become ready at {url}")
+
+
+def _ensure_local_services() -> None:
+    if os.environ.get("RETROCAUSE_E2E_NO_AUTOSTART") == "1":
+        return
+
+    if not _is_url_ready(f"{BASE}/"):
+        _start_process(
+            [
+                sys.executable,
+                "-B",
+                "-m",
+                "uvicorn",
+                "retrocause.api.main:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8000",
+            ],
+            ROOT_DIR,
+        )
+        _wait_for_url(f"{BASE}/", "backend")
+
+    if not _is_url_ready(FRONTEND):
+        npm_cmd = "npm.cmd" if os.name == "nt" else "npm"
+        frontend_args = [npm_cmd, "run", "start", "--", "-p", "3005"]
+        if not (FRONTEND_DIR / ".next").exists():
+            frontend_args = [npm_cmd, "run", "dev", "--", "-p", "3005"]
+        _start_process(frontend_args, FRONTEND_DIR)
+        _wait_for_url(FRONTEND, "frontend")
 
 
 def v2_post(query: str, **kwargs) -> tuple[int, dict]:
@@ -143,6 +217,9 @@ def validate_chain_structure(chain: dict, label: str):
 # ═══════════════════════════════════════════════════════════════════════
 # SECTION 1: Backend connectivity
 # ═══════════════════════════════════════════════════════════════════════
+atexit.register(_cleanup_started_processes)
+_ensure_local_services()
+
 print("\n" + "=" * 60)
 print("SECTION 1: Backend Connectivity")
 print("=" * 60)
@@ -559,6 +636,62 @@ else:
                         first_chain.get_attribute("aria-pressed") == "true",
                         f"aria-pressed={first_chain.get_attribute('aria-pressed')}",
                     )
+
+                # 11g-2: Degraded Source Browser Dogfood
+                print("\n  --- 11g-2: Degraded Source Browser Dogfood ---")
+                degraded_payload = dict(stream_event)
+                degraded_data = dict(stream_event["data"])
+                degraded_data["retrieval_trace"] = [
+                    {
+                        "source": "ap_news",
+                        "source_label": "AP News",
+                        "source_kind": "wire_news",
+                        "stability": "high",
+                        "query": "US Iran talks AP",
+                        "result_count": 0,
+                        "cache_hit": False,
+                        "status": "rate_limited",
+                        "retry_after_seconds": 30,
+                        "cache_policy": "short_lived_cache_allowed",
+                    },
+                    {
+                        "source": "web_search",
+                        "source_label": "Web Search",
+                        "source_kind": "web_search",
+                        "stability": "medium",
+                        "query": "US Iran talks cached",
+                        "result_count": 2,
+                        "cache_hit": True,
+                        "status": "cached",
+                        "retry_after_seconds": None,
+                        "cache_policy": "derived_cache_allowed",
+                    },
+                ]
+                degraded_payload["data"] = degraded_data
+                page.unroute("**/api/analyze/v2/stream")
+                page.route(
+                    "**/api/analyze/v2/stream",
+                    lambda route: route.fulfill(
+                        status=200,
+                        headers={"content-type": "text/event-stream"},
+                        body=f"data: {json.dumps(degraded_payload, ensure_ascii=False)}\n\n",
+                    ),
+                )
+                textarea.fill("Why did the source-limited test run degrade?")
+                submit.click()
+                time.sleep(3)
+                source_status_text = page.locator("[data-testid='source-trace-status']").all_text_contents()
+                joined_status_text = " ".join(source_status_text).lower()
+                check(
+                    "UI degraded source status is visible",
+                    "rate limited" in joined_status_text or "限流" in joined_status_text,
+                    f"statuses={source_status_text}",
+                )
+                check(
+                    "UI cached source status is visible",
+                    "cached" in joined_status_text or "缓存" in joined_status_text,
+                    f"statuses={source_status_text}",
+                )
 
                 # 11h: Node selection
                 print("\n  --- 11h: Node Click + Selection ---")
