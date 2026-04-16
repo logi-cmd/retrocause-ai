@@ -114,6 +114,11 @@ Note: the working tree already contained unrelated local edits before this task.
   - Performance/load: no runtime pipeline work was added; the only browser harness waits are capped at 10 seconds and run in tests only.
   - Maintainability tradeoff: the E2E script now waits for hydrated UI state instead of assuming `networkidle` is enough, which makes browser QA less flaky at the cost of a small test-only wait.
   - Continuity: reused the existing comprehensive API test file, existing project-state doc, existing evidence note, and existing E2E script; no new abstractions or test frameworks were introduced.
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"` after contract/evidence commit
+  - Result: passed, 100/100 safe-to-deploy for the contract/evidence synchronization commit.
+- `agent-guardrails check --base-ref HEAD~2 --commands-run "npm test"`
+  - Result: passed, 90/100 safe-to-deploy for the combined multi-user test and contract-sync changes.
+  - Non-blocking warnings: the change spans `.agent-guardrails`, `docs`, `scripts`, and `tests`; `docs/PROJECT_STATE.md` was intentionally updated because project docs must stay synchronized.
 
 - `pytest tests/test_anchoring.py tests/test_comprehensive.py -q`
   - Result: 61 passed.
