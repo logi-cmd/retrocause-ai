@@ -79,6 +79,20 @@ Note: the working tree already contained unrelated local edits before this task.
 
 ## Commands Run
 
+- OpenCLI rate-limit/source-adapter documentation continuation
+  - Scope: documented why OpenCLI avoids many shared hosted rate-limit failures through local browser/user-owned execution and bounded deterministic adapters, and translated that lesson into RetroCause retrieval, run-orchestration, and OSS/Pro boundary docs.
+  - Files updated: `docs/retrieval-and-output-strategy.md`, `docs/pro-workflow-spec.md`, `docs/PROJECT_STATE.md`, `.agent-guardrails/evidence/current-task.md`.
+  - Security/auth/secrets: no secrets, API keys, auth flows, or permissions were added; the docs explicitly discourage hidden scraping, account rotation, or bypassing provider terms.
+  - Dependencies: no package, lockfile, or dependency changes.
+  - Performance/load: documentation only; the product tradeoff recorded is to reduce future load through adapter-level caps, cache reuse, queue/cooldown states, and explicit quota ownership.
+  - Maintainability tradeoff: reused the existing retrieval strategy, Pro workflow spec, project state, and evidence note rather than creating a new architecture document; this keeps rate-limit design in the docs users and maintainers already read.
+  - Continuity: aligns with the existing SourceBroker direction, optional user-key hosted adapters, and Solo Pro / Team Lite boundary; no runtime behavior changed in this pass.
+- `npm test` with `.venv\Scripts` prepended to `PATH` after OpenCLI/rate-limit documentation sync
+  - Result: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, full pytest, and E2E smoke tests.
+  - Pytest result: 251 passed.
+  - E2E result: 572 passed, 0 failed, 1 skipped.
+  - The skipped item was the optional Playwright full workflow because Playwright was not installed in `.venv`.
 - Multi-user/persona testing continuation
   - Scope: added repeatable regression coverage for user-facing value states instead of optimizing only one question.
   - Files updated: `tests/test_comprehensive.py`, `docs/PROJECT_STATE.md`, `.agent-guardrails/evidence/current-task.md`.

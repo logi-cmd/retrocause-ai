@@ -8,7 +8,7 @@ RetroCause is a runnable, inspectable causal explanation product for "why did th
 
 ## Current Status
 
-The OSS version is **published as an alpha prerelease** and the SourceBroker retrieval reliability pass is implemented locally.
+The OSS version is **published as an alpha prerelease** and the SourceBroker retrieval reliability pass is implemented locally. The current retrieval strategy now explicitly treats rate limits as a product/workflow problem with central hosted quota, user-owned quota, and source-specific quota separated in the docs.
 
 What is done:
 
@@ -38,7 +38,7 @@ What is not done:
 
 Stabilize quality-first live evidence retrieval, especially for time-sensitive market/news queries where relative windows such as `today` and `yesterday` must not reuse stale evidence.
 
-Current UX focus: validate the general Production Brief Harness across real market, policy/geopolitics, and postmortem questions. OSS now supports scenario-aware single-run briefs with freshness/source-quality gating; Pro workflow depth should focus on individuals and small teams: run queues, quota management, cache reuse, saved runs, uploaded evidence, scheduled watch topics, PDF/DOCX export, and lightweight team review. Enterprise private deployment is not a near-term target.
+Current UX focus: validate the general Production Brief Harness across real market, policy/geopolitics, and postmortem questions. OSS now supports scenario-aware single-run briefs with freshness/source-quality gating; Pro workflow depth should focus on individuals and small teams: run queues, quota ownership, cache reuse, saved runs, uploaded evidence, scheduled watch topics, PDF/DOCX export, and lightweight team review. Enterprise private deployment is not a near-term target.
 
 Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md` and has been executed through code, frontend, export, and regression cleanup. The retrieval/output strategy is captured in `docs/retrieval-and-output-strategy.md`. The SourceBroker reliability implementation plan is saved at `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md` and has been executed through documentation/full verification.
 
@@ -88,16 +88,17 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Added a degraded-source drill regression covering `rate_limited`, `forbidden`, `timeout`, `source_error`, `source_limited`, and `cached` source trace rows in the same reviewable output.
 - Added multi-user/persona regression coverage for user-value outputs: no-key new users get a demo/readable brief path, invalid-key users get `blocked_by_model` with preflight next action, and reviewer users can audit degraded source states such as `rate_limited` and `forbidden` in the source trace and Markdown brief.
 - Stabilized the browser E2E harness to wait for hydrated demo cards and an enabled submit button before interacting with the page, preventing false failures from stale or not-yet-hydrated local app state.
+- Documented the OpenCLI source-adapter lesson for RetroCause: OpenCLI avoids shared hosted bottlenecks mostly through local/browser/user-owned execution and bounded deterministic adapters, while RetroCause still needs run orchestration, quota ownership labeling, cache, source policies, and transparent partial results for multi-user reliability.
 
 ## Blockers
 
 - The OSS product can now export a Markdown research brief and show retrieval-health states, but the brief format still needs real-user polish across more live domains.
 - Degraded-source states now have deterministic API/brief regression coverage, but the remaining gap is visual/browser dogfood of those bad-path states in the right-side source trace.
-- Direct monetization should stay Pro-oriented but lightweight: hosted operation, run queues, quota management, cache reuse, uploaded evidence, saved runs, PDF/DOCX, scheduled watch topics, lightweight team review, source controls, and saved comparisons.
+- Direct monetization should stay Pro-oriented but lightweight: hosted operation, run queues, quota ownership, cache reuse, uploaded evidence, saved runs, PDF/DOCX, scheduled watch topics, lightweight team review, source controls, and saved comparisons.
 
 ## Next Step
 
-Run visual/browser dogfood for degraded-source states, then decide whether the next implementation slice should be lightweight run orchestration, uploaded evidence, or saved-run history.
+Run visual/browser dogfood for degraded-source states, then start the smallest lightweight run-orchestration slice: run ids/status, source/provider usage ledger, queued/cooling-down states, and explicit central-vs-user-owned quota labels.
 
 Release-readiness pass from the user journey:
 

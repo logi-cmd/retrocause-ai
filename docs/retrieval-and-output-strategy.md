@@ -1,6 +1,6 @@
 # Retrieval And Output Strategy
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 ## Purpose
 
@@ -38,6 +38,26 @@ Source adapters are one of the first places where personal and small-team Pro us
 - time-sensitive queries can accidentally reuse stale evidence if cache keys do not include absolute dates
 
 This means rate limiting must be handled as a product workflow, not only as a retry loop. Users should see which sources were checked, which were rate-limited, which used cache, and whether the result is still reviewable.
+
+## OpenCLI-Inspired Rate-Limit Lessons
+
+OpenCLI is useful as an architecture reference, but not because it magically avoids limits. Its current open-source design reduces shared hosted bottlenecks in five practical ways:
+
+- It has no runtime LLM or shared OpenRouter/OpenAI key dependency, so there is no central model-provider quota that all users hit together.
+- It runs through a local daemon and browser bridge, so cookie, account, IP, and anti-abuse limits usually belong to the user's own browser session rather than to a shared hosted server.
+- Its adapters are deterministic CLI commands. They fetch bounded data and transform it, instead of asking an LLM to re-plan a full retrieval workflow on every run.
+- Its access strategy cascades from cheaper paths to heavier paths: public fetch, cookie-backed fetch, header auth, interception, then UI/browser automation.
+- Individual adapters cap work, such as limiting intermediate item fetches and using bounded concurrency for batch fetches.
+
+The lesson for RetroCause is not "copy OpenCLI and rate limits disappear." RetroCause still needs retrieval, evidence extraction, LLM synthesis, causal graphing, and challenge checks. The right lesson is to separate limit surfaces:
+
+- central hosted quota: model calls, hosted search providers, shared extraction services
+- user-owned quota: user API keys, user browser sessions, user-uploaded documents, user-authorized sources
+- source-specific quota: public sites, wire/news APIs, academic APIs, official records, search APIs
+
+For OSS, the best fit is inspectable local execution, optional user-supplied provider keys, bounded source adapters, and transparent source traces. For Pro, the best fit is hosted reliability with queues, budgets, cache reuse, cooldowns, partial results, and user-owned source connectors where feasible. Pro should never sell "unlimited search"; it should sell predictable, reviewable workflow under real limits.
+
+OpenCLI-style source/domain packs can help RetroCause when they are deterministic adapters, not prompt presets. A good RetroCause adapter should declare source kind, authentication mode, storage policy, freshness behavior, result caps, rate-limit handling, and whether the source is user-owned or centrally hosted.
 
 ## Source Portfolio
 
@@ -150,6 +170,10 @@ Minimum run controls:
 - retry-after handling
 - circuit breaker for repeated 429/403/timeouts
 - cache key with normalized topic, scenario, language, absolute time window, and source policy
+- quota ownership labeling: central hosted quota, user API-key quota, browser/account quota, or local/uploaded evidence
+- adapter-level work caps for pages fetched, snippets retained, challenge queries, and browser actions
+- fallback ordering from stable/official/domain adapters to broader hosted search instead of starting every run with expensive generic search
+- visible queued, cooling-down, partial-live, and skipped-source states so a user understands what output can and cannot support
 
 ## Cache Policy
 

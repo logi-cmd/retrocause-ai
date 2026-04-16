@@ -57,6 +57,8 @@ The smallest credible Pro version should ship one complete repeated workflow:
    - Create a run record instead of forcing the full analysis through one synchronous request.
    - Track run steps, provider usage, retry/fallback state, and partial-live degradation.
    - Enforce user and workspace quotas for runs, deep checks, LLM calls, search calls, and concurrent jobs.
+   - Separate central hosted quota from user-owned quota such as user API keys, browser/account-backed sources, and uploaded evidence.
+   - Show queued, cooling-down, rate-limited, cached, and partial-live states as product states, not hidden backend errors.
 
 2. Source policy and cache
    - Route each scenario through source packs such as market research, policy/geopolitics, and postmortem.
@@ -100,6 +102,24 @@ Every Pro output should answer five user questions clearly:
 
 The UI should treat this as a workflow, not a dashboard. A good Pro run ends with a deliverable the user can send, archive, compare, or schedule.
 
+## Rate-Limit And Source Ownership Model
+
+OpenCLI is a useful comparison point because it avoids a large class of shared rate-limit failures by running deterministic adapters through the user's local browser, cookies, account, and IP. It is not "limit free"; it moves many limits from a central service to the user's own source session and keeps each adapter bounded.
+
+RetroCause cannot remove limits the same way because the product depends on retrieval plus LLM-backed extraction, synthesis, causal graphing, and challenge coverage. Pro should therefore make quota ownership explicit:
+
+- Central hosted quota: RetroCause-managed LLM calls, hosted search, extraction, report rendering, and scheduled jobs.
+- User-owned quota: user-supplied LLM/search keys, browser-backed source sessions where supported, and uploaded evidence libraries.
+- Source-specific quota: public websites, official APIs, news APIs, academic APIs, and search providers with their own RPM, daily, storage, or access rules.
+
+The Pro promise should be reliability under limits, not unlimited usage. A paid run should queue, reuse allowed cache, fall back to safer sources, pause on retry-after, preserve partial results, and tell the user exactly which source or provider was constrained. This is the direct monetization value for individuals and small teams: they pay for a repeatable operating workflow that turns fragile provider calls into a reviewable deliverable.
+
+This also defines the OSS/Pro boundary:
+
+- OSS: local inspectable runs, explicit source trace, optional user-supplied keys, bounded adapters, and Markdown export.
+- Pro: hosted run records, usage ledger, queue, cache reuse, saved runs, exports, uploaded evidence, scheduled watch topics, lightweight team review, and source-policy controls.
+- Not near-term: private enterprise deployment, hidden scraping, account rotation, or promises that bypass provider terms.
+
 ## Trust Rules
 
 - Causal conclusions must cite evidence or point to a missing-evidence caveat.
@@ -107,6 +127,7 @@ The UI should treat this as a workflow, not a dashboard. A good Pro run ends wit
 - Challenge coverage must distinguish `has_refutation`, `no_refutation_in_retrieved_evidence`, and `not_checked`.
 - Reports must never hide demo, partial-live, provider failure, or stale evidence states.
 - Source trace and retrieval policy must be visible in every saved run and export.
+- Source ownership and quota status must be visible enough that users can tell whether a failure came from RetroCause-hosted quota, their own key/session, or a third-party source.
 
 ## Success Metrics
 
