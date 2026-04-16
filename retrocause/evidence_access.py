@@ -445,6 +445,8 @@ def broker_source_names(
         return _prepend_unique(["gdelt", "web"], ["ap_news", "federal_register", *optional])
     if plan.scenario in {"market", "news"}:
         if plan.time_range is not None:
+            if plan.language == "zh":
+                return _prepend_unique(["web", "gdelt", "ap_news"], optional)
             return _prepend_unique(["ap_news", "gdelt", "web"], optional)
         return _prepend_unique(["ap_news", "web", "gdelt", "arxiv"], optional)
     if plan.scenario == "academic":

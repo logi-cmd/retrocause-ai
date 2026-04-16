@@ -311,6 +311,50 @@ _CJK_GENERIC_QUERY_TERMS = {"为什么", "原因", "美国"}
 _CJK_SEARCH_NOISE_TERMS = {"为什么", "原因"}
 
 
+_CJK_SEARCH_TRANSLATIONS.update(
+    {
+        "\u4eca\u65e5": "today",
+        "\u4eca\u5929": "today",
+        "\u5348\u540e": "afternoon",
+        "\u80a1\u4ef7": "share price stock price",
+        "\u80a1\u7968": "stock shares",
+        "\u76f4\u7ebf\u8df3\u6c34": "plunge selloff",
+        "\u8df3\u6c34": "price drop selloff",
+        "\u4e3a\u4ec0\u4e48": "why reasons",
+    }
+)
+
+_CJK_FINANCE_ENTITY_SUFFIXES = (
+    "\u80a1\u4efd",
+    "\u96c6\u56e2",
+    "\u79d1\u6280",
+    "\u94f6\u884c",
+    "\u8bc1\u5238",
+    "\u63a7\u80a1",
+    "\u516c\u53f8",
+    "\u7535\u5b50",
+    "\u7535\u6c14",
+    "\u80fd\u6e90",
+    "\u836f\u4e1a",
+    "\u6c7d\u8f66",
+)
+_CJK_FINANCE_ENTITY_BOUNDARIES = (
+    "\u4eca\u65e5",
+    "\u4eca\u5929",
+    "\u5348\u540e",
+    "\u65e9\u76d8",
+    "\u5c3e\u76d8",
+    "\u80a1\u4ef7",
+    "\u80a1\u7968",
+    "\u4e3a\u4ec0\u4e48",
+    "\u4e3a\u4f55",
+    "\u76f4\u7ebf\u8df3\u6c34",
+    "\u8df3\u6c34",
+    "\u4e0b\u8dcc",
+    "\u66b4\u8dcc",
+)
+
+
 def _significant_english_tokens(text: str) -> set[str]:
     return {
         token
@@ -329,7 +373,31 @@ def _required_cjk_anchor_tokens(original_query: str) -> set[str]:
     return tokens
 
 
+def _extract_cjk_finance_entity(query: str) -> str:
+    """Best-effort Chinese market entity anchor, e.g. `芯原股份`."""
+
+    for suffix in _CJK_FINANCE_ENTITY_SUFFIXES:
+        match = re.search(rf"([\u4e00-\u9fffA-Za-z0-9]{{2,20}}{re.escape(suffix)})", query)
+        if match:
+            return match.group(1)
+
+    boundary_positions = [query.find(marker) for marker in _CJK_FINANCE_ENTITY_BOUNDARIES]
+    boundary_positions = [pos for pos in boundary_positions if pos > 0]
+    if not boundary_positions:
+        return ""
+
+    prefix = query[: min(boundary_positions)]
+    prefix = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]", "", prefix)
+    if 2 <= len(prefix) <= 16:
+        return prefix
+    return ""
+
+
 def _has_required_cjk_anchor(candidate: str, original_query: str) -> bool:
+    entity_anchor = _extract_cjk_finance_entity(original_query)
+    if entity_anchor and entity_anchor not in candidate and not _contains_cjk(candidate):
+        return False
+
     required_tokens = _required_cjk_anchor_tokens(original_query)
     if not required_tokens:
         return True
@@ -351,6 +419,9 @@ def _heuristic_search_queries(query: str, domain: str) -> list[str]:
             continue
         matched_sources.append(source)
     translated_terms = [_CJK_SEARCH_TRANSLATIONS[source] for source in matched_sources]
+    entity_anchor = _extract_cjk_finance_entity(query) if domain in {"finance", "business"} else ""
+    if entity_anchor:
+        translated_terms = [entity_anchor, *translated_terms]
     if len(translated_terms) < 2:
         return [query]
 

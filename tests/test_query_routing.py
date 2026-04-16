@@ -81,6 +81,44 @@ def test_cjk_bitcoin_query_gets_search_effective_finance_terms():
     assert any("selloff" in item.lower() or "drop" in item.lower() for item in queries)
 
 
+def test_cjk_a_share_stock_query_preserves_company_anchor():
+    query = "\u82af\u539f\u80a1\u4efd\u4eca\u65e5\u5348\u540e\u80a1\u4ef7\u4e3a\u4ec0\u4e48\u76f4\u7ebf\u8df3\u6c34\uff1f"
+
+    parsed = parse_input(query)
+    queries = _heuristic_search_queries(query, parsed.domain)
+
+    assert parsed.domain == "finance"
+    assert parsed.time_range == "today"
+    assert not _queries_look_invalid(query, queries)
+    assert any("\u82af\u539f\u80a1\u4efd" in item for item in queries)
+    assert any("share price" in item.lower() or "stock price" in item.lower() for item in queries)
+    assert any("selloff" in item.lower() or "plunge" in item.lower() for item in queries)
+
+
+def test_build_search_queries_rejects_cjk_stock_rewrite_without_company_anchor():
+    query = "\u82af\u539f\u80a1\u4efd\u4eca\u65e5\u5348\u540e\u80a1\u4ef7\u4e3a\u4ec0\u4e48\u76f4\u7ebf\u8df3\u6c34\uff1f"
+    client = object.__new__(LLMClient)
+    client.decompose_query = types.MethodType(
+        lambda self, query, domain: [
+            "how to determine causal relationships in a general context",
+            "methods for identifying causality in broad domains",
+        ],
+        client,
+    )
+    client._rewrite_search_queries = types.MethodType(
+        lambda self, query, domain: [
+            "today stock price plunge market analysis",
+            "today share price selloff official statements",
+        ],
+        client,
+    )
+
+    queries = client.build_search_queries(query, "finance")
+
+    assert any("\u82af\u539f\u80a1\u4efd" in item for item in queries)
+    assert all("causal relationships in a general context" not in item for item in queries)
+
+
 def test_finance_crypto_graph_retries_when_too_narrow():
     assert _should_retry_graph_coverage(
         "比特币今日价格为何跳水",

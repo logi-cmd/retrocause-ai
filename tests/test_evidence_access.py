@@ -363,13 +363,23 @@ def test_source_broker_routes_market_and_policy_queries_to_scenario_fit_sources(
     market_plan = plan_query("比特币今日价格为何跳水")
     policy_plan = plan_query("美国为什么会推出新的半导体出口管制？")
 
-    assert broker_source_names(None, market_plan)[:3] == ["ap_news", "gdelt", "web"]
+    assert broker_source_names(None, market_plan)[:3] == ["web", "gdelt", "ap_news"]
     assert broker_source_names(None, policy_plan)[:4] == [
         "ap_news",
         "federal_register",
         "gdelt",
         "web",
     ]
+
+
+def test_source_broker_routes_chinese_intraday_stock_queries_to_web_first():
+    query = "\u82af\u539f\u80a1\u4efd\u4eca\u65e5\u5348\u540e\u80a1\u4ef7\u4e3a\u4ec0\u4e48\u76f4\u7ebf\u8df3\u6c34\uff1f"
+    plan = plan_query(query)
+
+    assert plan.language == "zh"
+    assert plan.scenario == "market"
+    assert plan.time_range == "today"
+    assert broker_source_names(None, plan)[:3] == ["web", "gdelt", "ap_news"]
 
 
 def test_source_broker_respects_explicit_source_override():
