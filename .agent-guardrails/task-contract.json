@@ -1,39 +1,14 @@
 {
   "schemaVersion": 3,
-  "task": "Add OSS Markdown research brief output: expose a deterministic markdown_brief in /api/analyze/v2, add a browser Copy Markdown action, update tests and documentation, and keep Pro PDF/team/scheduled/branded workflows out of OSS scope.",
+  "task": "Add multi-user/persona regression coverage for user-value outputs and stabilize the browser E2E harness when hydration leaves the submit button disabled.",
   "preset": "generic",
-  "createdAt": "2026-04-12T20:27:08.681Z",
+  "createdAt": "2026-04-16T04:49:25.176Z",
   "allowedPaths": [
     "tests/",
-    ".gitignore",
-    ".agent-guardrails/evidence/",
-    "README.md",
     "docs/",
-    "frontend/src/app/",
-    "frontend/src/app/page.tsx",
-    "frontend/src/components/",
-    "frontend/next.config.ts",
-    "frontend/package.json",
-    "frontend/package-lock.json",
-    "logs/",
-    "logs/backend-8001-err.log",
-    "logs/backend-8001.log",
-    "logs/qa-backend.err.log",
-    "logs/qa-backend.inline.log",
-    "logs/qa-backend.out.log",
-    "logs/qa-frontend.err.log",
-    "logs/qa-frontend.inline.log",
-    "logs/qa-frontend.out.log",
-    "logs/sse-test-err.log",
-    "logs/sse-test.log",
-    "retrocause/",
-    "retrocause/anchoring.py",
-    "retrocause/api/",
-    "retrocause/api/main.py",
-    "tests/test_comprehensive.py",
-    "tests/test_anchoring.py",
-    "uvicorn_stderr.log",
-    "uvicorn_stdout.log"
+    ".agent-guardrails/evidence/",
+    ".agent-guardrails/task-contract.json",
+    "scripts/e2e_test.py"
   ],
   "requiredCommands": [
     "npm test"
@@ -44,21 +19,28 @@
   "intendedFiles": [],
   "protectedPaths": [],
   "allowedChangeTypes": [
+    "tests",
     "docs",
-    "config",
-    "guardrails-internal",
-    "other",
-    "interface",
-    "tests"
+    "guardrails-internal"
   ],
   "riskLevel": "low",
-  "requiresReviewNotes": true,
+  "requiresReviewNotes": false,
   "validationProfile": "standard",
-  "securityRequirements": [],
-  "dependencyRequirements": [],
-  "performanceRequirements": [],
-  "understandingRequirements": [],
-  "continuityRequirements": [],
+  "securityRequirements": [
+    "Mention auth, secrets, permissions, and sensitive-data handling explicitly."
+  ],
+  "dependencyRequirements": [
+    "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
+  ],
+  "performanceRequirements": [
+    "Mention performance, latency, or load impact in evidence."
+  ],
+  "understandingRequirements": [
+    "Explain the main tradeoffs so future maintainers can follow the change."
+  ],
+  "continuityRequirements": [
+    "Mention reuse targets and any deliberate continuity break in evidence."
+  ],
   "acknowledgedSkips": [],
   "patternSummary": "",
   "smallestViableChange": "",
@@ -76,29 +58,67 @@
   "expectedLoadSensitivePaths": [],
   "expectedConcurrencyImpact": "",
   "observabilityRequirements": [],
-  "rollbackNotes": "Public alpha.2 can be rolled back by deleting the v0.1.0-alpha.2 GitHub prerelease/tag or publishing a corrective alpha tag; source repo changes are captured in the local alpha release polish commit.",
-  "riskJustification": "Markdown brief is a small additive API/UI feature. It derives from existing grounded response fields and does not introduce new LLM conclusions or paid Pro report workflows.",
-  "guardRules": [
-    "只做向后兼容的新增字段和 UI 操作",
-    "保持向后兼容",
-    "更新 API/README/项目状态文档",
-    "新增或更新测试覆盖"
-  ],
-  "roughIntent": {
-    "detected": true,
-    "taskType": "test",
-    "confidence": 0.68,
-    "sources": {
-      "taskType": "关键词匹配 (68% 置信度)",
-      "paths": "关键词+文件树",
-      "testCommand": "package.json",
-      "riskLevel": "基于任务类型: test"
-    }
-  },
+  "rollbackNotes": "",
+  "riskJustification": "",
   "autoFilledFields": [
-    "allowedPaths",
-    "requiredCommands",
-    "riskLevel",
-    "guardRules"
-  ]
+    "安全要求",
+    "依赖要求",
+    "性能要求",
+    "可理解性要求",
+    "连续性要求"
+  ],
+  "session": {
+    "version": 1,
+    "sessionId": "8c415e88-5735-411b-9d74-b9c44cbebc8e",
+    "createdAt": "2026-04-16T04:49:25.175Z",
+    "repoRoot": "D:\\opencode\\retrocause-ai",
+    "taskRequest": "Add multi-user/persona regression coverage for user-value outputs and stabilize the browser E2E harness when hydration leaves the submit button disabled.",
+    "contractSource": "preset-defaults",
+    "selectedFiles": [],
+    "changedFiles": [],
+    "autoFilledFields": [
+      "安全要求",
+      "依赖要求",
+      "性能要求",
+      "可理解性要求",
+      "连续性要求"
+    ],
+    "requiredCommandsSuggested": [
+      "npm test"
+    ],
+    "evidencePathSuggested": ".agent-guardrails/evidence/current-task.md",
+    "riskDimensions": {
+      "securityRequirements": [
+        "Mention auth, secrets, permissions, and sensitive-data handling explicitly."
+      ],
+      "dependencyRequirements": [
+        "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
+      ],
+      "performanceRequirements": [
+        "Mention performance, latency, or load impact in evidence."
+      ],
+      "understandingRequirements": [
+        "Explain the main tradeoffs so future maintainers can follow the change."
+      ],
+      "continuityRequirements": [
+        "Mention reuse targets and any deliberate continuity break in evidence."
+      ]
+    },
+    "finishCheckHints": [
+      "Report the commands you actually ran: npm test",
+      "Keep the evidence note current: .agent-guardrails/evidence/current-task.md",
+      "Keep security, dependency, performance, understanding, and continuity concerns explicit in the evidence note and review summary.",
+      "Finish with agent-guardrails check --review before handing off or merging."
+    ],
+    "riskSignals": [],
+    "archaeologyNotes": [],
+    "nextActions": [
+      "Implement the smallest change that fits the contract.",
+      "Run required commands: npm test",
+      "Update evidence: .agent-guardrails/evidence/current-task.md",
+      "Keep security, dependency, performance, understanding, continuity concerns explicit in the evidence note and review summary.",
+      "Run agent-guardrails check --review before completing the task."
+    ],
+    "roughIntent": null
+  }
 }
