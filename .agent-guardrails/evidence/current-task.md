@@ -1824,3 +1824,61 @@ Complete the `v0.1.0-alpha.5` release-readiness closeout for the current OSS can
 - `agent-guardrails check` still has a CLI limitation where multiple `--commands-run` values are not all counted in one invocation; release evidence must continue to note the separate per-command checks until the tool is fixed.
 - The focused pytest command depends on the project virtualenv being first on `PATH` in this machine because the system Anaconda `python` lacks optional app dependencies such as `streamlit_agraph`.
 - Tagging and GitHub prerelease publication still depend on git remote restoration, remote tag fetch, and push/auth succeeding from this clone.
+
+## 2026-04-16 Alpha.5 Post-Release Hygiene
+
+### Task
+
+Verify the already-published `v0.1.0-alpha.5` GitHub prerelease, clean local ignored/cache status noise without touching tracked files or `.retrocause/` user data, and leave a concise handoff for the next OSS stabilization pass.
+
+### Files Touched
+
+- `.agent-guardrails/evidence/current-task.md`
+- `.git/info/exclude` (local-only git metadata, not version-controlled)
+
+### Commands Run
+
+- `git remote -v`
+  - Result: `origin` fetch/push both point to `git@github.com:logi-cmd/retrocause-ai.git`.
+- `git tag --list "v0.1.0-alpha.*"`
+  - Result: local tags include `v0.1.0-alpha.1` through `v0.1.0-alpha.5`.
+- `git ls-remote --tags origin refs/tags/v0.1.0-alpha.5`
+  - Result: remote tag exists at `dc6ffc35797943aff39a23d04808834caefebd7e`.
+- `gh release view v0.1.0-alpha.5 --repo logi-cmd/retrocause-ai --json url,isPrerelease,tagName,name,body`
+  - Result: GitHub release exists, `isPrerelease=true`, `tagName=v0.1.0-alpha.5`, title `RetroCause v0.1.0-alpha.5`, URL `https://github.com/logi-cmd/retrocause-ai/releases/tag/v0.1.0-alpha.5`.
+  - Release body matches the approved GitHub prerelease-only notes for local inspectability, degraded-source dogfood, Chinese A-share routing, docs, and verification.
+- Cache cleanup attempts:
+  - Attempted to remove `.tmp`, `.pytest-tmp`, `.pytest_cache`, `.tmp-tests`, `.npm-cache`, and `.pip-tmp` only after resolving paths under `D:\opencode\retrocause-ai`.
+  - `.tmp` and `.tmp-tests` contain ACL-protected cache children owned by another local account and could not be fully removed by the current user, even after scoped ACL/takeown attempts.
+  - `.retrocause/` was intentionally not removed or modified.
+  - Added `.tmp/` and `.npm-cache/` to local `.git/info/exclude` so git no longer scans local cache noise; this does not affect repository contents.
+- `git ls-files .retrocause .pytest_cache .tmp-tests .npm-cache .tmp .pytest-tmp .pip-tmp`
+  - Result: no tracked files returned for runtime/cache directories.
+- `git diff --quiet`
+  - Result: clean.
+- `git status --short`
+  - Result after local exclude update: clean output with no cache permission warning.
+
+### Release Handoff
+
+- Alpha.5 commits:
+  - `3be545b` `feat: persist local run history and uploaded evidence`
+  - `c7376e5` `test: auto-start local services for browser dogfood`
+  - `58f9343` `fix: preserve company anchors in chinese market queries`
+  - `dc6ffc3` `docs: close out alpha.5 release readiness`
+- Prior release verification:
+  - Focused pytest passed, 39 passed, using the repo virtualenv first on `PATH`.
+  - `npm test` passed, including frontend lint/build, `ruff check retrocause/`, full pytest, and browser E2E.
+  - Full pytest result: 257 passed.
+  - Browser E2E result: 606 passed, 0 failed, 0 skipped.
+  - Guardrails checks returned `safe-to-deploy`, 95/100, with 0 blocking errors and expected non-blocking docs/state warnings.
+- Release scope:
+  - GitHub prerelease only.
+  - No npm publish.
+  - No PyPI publish.
+
+### Residual Risks
+
+- Some ignored local cache directories remain on disk because of Windows ACL ownership from earlier runs, but they are untracked and excluded from git status noise.
+- `.retrocause/` remains local user-owned runtime data and should continue to be preserved unless a future task explicitly asks to reset local app state.
+- Next work should start from a new task/plan, with the best OSS stabilization entry points being real user feedback, README first-run verification, Chinese finance live-query behavior, and degraded-source UX polish.
