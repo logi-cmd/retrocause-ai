@@ -1116,6 +1116,109 @@ async def test_analyze_v2_accepts_scenario_override_without_live_key():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.anyio
+async def test_multi_user_persona_outputs_are_actionable(monkeypatch):
+    novice_response = await analyze_query_v2(
+        AnalyzeRequest(query="Why did a product launch fail to convert trial users?")
+    )
+
+    assert novice_response.analysis_mode == "demo"
+    assert novice_response.product_harness is not None
+    assert novice_response.product_harness.status in {"ready_for_review", "needs_more_evidence"}
+    assert novice_response.analysis_brief is not None
+    assert novice_response.markdown_brief
+    assert novice_response.product_harness.next_actions
+
+    def _fail_run_real_analysis(*args, **kwargs):
+        raise RuntimeError("401 invalid API key")
+
+    monkeypatch.setattr("retrocause.app.demo_data.run_real_analysis", _fail_run_real_analysis)
+
+    blocked_response = await analyze_query_v2(
+        AnalyzeRequest(
+            query="Why did Bitcoin move today?",
+            model="openrouter",
+            api_key="sk-test",
+            explicit_model="deepseek/deepseek-chat-v3-0324",
+        )
+    )
+
+    assert blocked_response.is_demo is False
+    assert blocked_response.analysis_mode == "partial_live"
+    assert blocked_response.product_harness is not None
+    assert blocked_response.product_harness.status == "blocked_by_model"
+    assert blocked_response.error is not None
+    assert blocked_response.markdown_brief
+    assert any("preflight" in action.lower() for action in blocked_response.product_harness.next_actions)
+
+
+def test_multi_user_reviewer_can_audit_degraded_source_states():
+    result = _sample_result_with_one_supported_chain(
+        "Why did US Iran talks in Islamabad end without agreement?"
+    )
+    result.retrieval_trace = [
+        {
+            "source": "ap_news",
+            "query": "US Iran Islamabad talks AP",
+            "result_count": 0,
+            "cache_hit": False,
+            "status": "rate_limited",
+            "retry_after_seconds": 30,
+            "source_kind": "wire_news",
+            "stability": "high",
+            "cache_policy": "short_lived_cache_allowed",
+        },
+        {
+            "source": "brave_search",
+            "query": "US Iran talks sanctions disagreement",
+            "result_count": 0,
+            "cache_hit": False,
+            "status": "forbidden",
+            "source_kind": "hosted_search",
+            "stability": "medium",
+            "cache_policy": "transient_results_only",
+        },
+        {
+            "source": "web_search",
+            "query": "US Iran negotiations failed reasons",
+            "result_count": 2,
+            "cache_hit": False,
+            "status": "ok",
+            "source_kind": "general_search",
+            "stability": "medium",
+            "cache_policy": "short_lived_cache_allowed",
+        },
+    ]
+    result.refutation_checks = [
+        {
+            "edge_id": "primary_driver->observed_outcome",
+            "source": "primary_driver",
+            "target": "observed_outcome",
+            "query": "evidence against primary driver causing observed outcome",
+            "result_count": 1,
+            "refuting_count": 0,
+            "status": "checked_no_refuting_claims",
+        }
+    ]
+
+    response = _result_to_v2(result, is_demo=False)
+
+    statuses = {item.source: item.status for item in response.retrieval_trace}
+    assert statuses == {
+        "ap_news": "rate_limited",
+        "brave_search": "forbidden",
+        "web_search": "ok",
+    }
+    assert response.product_harness is not None
+    assert response.product_harness.status in {"ready_for_review", "needs_more_evidence"}
+    assert response.analysis_brief is not None
+    assert "3 source attempt(s), 2 degraded or limited" in response.analysis_brief.source_coverage
+    assert response.markdown_brief is not None
+    assert "status: rate-limited" in response.markdown_brief
+    assert "status: forbidden" in response.markdown_brief
+    assert "retry after 30s" in response.markdown_brief
+
+
 def test_v2_schema_round_trip():
     """验证 V2 schema 可以正确序列化/反序列化"""
     v2 = AnalyzeResponseV2(

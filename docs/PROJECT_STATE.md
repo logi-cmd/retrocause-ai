@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 ## Goal
 
@@ -86,11 +86,13 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Implemented SourceBroker Task 8: README and retrieval docs now explain SourceBroker source states, optional hosted adapters, OSS inspectable retrieval, and OSS/Pro boundary in user-facing language.
 - Dogfooded the completed SourceBroker reliability pass across market, policy/geopolitics, and postmortem live scenarios with OpenRouter DeepSeek V3: all three returned live reviewable results with source trace rows, evidence counts, Markdown briefs, and harness `ready_for_review`.
 - Added a degraded-source drill regression covering `rate_limited`, `forbidden`, `timeout`, `source_error`, `source_limited`, and `cached` source trace rows in the same reviewable output.
+- Added multi-user/persona regression coverage for user-value outputs: no-key new users get a demo/readable brief path, invalid-key users get `blocked_by_model` with preflight next action, and reviewer users can audit degraded source states such as `rate_limited` and `forbidden` in the source trace and Markdown brief.
+- Stabilized the browser E2E harness to wait for hydrated demo cards and an enabled submit button before interacting with the page, preventing false failures from stale or not-yet-hydrated local app state.
 
 ## Blockers
 
 - The OSS product can now export a Markdown research brief and show retrieval-health states, but the brief format still needs real-user polish across more live domains.
-- The degraded-source drill is now covered by a deterministic regression test; the remaining gap is visual/browser dogfood of those bad-path states in the right-side source trace.
+- Degraded-source states now have deterministic API/brief regression coverage, but the remaining gap is visual/browser dogfood of those bad-path states in the right-side source trace.
 - Direct monetization should stay Pro-oriented but lightweight: hosted operation, run queues, quota management, cache reuse, uploaded evidence, saved runs, PDF/DOCX, scheduled watch topics, lightweight team review, source controls, and saved comparisons.
 
 ## Next Step

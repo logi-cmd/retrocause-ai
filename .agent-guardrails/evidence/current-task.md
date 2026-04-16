@@ -79,6 +79,32 @@ Note: the working tree already contained unrelated local edits before this task.
 
 ## Commands Run
 
+- Multi-user/persona testing continuation
+  - Scope: added repeatable regression coverage for user-facing value states instead of optimizing only one question.
+  - Files updated: `tests/test_comprehensive.py`, `docs/PROJECT_STATE.md`, `.agent-guardrails/evidence/current-task.md`.
+  - Persona paths covered:
+    - new user without an API key gets a demo-mode response with an analysis brief, Markdown brief, product harness status, and next actions.
+    - constrained user with an invalid live key gets `analysis_mode=partial_live`, `product_harness.status=blocked_by_model`, a Markdown failure report, and a provider-preflight next action.
+    - reviewer user can audit degraded source rows (`rate_limited`, `forbidden`, and `ok`) and see source coverage plus retry/permission status in the Markdown brief.
+- `pytest tests/test_comprehensive.py::test_multi_user_persona_outputs_are_actionable tests/test_comprehensive.py::test_multi_user_reviewer_can_audit_degraded_source_states -q`
+  - Result: 2 passed.
+- `ruff check tests\test_comprehensive.py`
+  - Result: passed.
+- `npm test`
+  - First result: failed after frontend lint/build, `ruff check retrocause/`, and `pytest tests/ --basetemp=.pytest-tmp` passed.
+  - Failure: Playwright E2E hit a disabled submit button because the browser harness interacted before the hydrated page exposed an enabled query button; the initial sticky-card count was also `0`.
+  - Follow-up: restarted stale local RetroCause dev processes that had been running since 2026-04-15 and hardened `scripts/e2e_test.py` to wait for visible sticky cards plus an enabled Analyze/分析 button.
+- `ruff check scripts\e2e_test.py tests\test_comprehensive.py`
+  - Initial result: failed on pre-existing script lint issues exposed by the new touched-file check (`Any` unused, unused `cid`, two placeholder-free f-strings).
+  - Final result after cleanup: passed.
+- `python scripts\e2e_test.py`
+  - Result after E2E harness stabilization and local service restart: passed, 604 passed / 0 failed / 0 skipped.
+- `npm test`
+  - Result after E2E harness stabilization: passed.
+  - Included frontend lint/build, `ruff check retrocause/`, `pytest tests/ --basetemp=.pytest-tmp`, and `python scripts/e2e_test.py`.
+  - Pytest result: 251 passed.
+  - E2E result: 604 passed, 0 failed, 0 skipped.
+
 - `pytest tests/test_anchoring.py tests/test_comprehensive.py -q`
   - Result: 61 passed.
 - `pytest tests/test_auto_collect.py::test_collect_refutations_searches_challenge_queries_and_marks_stance tests/test_comprehensive.py::test_result_to_v2_surfaces_challenge_checks_and_analysis_brief -q`

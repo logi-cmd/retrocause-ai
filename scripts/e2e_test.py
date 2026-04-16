@@ -4,12 +4,13 @@ import json
 import os
 import sys
 import time
-from typing import Any
 
 try:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
     from playwright.sync_api import sync_playwright
 except ImportError:
     print("[SKIP] playwright not installed — UI tests skipped")
+    PlaywrightTimeoutError = TimeoutError
     sync_playwright = None
 
 BASE = os.environ.get("RETROCAUSE_E2E_BASE", "http://127.0.0.1:8000")
@@ -46,7 +47,6 @@ def v2_post(query: str, **kwargs) -> tuple[int, dict]:
 
 
 def validate_chain_structure(chain: dict, label: str):
-    cid = chain.get("chain_id", "?")
     nodes = chain.get("nodes", [])
     edges = chain.get("edges", [])
 
@@ -390,6 +390,10 @@ else:
         check("UI right panel", right.count() > 0)
 
         cards = page.locator(".sticky-card")
+        try:
+            cards.first.wait_for(state="visible", timeout=10000)
+        except PlaywrightTimeoutError:
+            pass
         card_count = cards.count()
         check(f"UI sticky cards ({card_count})", card_count > 0)
 
@@ -401,7 +405,7 @@ else:
         page_text = page.locator(".evidence-board").text_content() or ""
         right_text = page.locator(".right-panel").text_content() or ""
         combined = (page_text + " " + right_text).lower()
-        check("UI demo label visible", "demo" in combined, f"no 'demo' in page text")
+        check("UI demo label visible", "demo" in combined, "no 'demo' in page text")
 
         # 11c: Query flow — submit SVB query
         print("\n  --- 11c: Query Flow ---")
@@ -435,6 +439,22 @@ else:
                 submit = page.locator("button").filter(has_text="Analyze").first
             if submit.count() == 0:
                 submit = page.locator("button").filter(has_text="分析").first
+            try:
+                page.wait_for_function(
+                    """
+                    () => Array.from(document.querySelectorAll('button')).some((button) => {
+                      const text = button.textContent || '';
+                      return (text.includes('Analyze') || text.includes('分析')) && !button.disabled;
+                    })
+                    """,
+                    timeout=10000,
+                )
+            except PlaywrightTimeoutError:
+                pass
+            if submit.count() == 0 or not submit.is_enabled():
+                submit = page.locator("button:enabled").filter(has_text="Analyze").first
+            if submit.count() == 0:
+                submit = page.locator("button:enabled").filter(has_text="分析").first
             check("UI submit button found", submit.count() > 0)
 
             if submit.count() > 0:
@@ -627,7 +647,7 @@ else:
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════════
 print(f"\n{'=' * 60}")
-print(f"E2E Test Results")
+print("E2E Test Results")
 print(f"{'=' * 60}")
 total = passed + failed + skipped
 print(f"Total: {total} | PASS: {passed} | FAIL: {failed} | SKIP: {skipped}")
