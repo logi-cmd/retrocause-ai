@@ -23,6 +23,12 @@ from retrocause.api.briefs import (
     build_markdown_research_brief,
     humanize_identifier as _humanize_identifier,
 )
+from retrocause.api.provider_preflight import (
+    classify_preflight_failure_code,
+    is_live_failure,
+    preflight_user_action,
+    resolve_provider_model,
+)
 from retrocause.api.runtime import TimeoutError, run_with_timeout
 from retrocause.api.scenarios import detect_production_scenario_payload
 from retrocause.models import AnalysisResult
@@ -480,63 +486,6 @@ def _derive_partial_live_reasons(result: AnalysisResult) -> List[str]:
     return deduped[:3]
 
 
-def _is_live_failure(error_msg: str | None) -> bool:
-    if not error_msg:
-        return False
-    lowered = error_msg.lower()
-    return any(
-        token in lowered
-        for token in [
-            "401",
-            "authentication",
-            "permission",
-            "user not found",
-            "connection error",
-            "apiconnectionerror",
-            "timed out",
-            "empty result",
-            "rate limit",
-        ]
-    )
-
-
-def _resolve_provider_model(provider_key: str, explicit_model: str | None) -> tuple[dict | None, str]:
-    provider_cfg = PROVIDERS.get(provider_key)
-    if explicit_model:
-        return provider_cfg, explicit_model
-    if provider_cfg and provider_cfg.get("models"):
-        return provider_cfg, list(provider_cfg["models"].keys())[0]
-    return provider_cfg, provider_key
-
-
-def _preflight_failure_code(error_msg: str | None) -> str:
-    lowered = (error_msg or "").lower()
-    if "invalid model" in lowered or ("model" in lowered and "not found" in lowered):
-        return "invalid_model"
-    if any(token in lowered for token in ["401", "authentication", "permission", "user not found"]):
-        return "auth_or_permission"
-    if any(token in lowered for token in ["balance", "quota", "insufficient", "credits"]):
-        return "billing_or_quota"
-    if "timeout" in lowered or "timed out" in lowered:
-        return "timeout"
-    if "unexpected payload" in lowered or "empty" in lowered or "json" in lowered:
-        return "invalid_or_empty_payload"
-    return "provider_error"
-
-
-def _preflight_user_action(failure_code: str | None) -> str:
-    actions = {
-        "missing_api_key": "Enter an API key before running live analysis.",
-        "unknown_provider": "Choose a configured provider or add provider settings first.",
-        "invalid_model": "Pick a model listed by the provider, then run preflight again.",
-        "auth_or_permission": "Check that the API key is valid and has access to this provider/model.",
-        "billing_or_quota": "Check provider balance, quota, or account limits before retrying.",
-        "timeout": "Try a faster model or retry when the provider is responsive.",
-        "invalid_or_empty_payload": "Try a model with reliable JSON output before running the full analysis.",
-    }
-    return actions.get(failure_code or "", "Inspect the provider error, then retry preflight.")
-
-
 def _harness_check(check_id: str, label: str, status: str, detail: str = "") -> HarnessCheckV2:
     return HarnessCheckV2(id=check_id, label=label, status=status, detail=detail)
 
@@ -615,7 +564,7 @@ def _build_usage_ledger(
     response: AnalyzeResponseV2,
     request: AnalyzeRequest,
 ) -> list[UsageLedgerItemV2]:
-    provider_cfg, model_name = _resolve_provider_model(request.model, request.explicit_model)
+    provider_cfg, model_name = resolve_provider_model(PROVIDERS, request.model, request.explicit_model)
     provider_label = provider_cfg.get("label", request.model) if provider_cfg else request.model
     ledger = [
         UsageLedgerItemV2(
@@ -1809,7 +1758,7 @@ async def upload_evidence(request: UploadedEvidenceRequest):
 
 @app.post("/api/providers/preflight", response_model=ProviderPreflightResponse)
 async def preflight_provider(request: ProviderPreflightRequest):
-    provider_cfg, model_name = _resolve_provider_model(request.model, request.explicit_model)
+    provider_cfg, model_name = resolve_provider_model(PROVIDERS, request.model, request.explicit_model)
     checks: list[HarnessCheckV2] = []
 
     if provider_cfg is None:
@@ -1828,7 +1777,7 @@ async def preflight_provider(request: ProviderPreflightRequest):
             can_run_analysis=False,
             failure_code="unknown_provider",
             diagnosis="Provider is not configured in this RetroCause instance.",
-            user_action=_preflight_user_action("unknown_provider"),
+            user_action=preflight_user_action("unknown_provider"),
             checks=checks,
         )
 
@@ -1857,7 +1806,7 @@ async def preflight_provider(request: ProviderPreflightRequest):
             can_run_analysis=False,
             failure_code="missing_api_key",
             diagnosis="Live analysis needs a provider API key.",
-            user_action=_preflight_user_action("missing_api_key"),
+            user_action=preflight_user_action("missing_api_key"),
             checks=checks,
         )
 
@@ -1915,7 +1864,7 @@ async def preflight_provider(request: ProviderPreflightRequest):
             checks=checks,
         )
 
-    failure_code = _preflight_failure_code(error_msg)
+    failure_code = classify_preflight_failure_code(error_msg)
     checks.append(
         _harness_check(
             "model_access",
@@ -1931,7 +1880,7 @@ async def preflight_provider(request: ProviderPreflightRequest):
         can_run_analysis=False,
         failure_code=failure_code,
         diagnosis=error_msg or "Model preflight failed.",
-        user_action=_preflight_user_action(failure_code),
+        user_action=preflight_user_action(failure_code),
         checks=checks,
     )
 
@@ -2073,7 +2022,7 @@ async def analyze_query_v2(request: AnalyzeRequest):
             if result is not None:
                 is_demo = False
 
-        if result is None and request.api_key and _is_live_failure(error_msg):
+        if result is None and request.api_key and is_live_failure(error_msg):
             return _finalize_run_response(
                 _empty_live_failure_response(
                     request.query,
@@ -2199,7 +2148,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                     )
                     resp = _finalize_run_response(resp, request, run_id)
                     eq.put({"type": "done", "is_demo": False, "data": resp.model_dump(mode="json")})
-                elif request.api_key and _is_live_failure(error_msg):
+                elif request.api_key and is_live_failure(error_msg):
                     resp = _empty_live_failure_response(
                         request.query,
                         error_msg or "Live analysis failed.",

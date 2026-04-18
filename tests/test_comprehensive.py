@@ -1218,6 +1218,24 @@ def test_api_production_scenario_detection_is_extracted():
     assert "SCENARIO_SIGNALS" in scenario_source
 
 
+def test_api_provider_preflight_classification_is_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    provider_preflight_source = (
+        REPO_ROOT / "retrocause" / "api" / "provider_preflight.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from retrocause.api.provider_preflight import" in api_source
+    assert "classify_preflight_failure_code" in api_source
+    assert "preflight_user_action" in api_source
+    assert "is_live_failure" in api_source
+    assert "def _preflight_failure_code" not in api_source
+    assert "def _preflight_user_action" not in api_source
+    assert "def _is_live_failure" not in api_source
+    assert "def classify_preflight_failure_code" in provider_preflight_source
+    assert "def preflight_user_action" in provider_preflight_source
+    assert "def is_live_failure" in provider_preflight_source
+
+
 def test_legacy_canvas_graph_uses_shared_red_string_path_builder():
     legacy_graph_source = (
         REPO_ROOT / "frontend" / "src" / "components" / "canvas" / "CausalGraphView.tsx"

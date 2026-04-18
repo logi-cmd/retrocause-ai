@@ -2989,3 +2989,38 @@ Residual risks / next work:
   - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
   - `docs/PROJECT_STATE.md` was updated as a state file.
 - Risk disposition: both warnings are expected for this maintenance slice because the helper extraction intentionally pairs backend code, regression coverage, and synchronized docs/evidence. No blocking guardrails errors were reported.
+
+## 2026-04-18 provider preflight helper extraction
+
+Scope:
+- Continued the backend maintainability cleanup by extracting provider/preflight string classification and provider-model resolution from `retrocause/api/main.py` into `retrocause/api/provider_preflight.py`.
+- Kept route orchestration and Pydantic response assembly in `retrocause/api/main.py`; no API shape, endpoint, or user-visible behavior was intentionally changed.
+- Synchronized `docs/PROJECT_STATE.md` and `docs/codebase-audit.md` so future maintainers can see which backend helpers have already been split out.
+
+TDD / verification so far:
+- RED: `python -m pytest tests\test_comprehensive.py::test_api_provider_preflight_classification_is_extracted -q --basetemp=.pytest-tmp` failed because `retrocause/api/provider_preflight.py` did not exist.
+- GREEN: `python -m pytest tests\test_comprehensive.py::test_api_provider_preflight_classification_is_extracted tests\test_comprehensive.py::test_provider_preflight_classifies_missing_api_key tests\test_comprehensive.py::test_provider_preflight_runs_model_health_check -q --basetemp=.pytest-tmp` passed.
+
+Risk notes:
+- Security/auth/secrets: no new secrets, permissions, storage paths, or auth flows were added; the extracted helper only classifies existing provider/auth/quota error strings and chooses existing provider model names.
+- Dependencies: no packages or lockfiles changed.
+- Performance: helper extraction is in-process string matching and dictionary lookup only; no expected latency or load impact.
+- Tradeoff: `main.py` still owns endpoint orchestration, while reusable provider/preflight rules now have one home. This reduces duplicate growth without moving the full preflight endpoint yet.
+- Continuity: follows the existing small-helper pattern used by `retrocause/api/runtime.py`, `retrocause/api/briefs.py`, and `retrocause/api/scenarios.py`; no deliberate continuity break.
+- Residual risk: future preflight route refactors should preserve the existing response schema and focused preflight tests before moving more endpoint code.
+
+### Full verification update
+
+- `npm test`: passed after provider preflight helper extraction.
+  - Frontend lint/build passed.
+  - `ruff check retrocause/`: passed.
+  - Full pytest passed: 270 tests.
+  - Browser E2E passed: 608 pass / 0 fail / 0 skip.
+
+### Guardrails final result
+
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`: passed with score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings:
+  - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
+  - `docs/PROJECT_STATE.md` was updated as a state file.
+- Risk disposition: both warnings are expected for this maintainability slice because backend extraction is intentionally paired with regression coverage and synchronized docs/evidence. No blocking guardrails errors were reported.
