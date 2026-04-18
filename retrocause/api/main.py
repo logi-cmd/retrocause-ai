@@ -26,6 +26,10 @@ from retrocause.api.provider_preflight import (
     resolve_provider_model,
 )
 from retrocause.api.runtime import TimeoutError, run_with_timeout
+from retrocause.api.run_metadata import (
+    build_run_step_payloads,
+    build_usage_ledger_payloads,
+)
 from retrocause.api.run_store import (
     create_run_id,
     load_saved_run_records,
@@ -491,86 +495,6 @@ def _harness_check(check_id: str, label: str, status: str, detail: str = "") -> 
     return HarnessCheckV2(id=check_id, label=label, status=status, detail=detail)
 
 
-def _run_step(step_id: str, label: str, status: str, detail: str = "") -> RunStepV2:
-    return RunStepV2(id=step_id, label=label, status=status, detail=detail)
-
-
-def _build_run_steps(response: AnalyzeResponseV2, saved: bool) -> list[RunStepV2]:
-    analysis_status = "failed" if response.error and not response.chains else "completed"
-    brief_status = "completed" if response.markdown_brief or response.analysis_brief else "skipped"
-    return [
-        _run_step("queued", "Run accepted", "completed", "Local run record was created."),
-        _run_step(
-            "analysis",
-            "Analysis pipeline",
-            analysis_status,
-            response.error or f"{len(response.chains)} causal chain(s) returned.",
-        ),
-        _run_step(
-            "brief",
-            "Reviewable brief",
-            brief_status,
-            "Markdown/readable brief available." if brief_status == "completed" else "No brief output.",
-        ),
-        _run_step(
-            "saved",
-            "Saved run",
-            "completed" if saved else "failed",
-            "Run payload persisted locally." if saved else "Run payload was not saved.",
-        ),
-    ]
-
-
-def _quota_owner_for_source(item: RetrievalTraceItemV2) -> str:
-    if item.cache_hit or item.status == "cached":
-        return "cache_reuse"
-    if item.source.startswith("uploaded") or item.source_kind == "uploaded":
-        return "user_owned"
-    return "source_specific"
-
-
-def _build_usage_ledger(
-    response: AnalyzeResponseV2,
-    request: AnalyzeRequest,
-) -> list[UsageLedgerItemV2]:
-    provider_cfg, model_name = resolve_provider_model(PROVIDERS, request.model, request.explicit_model)
-    provider_label = provider_cfg.get("label", request.model) if provider_cfg else request.model
-    ledger = [
-        UsageLedgerItemV2(
-            category="model_provider",
-            name=model_name,
-            quota_owner="user_owned" if request.api_key else "local_demo",
-            status=response.analysis_mode,
-            count=len(response.chains),
-            detail=provider_label,
-        )
-    ]
-    ledger.extend(
-        UsageLedgerItemV2(
-            category="retrieval_source",
-            name=item.source_label or item.source,
-            quota_owner=_quota_owner_for_source(item),
-            status=item.status,
-            count=item.result_count,
-            detail=item.cache_policy,
-        )
-        for item in response.retrieval_trace
-    )
-    uploaded_count = sum(1 for item in response.evidences if item.source_tier == "uploaded")
-    if uploaded_count:
-        ledger.append(
-            UsageLedgerItemV2(
-                category="uploaded_evidence",
-                name="Uploaded evidence library",
-                quota_owner="user_owned",
-                status="attached",
-                count=uploaded_count,
-                detail="User-provided evidence is stored locally.",
-            )
-        )
-    return ledger
-
-
 def _write_saved_run_response(response: AnalyzeResponseV2) -> bool:
     run_id = response.run_id or ""
     scenario_key = response.scenario.key if response.scenario else "general"
@@ -591,9 +515,31 @@ def _finalize_run_response(
 ) -> AnalyzeResponseV2:
     response.run_id = run_id
     response.run_status = "failed" if response.error and not response.chains else "completed"
-    response.usage_ledger = _build_usage_ledger(response, request)
+    provider_cfg, model_name = resolve_provider_model(PROVIDERS, request.model, request.explicit_model)
+    provider_label = provider_cfg.get("label", request.model) if provider_cfg else request.model
+    response.usage_ledger = [
+        UsageLedgerItemV2(**payload)
+        for payload in build_usage_ledger_payloads(
+            provider_label=provider_label,
+            model_name=model_name,
+            has_api_key=bool(request.api_key),
+            analysis_mode=response.analysis_mode,
+            chain_count=len(response.chains),
+            retrieval_trace=response.retrieval_trace,
+            evidences=response.evidences,
+        )
+    ]
     saved = _write_saved_run_response(response)
-    response.run_steps = _build_run_steps(response, saved=saved)
+    response.run_steps = [
+        RunStepV2(**payload)
+        for payload in build_run_step_payloads(
+            error=response.error,
+            chain_count=len(response.chains),
+            has_markdown_brief=bool(response.markdown_brief),
+            has_analysis_brief=bool(response.analysis_brief),
+            saved=saved,
+        )
+    ]
     if saved:
         # Persist once more so the saved payload includes the completed saved step.
         _write_saved_run_response(response)

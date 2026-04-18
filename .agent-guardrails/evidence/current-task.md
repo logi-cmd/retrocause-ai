@@ -3060,3 +3060,38 @@ Risk notes:
   - `docs/PROJECT_STATE.md` was updated as a state file.
   - `retrocause/api/run_store.py` was flagged as state-related because it centralizes saved-run JSON persistence.
 - Risk disposition: these warnings are expected for this maintainability slice because it intentionally moves existing local saved-run state IO into a named helper while preserving the same local path, env override, latest-50 cap, and saved-run round trip behavior. No blocking guardrails errors were reported.
+
+## 2026-04-18 run metadata helper extraction
+
+Scope:
+- Continued backend maintainability cleanup by extracting run-step and usage-ledger payload assembly from `retrocause/api/main.py` into `retrocause/api/run_metadata.py`.
+- Kept API Pydantic schemas and route orchestration in `retrocause/api/main.py`; the helper returns plain payload dictionaries that `main.py` wraps in existing response models.
+- Synchronized `docs/PROJECT_STATE.md` and `docs/codebase-audit.md` so the backend extraction map stays current.
+
+TDD / verification so far:
+- RED: `python -m pytest tests\test_comprehensive.py::test_api_run_metadata_assembly_is_extracted -q --basetemp=.pytest-tmp` failed because `retrocause/api/run_metadata.py` did not exist.
+- GREEN: `python -m pytest tests\test_comprehensive.py::test_api_run_metadata_assembly_is_extracted tests\test_comprehensive.py::test_run_orchestration_metadata_and_saved_run_round_trip -q --basetemp=.pytest-tmp` passed.
+
+Risk notes:
+- Security/auth/secrets: no auth, API key, permission, saved data, or sensitive-data behavior changed. The helper only assembles existing run-step and quota-owner labels.
+- Dependencies: no package or lockfile changes.
+- Performance: helper extraction is in-process list/dict assembly only; no expected latency, IO, or load impact.
+- Tradeoff: `main.py` still resolves provider labels and owns response model construction, while `run_metadata.py` owns pure metadata payload assembly. This avoids moving API schemas prematurely.
+- Continuity: follows the existing small-helper pattern used by `runtime.py`, `briefs.py`, `scenarios.py`, `provider_preflight.py`, and `run_store.py`; no deliberate continuity break.
+- Residual risk: future cleanup should move larger harness/brief builders only in separate tested slices because those have wider product semantics.
+
+### Full verification update
+
+- `npm test`: passed after run metadata helper extraction.
+  - Frontend lint/build passed.
+  - `ruff check retrocause/`: passed.
+  - Full pytest passed: 272 tests.
+  - Browser E2E passed: 608 pass / 0 fail / 0 skip.
+
+### Guardrails final result
+
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`: passed with score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings:
+  - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
+  - `docs/PROJECT_STATE.md` was updated as a state file.
+- Risk disposition: both warnings are expected for this maintainability slice because backend helper extraction is intentionally paired with regression coverage and synchronized docs/evidence. No blocking guardrails errors were reported.

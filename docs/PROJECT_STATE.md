@@ -28,7 +28,7 @@ What is done:
 - GitHub prerelease `v0.1.0-alpha.5`
 - SourceBroker reliability pass: source profiles, scenario/language/time-aware cache keys, degraded-source classification, API/brief/UI source-health status, and optional user-key Tavily/Brave adapters
 - lightweight local run workflow: `run_id`, run status/steps, source/provider usage ledger, saved-run endpoints/UI, and minimal pasted uploaded evidence stored as user-owned evidence
-- OSS stabilization follow-up: narrow-viewport panel controls are browser-tested, graph path layout guards against `NaN`, demo/no-key source trace absence is explicit, Markdown brief generation, production-scenario detection, provider preflight classification, saved-run persistence, and API timeout runtime helpers have been split out of the large route module, the legacy canvas graph now reuses the shared sticky-card renderer plus red-string path builder, and the E2E harness cleans up Windows frontend process trees while reporting 500 resource URLs
+- OSS stabilization follow-up: narrow-viewport panel controls are browser-tested, graph path layout guards against `NaN`, demo/no-key source trace absence is explicit, Markdown brief generation, production-scenario detection, provider preflight classification, saved-run persistence, run metadata assembly, and API timeout runtime helpers have been split out of the large route module, the legacy canvas graph now reuses the shared sticky-card renderer plus red-string path builder, and the E2E harness cleans up Windows frontend process trees while reporting 500 resource URLs
 
 What is not done:
 
@@ -119,7 +119,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Degraded-source states now have deterministic API/brief regression coverage plus browser-level source-trace dogfood for representative rate-limited/cached rows; wider visual QA across all bad-path states remains useful.
 - Direct monetization design should be deferred until OSS is solid; future Pro should be revisited as a full-stack Rust architecture rather than incremental hosted work in the current alpha stack.
 - A true live Chinese finance run with real provider/search keys still needs verification after the anchor-preservation fix.
-- The API route module is still very large even after the timeout, Markdown-brief, production-scenario, provider-preflight, and saved-run helper extractions; schemas, analysis brief builders, production brief builders, usage ledger/run-step assembly, and harness helpers remain candidates for later split.
+- The API route module is still very large even after the timeout, Markdown-brief, production-scenario, provider-preflight, saved-run, and run-metadata helper extractions; schemas, analysis brief builders, production brief builders, and harness helpers remain candidates for later split.
 - Legacy canvas layout/state logic remains separate from the canonical homepage evidence board, but sticky-card rendering and red-string path math now reuse shared modules.
 
 ## Next Step

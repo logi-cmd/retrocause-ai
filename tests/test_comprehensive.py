@@ -1256,6 +1256,24 @@ def test_api_saved_run_persistence_is_extracted():
     assert "def persist_saved_run_payload" in run_store_source
 
 
+def test_api_run_metadata_assembly_is_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    run_metadata_source = (
+        REPO_ROOT / "retrocause" / "api" / "run_metadata.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from retrocause.api.run_metadata import" in api_source
+    assert "build_run_step_payloads" in api_source
+    assert "build_usage_ledger_payloads" in api_source
+    assert "def _run_step" not in api_source
+    assert "def _build_run_steps" not in api_source
+    assert "def _quota_owner_for_source" not in api_source
+    assert "def _build_usage_ledger" not in api_source
+    assert "def build_run_step_payloads" in run_metadata_source
+    assert "def build_usage_ledger_payloads" in run_metadata_source
+    assert "def quota_owner_for_source_payload" in run_metadata_source
+
+
 def test_legacy_canvas_graph_uses_shared_red_string_path_builder():
     legacy_graph_source = (
         REPO_ROOT / "frontend" / "src" / "components" / "canvas" / "CausalGraphView.tsx"
