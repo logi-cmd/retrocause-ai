@@ -26,7 +26,6 @@ from retrocause.api.live_failure_response import build_empty_live_failure_respon
 from retrocause.api.production_brief import build_production_brief_payload
 from retrocause.api.provider_preflight import (
     is_live_failure,
-    resolve_provider_model,
 )
 from retrocause.api.provider_routes import router as provider_router
 from retrocause.api.retrieval_trace import (
@@ -34,15 +33,9 @@ from retrocause.api.retrieval_trace import (
     retrieval_status_from_trace,
 )
 from retrocause.api.runtime import TimeoutError, run_with_timeout
-from retrocause.api.run_metadata import (
-    build_run_step_payloads,
-    build_usage_ledger_payloads,
-)
+from retrocause.api.run_finalization import finalize_run_response
 from retrocause.api.run_routes import router as run_router
-from retrocause.api.run_store import (
-    create_run_id,
-    persist_saved_run_payload,
-)
+from retrocause.api.run_store import create_run_id
 from retrocause.api.scenarios import detect_production_scenario_payload
 from retrocause.api.schemas import (
     AnalysisBriefV2,
@@ -64,11 +57,9 @@ from retrocause.api.schemas import (
     ProductHarnessReportV2,
     ProductionBriefV2,
     ProductionHarnessReportV2,
-    RunStepV2,
     ScenarioV2,
     UncertaintyAssessmentV2,
     UncertaintyReportV2,
-    UsageLedgerItemV2,
     UpstreamMapEntryV2,
     UpstreamMapV2,
 )
@@ -127,57 +118,6 @@ def _derive_partial_live_reasons(result: AnalysisResult) -> List[str]:
         seen.add(reason)
         deduped.append(reason)
     return deduped[:3]
-
-
-def _write_saved_run_response(response: AnalyzeResponseV2) -> bool:
-    run_id = response.run_id or ""
-    scenario_key = response.scenario.key if response.scenario else "general"
-    return persist_saved_run_payload(
-        run_id=run_id,
-        query=response.query,
-        run_status=response.run_status,
-        analysis_mode=response.analysis_mode,
-        scenario_key=scenario_key,
-        response_payload=response.model_dump(mode="json"),
-    )
-
-
-def _finalize_run_response(
-    response: AnalyzeResponseV2,
-    request: AnalyzeRequest,
-    run_id: str,
-) -> AnalyzeResponseV2:
-    response.run_id = run_id
-    response.run_status = "failed" if response.error and not response.chains else "completed"
-    provider_cfg, model_name = resolve_provider_model(PROVIDERS, request.model, request.explicit_model)
-    provider_label = provider_cfg.get("label", request.model) if provider_cfg else request.model
-    response.usage_ledger = [
-        UsageLedgerItemV2(**payload)
-        for payload in build_usage_ledger_payloads(
-            provider_label=provider_label,
-            model_name=model_name,
-            has_api_key=bool(request.api_key),
-            analysis_mode=response.analysis_mode,
-            chain_count=len(response.chains),
-            retrieval_trace=response.retrieval_trace,
-            evidences=response.evidences,
-        )
-    ]
-    saved = _write_saved_run_response(response)
-    response.run_steps = [
-        RunStepV2(**payload)
-        for payload in build_run_step_payloads(
-            error=response.error,
-            chain_count=len(response.chains),
-            has_markdown_brief=bool(response.markdown_brief),
-            has_analysis_brief=bool(response.analysis_brief),
-            saved=saved,
-        )
-    ]
-    if saved:
-        # Persist once more so the saved payload includes the completed saved step.
-        _write_saved_run_response(response)
-    return response
 
 
 def _classify_node_type(name: str, upstream_ids: List[str], downstream_ids: List[str]) -> str:
@@ -695,7 +635,7 @@ async def analyze_query_v2(request: AnalyzeRequest):
                 is_demo = False
 
         if result is None and request.api_key and is_live_failure(error_msg):
-            return _finalize_run_response(
+            return finalize_run_response(
                 build_empty_live_failure_response(
                     request.query,
                     error_msg or "Live analysis failed.",
@@ -703,6 +643,7 @@ async def analyze_query_v2(request: AnalyzeRequest):
                 ),
                 request,
                 run_id,
+                PROVIDERS,
             )
 
         if result is None:
@@ -720,7 +661,7 @@ async def analyze_query_v2(request: AnalyzeRequest):
             scenario_override=request.scenario_override,
         )
         resp.error = error_msg if is_demo and request.api_key else None
-        return _finalize_run_response(resp, request, run_id)
+        return finalize_run_response(resp, request, run_id, PROVIDERS)
 
     except Exception as e:
         import traceback
@@ -817,7 +758,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                         is_demo=False,
                         scenario_override=request.scenario_override,
                     )
-                    resp = _finalize_run_response(resp, request, run_id)
+                    resp = finalize_run_response(resp, request, run_id, PROVIDERS)
                     eq.put({"type": "done", "is_demo": False, "data": resp.model_dump(mode="json")})
                 elif request.api_key and is_live_failure(error_msg):
                     resp = build_empty_live_failure_response(
@@ -825,7 +766,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                         error_msg or "Live analysis failed.",
                         scenario_override=request.scenario_override,
                     )
-                    resp = _finalize_run_response(resp, request, run_id)
+                    resp = finalize_run_response(resp, request, run_id, PROVIDERS)
                     eq.put(
                         {
                             "type": "done",
@@ -844,7 +785,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                         demo_topic=demo_topic,
                         scenario_override=request.scenario_override,
                     )
-                    resp = _finalize_run_response(resp, request, run_id)
+                    resp = finalize_run_response(resp, request, run_id, PROVIDERS)
                     eq.put(
                         {
                             "type": "done",

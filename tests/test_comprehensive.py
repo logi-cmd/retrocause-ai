@@ -1226,12 +1226,16 @@ def test_api_provider_preflight_classification_is_extracted():
     provider_preflight_source = (
         REPO_ROOT / "retrocause" / "api" / "provider_preflight.py"
     ).read_text(encoding="utf-8")
+    analysis_execution_source = (
+        REPO_ROOT / "retrocause" / "api" / "analysis_execution.py"
+    ).read_text(encoding="utf-8")
 
     assert "from retrocause.api.provider_preflight import" in api_source
     assert "is_live_failure" in api_source
-    assert "resolve_provider_model" in api_source
+    assert "resolve_provider_model" not in api_source
     assert "classify_preflight_failure_code" not in api_source
     assert "preflight_user_action" not in api_source
+    assert "resolve_provider_model" in analysis_execution_source
     assert "classify_preflight_failure_code" in provider_route_source
     assert "preflight_user_action" in provider_route_source
     assert "def _preflight_failure_code" not in api_source
@@ -1266,10 +1270,14 @@ def test_api_saved_run_persistence_is_extracted():
     run_store_source = (REPO_ROOT / "retrocause" / "api" / "run_store.py").read_text(
         encoding="utf-8"
     )
+    run_finalization_source = (
+        REPO_ROOT / "retrocause" / "api" / "run_finalization.py"
+    ).read_text(encoding="utf-8")
 
     assert "from retrocause.api.run_store import" in api_source
     assert "create_run_id" in api_source
-    assert "persist_saved_run_payload" in api_source
+    assert "persist_saved_run_payload" not in api_source
+    assert "persist_saved_run_payload" in run_finalization_source
     assert "load_saved_run_records" not in api_source
     assert "load_saved_run_records" in run_route_source
     assert "def _create_run_id" not in api_source
@@ -1287,10 +1295,15 @@ def test_api_run_metadata_assembly_is_extracted():
     run_metadata_source = (
         REPO_ROOT / "retrocause" / "api" / "run_metadata.py"
     ).read_text(encoding="utf-8")
+    run_finalization_source = (
+        REPO_ROOT / "retrocause" / "api" / "run_finalization.py"
+    ).read_text(encoding="utf-8")
 
-    assert "from retrocause.api.run_metadata import" in api_source
-    assert "build_run_step_payloads" in api_source
-    assert "build_usage_ledger_payloads" in api_source
+    assert "from retrocause.api.run_metadata import" not in api_source
+    assert "build_run_step_payloads" not in api_source
+    assert "build_usage_ledger_payloads" not in api_source
+    assert "build_run_step_payloads" in run_finalization_source
+    assert "build_usage_ledger_payloads" in run_finalization_source
     assert "def _run_step" not in api_source
     assert "def _build_run_steps" not in api_source
     assert "def _quota_owner_for_source" not in api_source
@@ -1298,6 +1311,20 @@ def test_api_run_metadata_assembly_is_extracted():
     assert "def build_run_step_payloads" in run_metadata_source
     assert "def build_usage_ledger_payloads" in run_metadata_source
     assert "def quota_owner_for_source_payload" in run_metadata_source
+
+
+def test_api_run_finalization_is_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    run_finalization_source = (
+        REPO_ROOT / "retrocause" / "api" / "run_finalization.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from retrocause.api.run_finalization import" in api_source
+    assert "finalize_run_response" in api_source
+    assert "def _finalize_run_response" not in api_source
+    assert "def _write_saved_run_response" not in api_source
+    assert "def finalize_run_response" in run_finalization_source
+    assert "persist_saved_run_payload" in run_finalization_source
 
 
 def test_api_live_failure_response_builder_is_extracted():

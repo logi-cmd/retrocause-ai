@@ -3443,3 +3443,32 @@ Full verification:
 Guardrails:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
 - Non-blocking warnings: the slice spans 4 top-level areas (`.agent-guardrails`, `docs`, `retrocause`, `tests`), and `docs/PROJECT_STATE.md` was updated. Both are expected for this maintenance slice because it includes a backend extraction, structural tests, docs synchronization, and guardrails evidence.
+
+## Run Finalization Extraction
+
+Scope:
+- Extracted V2 run finalization into `retrocause/api/run_finalization.py`.
+- Updated `retrocause/api/main.py` to call `finalize_run_response(...)` for normal V2, partial-live failure, and streaming completion paths.
+- Updated structural tests and maintenance docs so the API module map remains current.
+
+Verification:
+- RED: `python -m pytest tests\test_comprehensive.py::test_api_run_finalization_is_extracted -q --basetemp=.pytest-tmp` failed because `retrocause/api/run_finalization.py` did not exist yet.
+- GREEN/focused regression: `python -m pytest tests\test_comprehensive.py::test_api_run_finalization_is_extracted tests\test_comprehensive.py::test_run_orchestration_metadata_and_saved_run_round_trip tests\test_comprehensive.py::test_analyze_query_v2_returns_partial_live_instead_of_demo_on_live_failure -q --basetemp=.pytest-tmp` passed.
+- Lint: `python -m ruff check retrocause\api\main.py retrocause\api\run_finalization.py tests\test_comprehensive.py` passed.
+
+Risk notes:
+- Security/auth/secrets: no API-key handling behavior changed; finalization only receives the request object to mark usage ledger ownership and does not store the key.
+- Dependencies: no package or lockfile changes.
+- Performance/latency: no extra IO beyond the existing saved-run persistence; the same two-write saved-step behavior is preserved.
+- Understanding tradeoff: the new module centralizes run status, usage ledger, and saved-run final writeback so route handlers remain orchestration-focused.
+- Continuity: reused existing `run_metadata`, `run_store`, and `provider_preflight` helpers; no deliberate behavior break.
+- Debug note: the first full `npm test` after extraction failed in pytest because three structural tests still expected `main.py` to import provider/run-store/run-metadata helpers directly. Root cause was stale test ownership assertions after moving those dependencies behind `analysis_execution.py` and `run_finalization.py`; no runtime behavior failure was indicated. The structural assertions were updated to check the new owner modules.
+- Focused fix verification: `python -m pytest tests\test_comprehensive.py::test_api_provider_preflight_classification_is_extracted tests\test_comprehensive.py::test_api_saved_run_persistence_is_extracted tests\test_comprehensive.py::test_api_run_metadata_assembly_is_extracted tests\test_comprehensive.py::test_api_run_finalization_is_extracted -q --basetemp=.pytest-tmp` passed.
+
+Full verification:
+- `npm test` completed with exit code 0 after updating the structural ownership tests.
+- Included frontend lint/build, `python -m ruff check retrocause/`, full pytest (`283 passed`), and browser E2E (`608 PASS, 0 FAIL, 0 SKIP`).
+
+Guardrails:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings: the slice spans 4 top-level areas (`.agent-guardrails`, `docs`, `retrocause`, `tests`), and `docs/PROJECT_STATE.md` was updated. Both are expected for this maintenance slice because it includes a backend extraction, structural tests, docs synchronization, and guardrails evidence.
