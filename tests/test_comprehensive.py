@@ -1203,6 +1203,21 @@ def test_api_markdown_brief_builder_is_extracted():
     assert "def markdown_bullet" in brief_source
 
 
+def test_api_production_scenario_detection_is_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    scenario_source = (REPO_ROOT / "retrocause" / "api" / "scenarios.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "from retrocause.api.scenarios import" in api_source
+    assert "detect_production_scenario_payload" in api_source
+    assert "PRODUCTION_SCENARIOS" not in api_source
+    assert "SCENARIO_SIGNALS" not in api_source
+    assert "def detect_production_scenario_payload" in scenario_source
+    assert "PRODUCTION_SCENARIOS" in scenario_source
+    assert "SCENARIO_SIGNALS" in scenario_source
+
+
 def test_legacy_canvas_graph_uses_shared_red_string_path_builder():
     legacy_graph_source = (
         REPO_ROOT / "frontend" / "src" / "components" / "canvas" / "CausalGraphView.tsx"

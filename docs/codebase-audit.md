@@ -105,9 +105,9 @@ Recommendation: keep `page.tsx` plus `frontend/src/lib/sticky-card.tsx` / `stick
 
 ### 3. Backend API assembly is too concentrated
 
-Current size: `retrocause/api/main.py` is still about 84 KB and 2,300+ lines after extracting timeout/runtime execution to `retrocause/api/runtime.py` and Markdown research brief generation to `retrocause/api/briefs.py`.
+Current size: `retrocause/api/main.py` is still large after extracting timeout/runtime execution to `retrocause/api/runtime.py`, Markdown research brief generation to `retrocause/api/briefs.py`, and production scenario metadata/keyword scoring to `retrocause/api/scenarios.py`.
 
-It contains request/response models, scenario detection, V2 conversion, analysis brief builder, production brief builder, product harness, saved-run persistence, uploaded evidence, provider preflight, and streaming. Timeout/runtime execution now lives in `retrocause/api/runtime.py`, and Markdown research brief text generation now lives in `retrocause/api/briefs.py`.
+It contains request/response models, V2 conversion, analysis brief builder, production brief builder, product harness, saved-run persistence, uploaded evidence, provider preflight, and streaming. Timeout/runtime execution now lives in `retrocause/api/runtime.py`, Markdown research brief text generation now lives in `retrocause/api/briefs.py`, and production scenario detection metadata now lives in `retrocause/api/scenarios.py`.
 
 Risk:
 

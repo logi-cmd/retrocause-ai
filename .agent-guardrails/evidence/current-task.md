@@ -2934,3 +2934,58 @@ Updated residual risks:
 Final guardrails for this slice:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` -> passed, trust score 90/100, safe-to-deploy classification, no blocking errors.
 - Nonblocking warnings: the diff spans five top-level areas and updates `docs/PROJECT_STATE.md`; this is expected because the user explicitly requested code and docs be kept synchronized during maintainability cleanup.
+
+## 2026-04-18 production scenario helper extraction
+
+Scope:
+- Continued backend maintainability cleanup from `docs/codebase-audit.md`.
+- Added a RED static test requiring production scenario metadata and keyword scoring to live outside `retrocause/api/main.py`.
+- Added `retrocause/api/scenarios.py` with `ProductionScenarioPayload`, `PRODUCTION_SCENARIOS`, `SCENARIO_SIGNALS`, and `detect_production_scenario_payload`.
+- Updated `retrocause/api/main.py` so `_detect_production_scenario` only adapts the pure payload into the existing Pydantic `ScenarioV2` response model.
+- Updated `docs/PROJECT_STATE.md` and `docs/codebase-audit.md` to reflect the new backend split and remaining route-module risks.
+
+TDD notes:
+- `python -m pytest tests\test_comprehensive.py::test_api_production_scenario_detection_is_extracted -q --basetemp=.pytest-tmp` failed first because `retrocause/api/scenarios.py` did not exist.
+- After implementation, the extraction test plus existing market/policy/postmortem/override behavior tests passed.
+
+Commands run so far:
+- `python -m pytest tests\test_comprehensive.py::test_api_production_scenario_detection_is_extracted -q --basetemp=.pytest-tmp` -> failed as expected in RED state.
+- `python -m pytest tests\test_comprehensive.py::test_api_production_scenario_detection_is_extracted tests\test_comprehensive.py::test_detects_market_production_scenario tests\test_comprehensive.py::test_detects_policy_geopolitics_production_scenario tests\test_comprehensive.py::test_detects_postmortem_production_scenario tests\test_comprehensive.py::test_scenario_override_wins_over_auto_detection -q --basetemp=.pytest-tmp` -> passed.
+
+Security / sensitive data:
+- No auth, permissions, API-key storage, secrets, or sensitive-data paths changed.
+
+Dependency impact:
+- No new or upgraded packages and no lockfile changes.
+
+Performance / load impact:
+- Scenario detection remains a small in-process keyword scan over fixed lists; no new I/O, network calls, persistence, or concurrency changes.
+
+Understanding / tradeoffs:
+- This deliberately keeps the Pydantic API model in `main.py` for now to avoid a broad schema migration in the same slice.
+- The extracted module is pure metadata/scoring, so future scenario keyword or label updates no longer require editing the route module.
+
+Continuity and reuse:
+- Preserved `_detect_production_scenario` as the existing internal adapter so current tests and route assembly keep the same call shape.
+- No public API, UI, README first-run behavior, or model behavior changed.
+
+Residual risks / next work:
+- `retrocause/api/main.py` still owns schemas, V2 conversion, analysis brief builders, production brief builders, harness logic, saved runs, uploaded evidence, preflight, and streaming.
+- Recommended next backend slices remain schemas, brief builders, and harness checks.
+
+### Final verification update
+
+- `npm test`: passed after the production-scenario helper extraction.
+  - Frontend lint/build passed.
+  - `ruff check retrocause/`: passed.
+  - Full pytest passed: 269 tests.
+  - Browser E2E passed: 608 pass / 0 fail / 0 skip.
+- Residual risk: this is a maintainability-only extraction; behavior is covered by focused scenario tests plus the full regression suite, but future production-scenario additions should be made in `retrocause/api/scenarios.py` rather than re-growing `retrocause/api/main.py`.
+
+### Guardrails final result
+
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`: passed with score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings:
+  - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
+  - `docs/PROJECT_STATE.md` was updated as a state file.
+- Risk disposition: both warnings are expected for this maintenance slice because the helper extraction intentionally pairs backend code, regression coverage, and synchronized docs/evidence. No blocking guardrails errors were reported.

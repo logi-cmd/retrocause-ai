@@ -24,6 +24,7 @@ from retrocause.api.briefs import (
     humanize_identifier as _humanize_identifier,
 )
 from retrocause.api.runtime import TimeoutError, run_with_timeout
+from retrocause.api.scenarios import detect_production_scenario_payload
 from retrocause.models import AnalysisResult
 
 logger = logging.getLogger(__name__)
@@ -442,89 +443,19 @@ class AnalyzeResponse(BaseModel):
     time_range: Optional[str] = None
 
 
-def _scenario_from_key(key: str, confidence: float, detection_method: str) -> ScenarioV2:
-    labels = {
-        "market": "Market / Investment Brief",
-        "policy_geopolitics": "Policy / Geopolitics Brief",
-        "postmortem": "Postmortem Brief",
-        "general": "General Causal Brief",
-    }
-    values = {
-        "market": (
-            "Helps users inspect market-moving factors, evidence freshness, "
-            "and trade/research risks."
-        ),
-        "policy_geopolitics": (
-            "Helps users inspect policy or geopolitical drivers, source reliability, "
-            "and negotiation constraints."
-        ),
-        "postmortem": (
-            "Helps teams inspect incident, product, or business causes and the evidence "
-            "needed before action."
-        ),
-        "general": "Helps users inspect likely causes, evidence, counterpoints, and gaps.",
-    }
-    normalized_key = key if key in labels else "general"
-    bounded_confidence = max(0.0, min(1.0, confidence))
-    return ScenarioV2(
-        key=normalized_key,
-        label=labels[normalized_key],
-        confidence=bounded_confidence,
-        detection_method=detection_method,
-        user_value=values[normalized_key],
-    )
-
-
 def _detect_production_scenario(
     query: str,
     domain: str = "general",
     override: Optional[str] = None,
 ) -> ScenarioV2:
-    valid = {"market", "policy_geopolitics", "postmortem", "general"}
-    if override in valid:
-        return _scenario_from_key(override, 1.0, "override")
-
-    normalized = f"{query} {domain}".lower()
-    signals = {
-        "market": [
-            "market",
-            "stock",
-            "bitcoin",
-            "crypto",
-            "price",
-            "yield",
-            "rate",
-            "earnings",
-            "etf",
-        ],
-        "policy_geopolitics": [
-            "policy",
-            "sanction",
-            "talks",
-            "ceasefire",
-            "negotiation",
-            "election",
-            "treaty",
-            "war",
-        ],
-        "postmortem": [
-            "our",
-            "incident",
-            "outage",
-            "conversion",
-            "release",
-            "churn",
-            "customer",
-            "retention",
-        ],
-    }
-    scored = {
-        key: sum(1 for token in tokens if token in normalized) for key, tokens in signals.items()
-    }
-    key, count = max(scored.items(), key=lambda item: item[1])
-    if count <= 0:
-        return _scenario_from_key("general", 0.35, "auto")
-    return _scenario_from_key(key, min(0.95, 0.45 + count * 0.15), "auto")
+    payload = detect_production_scenario_payload(query, domain=domain, override=override)
+    return ScenarioV2(
+        key=payload.key,
+        label=payload.label,
+        confidence=payload.confidence,
+        detection_method=payload.detection_method,
+        user_value=payload.user_value,
+    )
 
 
 def _derive_partial_live_reasons(result: AnalysisResult) -> List[str]:
