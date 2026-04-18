@@ -3502,3 +3502,25 @@ Full verification:
 Guardrails:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
 - Non-blocking warnings: the slice spans 4 top-level areas (`.agent-guardrails`, `docs`, `retrocause`, `tests`), and `docs/PROJECT_STATE.md` was updated. Both are expected for this maintenance slice because it includes a backend extraction, structural tests, docs synchronization, and guardrails evidence.
+
+## Chinese A-share Homepage Sample
+
+Scope:
+- Added a homepage sample query button for `芯原股份今天盘中为什么下跌？`.
+- The sample fills the query textarea and switches the scenario override to `market`, making the Chinese A-share intraday path discoverable without implying any hosted Pro capability.
+- Added bilingual i18n copy, README guidance, project-state notes, a structural regression test, and browser E2E checks for the sample.
+
+Verification:
+- RED: `python -m pytest tests\test_comprehensive.py -q -k chinese_a_share_market_sample --basetemp=.pytest-tmp` failed because `sample-a-share-query` did not exist yet.
+- GREEN: `python -m pytest tests\test_comprehensive.py -q -k chinese_a_share_market_sample --basetemp=.pytest-tmp` passed after adding the sample button, i18n copy, and E2E assertions.
+- Required full verification: `npm test` completed with exit code 0. It included frontend lint/build, `python -m ruff check retrocause/`, full pytest (`285 passed`), and browser E2E (`612 PASS, 0 FAIL, 0 SKIP`).
+
+Risk notes:
+- Security/auth/secrets: no API-key handling, auth, permissions, storage, or secret paths changed.
+- Dependencies: no package or lockfile changes.
+- Runtime behavior: the new button only mutates local UI state before submission; backend routing behavior is unchanged and remains covered by existing query-routing tests.
+- Product boundary: this is an OSS local inspectability/onboarding affordance, not hosted storage, Pro workflow, or paid infrastructure.
+- Residual risk: a true live Chinese finance run with real provider/search keys remains unverified; this slice only makes the intended query path easier to exercise and tests the browser wiring.
+Final guardrails after committing this slice:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings: the slice spans 6 top-level areas because it intentionally includes UI, i18n, E2E, tests, README, project-state docs, and guardrails evidence; `docs/PROJECT_STATE.md` changed because the user-visible homepage behavior changed and project documentation must stay synchronized.

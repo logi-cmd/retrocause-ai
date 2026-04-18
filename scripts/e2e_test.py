@@ -534,6 +534,24 @@ else:
             else:
                 skip("UI chain compare mock stream", "backend did not provide a 2-chain fixture")
 
+            sample_query = page.locator("[data-testid='sample-a-share-query']").first
+            check("UI A-share sample query visible", sample_query.count() > 0)
+            if sample_query.count() > 0:
+                sample_query.click()
+                check(
+                    "UI A-share sample fills Chinese company anchor",
+                    "芯原股份" in textarea.input_value(),
+                    f"textarea value was {textarea.input_value()!r}",
+                )
+                scenario_selector = page.locator("[data-testid='scenario-selector']").first
+                check("UI scenario selector found", scenario_selector.count() > 0)
+                if scenario_selector.count() > 0:
+                    check(
+                        "UI A-share sample selects market scenario",
+                        scenario_selector.input_value() == "market",
+                        f"scenario was {scenario_selector.input_value()!r}",
+                    )
+
             textarea.fill("Why did dinosaurs go extinct?")
 
             submit = page.locator("button:has-text('Analyze')").first

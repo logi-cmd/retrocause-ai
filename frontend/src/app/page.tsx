@@ -1797,6 +1797,17 @@ export default function Home() {
               boxShadow: "inset 0 1px 0 rgba(255,255,255,0.78)",
             }}
           />
+          <button
+            type="button"
+            className="sample-query-button"
+            data-testid="sample-a-share-query"
+            onClick={() => {
+              setCurrentQuery("芯原股份今天盘中为什么下跌？");
+              setScenarioOverride("market");
+            }}
+          >
+            {t("query.sampleAshare")}
+          </button>
           <div className="compact-label" style={{ marginTop: "10px" }}>
             {locale === "en" ? "Use case" : "\u4f7f\u7528\u573a\u666f"}
           </div>
@@ -2948,6 +2959,30 @@ export default function Home() {
         .analyst-input:focus {
           border-color: rgba(49, 95, 131, 0.42) !important;
           box-shadow: 0 0 0 3px rgba(49, 95, 131, 0.10), inset 0 1px 0 rgba(255,255,255,0.78);
+        }
+
+        .sample-query-button {
+          display: inline-flex;
+          align-items: center;
+          margin-top: 8px;
+          max-width: 100%;
+          border: 1px solid rgba(49, 95, 131, 0.24);
+          border-radius: 8px;
+          padding: 7px 10px;
+          background: rgba(255,255,255,0.64);
+          color: var(--analyst-ink);
+          font-family: var(--font-sans), sans-serif;
+          font-size: 0.68rem;
+          line-height: 1.35;
+          text-align: left;
+          cursor: pointer;
+          transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+        }
+
+        .sample-query-button:hover {
+          border-color: rgba(49, 95, 131, 0.42);
+          background: rgba(255,255,255,0.86);
+          transform: translateY(-1px);
         }
 
         .analyst-input {

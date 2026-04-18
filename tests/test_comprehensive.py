@@ -153,6 +153,26 @@ def test_frontend_and_e2e_expose_pro_workflow_slices():
     assert "source-trace-status" in e2e_source
 
 
+def test_frontend_exposes_chinese_a_share_market_sample():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    en_source = (REPO_ROOT / "frontend" / "src" / "lib" / "i18n" / "en.ts").read_text(
+        encoding="utf-8"
+    )
+    zh_source = (REPO_ROOT / "frontend" / "src" / "lib" / "i18n" / "zh.ts").read_text(
+        encoding="utf-8"
+    )
+    e2e_source = (REPO_ROOT / "scripts" / "e2e_test.py").read_text(encoding="utf-8")
+
+    assert 'data-testid="sample-a-share-query"' in page_source
+    assert "setScenarioOverride(\"market\")" in page_source
+    assert "芯原股份今天盘中为什么下跌" in page_source
+    assert "query.sampleAshare" in en_source
+    assert "query.sampleAshare" in zh_source
+    assert "sample-a-share-query" in e2e_source
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # 1. Demo topic 覆盖测试
 # ═══════════════════════════════════════════════════════════════════════════════

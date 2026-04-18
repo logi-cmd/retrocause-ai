@@ -234,6 +234,7 @@ const en: TranslationDict = {
   "debate.phaseLabel": "Phase",
   "query.label": "Causal Query",
   "query.placeholderExample": "For example: Why did this stock crash? Why did churn increase?",
+  "query.sampleAshare": "Try Chinese A-share: why did VeriSilicon fall intraday today?",
   "query.helper": "Ask a causal question — RetroCause will generate an evidence-backed explanation chain.",
   "query.submit": "Start Analysis",
   "query.model": "Model / Provider",

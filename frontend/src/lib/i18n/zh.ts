@@ -234,6 +234,7 @@ const zh = {
   "debate.phaseLabel": "阶段",
   "query.label": "因果查询",
   "query.placeholderExample": "例如：为什么某股票暴跌？为什么用户流失上升？",
+  "query.sampleAshare": "试试：芯原股份今天盘中为什么下跌？",
   "query.helper": "询问因果 — RetroCause 会生成证据支撑的解释链",
   "query.submit": "开始分析",
   "query.model": "模型 / 提供商",

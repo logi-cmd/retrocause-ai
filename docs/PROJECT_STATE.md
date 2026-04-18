@@ -39,7 +39,7 @@ What is not done:
 
 ## Current Focus
 
-Stabilize the published `v0.1.0-alpha.5` OSS prerelease from real user feedback. The current quality pass has addressed the first mobile/source-trace regressions locally, started backend route-module extraction, and made the homepage evidence board the canonical graph/card path while keeping older canvas components as legacy secondary surfaces. The next work should focus on README first-run validation, live Chinese finance query behavior with real provider/search keys, and continued maintainability cleanup around remaining legacy canvas layout/state logic plus the large API route module.
+Stabilize the published `v0.1.0-alpha.5` OSS prerelease from real user feedback. The current quality pass has addressed the first mobile/source-trace regressions locally, started backend route-module extraction, made the homepage evidence board the canonical graph/card path while keeping older canvas components as legacy secondary surfaces, and added a homepage Chinese A-share intraday sample that fills `芯原股份今天盘中为什么下跌？` while selecting the Market scenario. The next work should focus on README first-run validation, live Chinese finance query behavior with real provider/search keys, and continued maintainability cleanup around remaining legacy canvas layout/state logic plus the large API route module.
 
 Current UX focus: keep the OSS version useful and inspectable before adding more Pro behavior. Validate the general Production Brief Harness across real market, policy/geopolitics, postmortem, and Chinese finance questions. Future Pro workflow depth should be designed after OSS stabilization and should be a separate full-stack Rust rewrite rather than an incremental hosted extension of this alpha codebase.
 
@@ -112,13 +112,14 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Started backend maintainability cleanup by moving the API timeout helper into `retrocause/api/runtime.py`, leaving `retrocause/api/main.py` focused slightly more on routes and response assembly.
 - Moved Markdown research brief text generation into `retrocause/api/briefs.py` and made legacy `CausalGraphView` reuse the shared sticky-card renderer and sticky graph red-string path builder.
 - Hardened the browser E2E harness by avoiding `networkidle` waits for a page with background requests, reporting 500 resource URLs in console-health failures, and cleaning up Windows `npm`/`next` process trees after autostart.
+- Added a homepage Chinese A-share intraday sample query for `芯原股份今天盘中为什么下跌？`; the browser now dogfoods that the sample preserves the company anchor and selects the Market scenario before submission.
 
 ## Known Gaps
 
 - The OSS product can now export a Markdown research brief, show retrieval-health states, reopen local saved runs, has a clean bilingual README, and passes a clean-copy install/test smoke. The brief format still needs real-user polish across more live domains.
 - Degraded-source states now have deterministic API/brief regression coverage plus browser-level source-trace dogfood for representative rate-limited/cached rows; wider visual QA across all bad-path states remains useful.
 - Direct monetization design should be deferred until OSS is solid; future Pro should be revisited as a full-stack Rust architecture rather than incremental hosted work in the current alpha stack.
-- A true live Chinese finance run with real provider/search keys still needs verification after the anchor-preservation fix.
+- A true live Chinese finance run with real provider/search keys still needs verification after the anchor-preservation fix; the homepage now has a guarded sample entry for this query path, but live source quality is still unverified without real keys.
 - The API route module is still large even after the schema, uploaded-evidence route, saved-run route, provider route/preflight, live-failure V2 response, retrieval-trace V2 conversion, timeout, Markdown-brief, structured-analysis-brief, production-brief, production/product harness, production-scenario, provider-preflight, saved-run, and run-metadata helper extractions; streaming and the remaining main result-to-V2 conversion remain backend split candidates.
 - Legacy canvas layout/state logic remains separate from the canonical homepage evidence board, but sticky-card rendering and red-string path math now reuse shared modules.
 

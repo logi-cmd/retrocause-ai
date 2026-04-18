@@ -128,9 +128,10 @@ Example questions:
 2. Paste your OpenRouter or OpenAI-compatible API key.
 3. Click **Run model preflight**.
 4. Choose **Auto detect**, **Market / Investment**, **Policy / Geopolitics**, or **Postmortem**.
-5. If preflight passes, click **Start analysis**.
-6. Inspect the production brief, analysis brief, source trace, challenge coverage, and value harness before trusting the result.
-7. Use **Copy report** to export the Markdown research brief.
+5. For a Chinese A-share smoke test, click the sample query for `芯原股份今天盘中为什么下跌？`; it fills the query and selects **Market / Investment**.
+6. If preflight passes, click **Start analysis**.
+7. Inspect the production brief, analysis brief, source trace, challenge coverage, and value harness before trusting the result.
+8. Use **Copy report** to export the Markdown research brief.
 
 步骤：
 
@@ -280,6 +281,7 @@ This runs:
 RetroCause is useful when a user needs to explain an event and inspect the reasoning path:
 
 - market or policy event explanations
+- Chinese A-share intraday questions such as `芯原股份今天盘中为什么下跌？`
 - geopolitical/news causal briefings
 - company or competitor postmortems
 - research demos for evidence-grounded explanation UX
