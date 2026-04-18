@@ -70,9 +70,9 @@ Decision after this audit: the browser evidence board started by `python start.p
 
 ### 1. `frontend/src/app/page.tsx` is the biggest risk
 
-Current size after the source-trace, evidence-formatting, production-brief, saved-runs, uploaded-evidence, source-trace-panel, readable-brief-panel, source-progress-panel, and challenge-coverage-panel refactor slices: about 143 KB and 3,700 lines. API response/UI state types now live in `frontend/src/lib/api-types.ts`, source-trace status/source-kind/source-stability label helpers now live in `frontend/src/lib/source-trace.ts`, the rendered source trace list now lives in `frontend/src/lib/source-trace-panel.tsx`, readable brief/manual-copy/source-health rendering now lives in `frontend/src/lib/readable-brief-panel.tsx`, partial-live reason and in-flight retrieval progress rendering now lives in `frontend/src/lib/source-progress-panel.tsx`, challenge/refutation coverage rendering now lives in `frontend/src/lib/challenge-coverage-panel.tsx`, evidence quality/freshness/badge/refutation formatting helpers now live in `frontend/src/lib/evidence-formatting.ts`, the production brief card now lives in `frontend/src/lib/production-brief-panel.tsx`, the saved-runs panel now lives in `frontend/src/lib/saved-runs-panel.tsx`, and the uploaded-evidence panel now lives in `frontend/src/lib/uploaded-evidence-panel.tsx`.
+Current size after the source-trace, evidence-formatting, production-brief, saved-runs, uploaded-evidence, source-trace-panel, readable-brief-panel, source-progress-panel, challenge-coverage-panel, evidence-filter-panel, sticky-card, and sticky-graph-layout refactor slices: about 124 KB and 3,195 lines. API response/UI state types now live in `frontend/src/lib/api-types.ts`, source-trace status/source-kind/source-stability label helpers now live in `frontend/src/lib/source-trace.ts`, the rendered source trace list now lives in `frontend/src/lib/source-trace-panel.tsx`, readable brief/manual-copy/source-health rendering now lives in `frontend/src/lib/readable-brief-panel.tsx`, partial-live reason and in-flight retrieval progress rendering now lives in `frontend/src/lib/source-progress-panel.tsx`, challenge/refutation coverage rendering now lives in `frontend/src/lib/challenge-coverage-panel.tsx`, related-evidence filter/list rendering now lives in `frontend/src/lib/evidence-filter-panel.tsx`, sticky note card rendering now lives in `frontend/src/lib/sticky-card.tsx`, sticky graph layout and red-string path math now live in `frontend/src/lib/sticky-graph-layout.ts`, evidence quality/freshness/badge/refutation formatting helpers now live in `frontend/src/lib/evidence-formatting.ts`, the production brief card now lives in `frontend/src/lib/production-brief-panel.tsx`, the saved-runs panel now lives in `frontend/src/lib/saved-runs-panel.tsx`, and the uploaded-evidence panel now lives in `frontend/src/lib/uploaded-evidence-panel.tsx`.
 
-It still contains localization helpers, panel layout, sticky-card graph layout, evidence filtering UI, query flow, and global CSS in one file.
+It still contains localization helpers, panel layout, query flow, and global CSS in one file.
 
 Risk:
 
@@ -83,7 +83,7 @@ Risk:
 Recommended cleanup sequence:
 
 1. Continue extracting pure formatting helpers from `page.tsx` into `frontend/src/lib/`. The source-trace static tests now follow `frontend/src/lib/source-trace.ts`, so future helper extraction should update tests to track the canonical helper module instead of forcing literals to remain in the homepage.
-2. Move evidence filters and sticky graph sections into focused components.
+2. Resolve duplicated graph/card implementation by deciding whether the homepage or `frontend/src/components/canvas/CausalGraphView.tsx` is canonical.
 3. Keep `page.tsx` as state orchestration only.
 
 ### 2. Duplicate frontend graph/card concepts
@@ -170,7 +170,7 @@ Recommendation: introduce shared test fixtures only after the next refactor targ
 
 ## Current Non-Code Cleanup Backlog
 
-1. Continue splitting `frontend/src/app/page.tsx` by product section, next targeting evidence filters and sticky graph sections.
+1. Continue splitting `frontend/src/app/page.tsx` by product section, next targeting duplicated graph/card implementation or the remaining homepage panel layout/query-flow split.
 2. Split `retrocause/api/main.py` by schema, brief builders, harnesses, and route handlers.
 3. Consolidate retrieval quality/fallback semantics around SourceBroker policy.
 4. Add adapter contract tests for source metadata consistency.

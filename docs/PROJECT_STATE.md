@@ -104,7 +104,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Published `v0.1.0-alpha.5` as a GitHub prerelease with local run metadata, saved runs, pasted uploaded evidence, degraded-source browser dogfood, README/Pro-boundary cleanup, and the Chinese A-share retrieval fix.
 - Completed a post-release full functionality QA pass: focused query/evidence pytest passed, root `npm test` passed, guardrails passed, desktop demo/API/local inspectability worked, and mobile/narrow viewport defects were recorded for the next stabilization pass.
 - Added `docs/INDEX.md` and `docs/codebase-audit.md` so maintainers have one documentation map plus a living audit of public surfaces, undocumented capabilities, similar-code hotspots, and cleanup priorities.
-- Began reducing the large Next.js homepage by moving API/UI types, source-trace formatting, evidence formatting, the production brief card, the saved-runs panel, the uploaded-evidence panel, the rendered source-trace list, the readable brief panel, the source progress panel, and the challenge coverage panel into focused `frontend/src/lib/` modules while keeping behavior covered by static tests and full `npm test`.
+- Began reducing the large Next.js homepage by moving API/UI types, source-trace formatting, evidence formatting, the production brief card, the saved-runs panel, the uploaded-evidence panel, the rendered source-trace list, the readable brief panel, the source progress panel, the challenge coverage panel, the evidence filter panel, sticky card rendering, and sticky graph layout/red-string path math into focused `frontend/src/lib/` modules while keeping behavior covered by static tests and full `npm test`.
 - Normalized several fragile Chinese homepage strings to Unicode escapes while extracting the source-trace panel, preventing Windows console encoding rewrites from turning localized copy into invalid TypeScript.
 
 ## Known Gaps
@@ -126,4 +126,4 @@ Start a new OSS stabilization task from the post-release QA findings:
 3. improve no-key/demo source-trace clarity so source-opaque results do not look more inspectable than they are
 4. rerun README first-run validation from a clean clone
 5. exercise a live Chinese finance query with real provider/search keys and record source quality
-6. continue the maintainability cleanup from `docs/codebase-audit.md`, next targeting evidence filters, sticky graph/card sections, or duplicated graph/card implementation before attempting broader backend API decomposition
+6. continue the maintainability cleanup from `docs/codebase-audit.md`, next targeting duplicated graph/card implementation or the remaining homepage panel layout/query-flow split before attempting broader backend API decomposition

@@ -26,7 +26,8 @@ development, but many flows depend on the local FastAPI backend.
 - `src/app/layout.tsx`: app shell metadata.
 - `src/lib/`: extracted homepage types, formatting helpers, and focused panels
   for source trace/progress, readable briefs, production briefs, saved runs,
-  uploaded evidence, and challenge coverage.
+  uploaded evidence, challenge coverage, related-evidence filtering, and sticky
+  note card/graph layout rendering.
 - `src/components/canvas/`: older/componentized graph and evidence views that
   still overlap with homepage concepts.
 - `UI_DESIGN_SPEC.md`: historical design direction. Treat it as design intent,
