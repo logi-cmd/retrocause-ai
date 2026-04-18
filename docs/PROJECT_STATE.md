@@ -28,7 +28,7 @@ What is done:
 - GitHub prerelease `v0.1.0-alpha.5`
 - SourceBroker reliability pass: source profiles, scenario/language/time-aware cache keys, degraded-source classification, API/brief/UI source-health status, and optional user-key Tavily/Brave adapters
 - lightweight local run workflow: `run_id`, run status/steps, source/provider usage ledger, saved-run endpoints/UI, and minimal pasted uploaded evidence stored as user-owned evidence
-- OSS stabilization follow-up: narrow-viewport panel controls are browser-tested, graph path layout guards against `NaN`, demo/no-key source trace absence is explicit, Markdown brief generation and API timeout runtime helpers have been split out of the large route module, and the legacy canvas graph now reuses the shared red-string path builder
+- OSS stabilization follow-up: narrow-viewport panel controls are browser-tested, graph path layout guards against `NaN`, demo/no-key source trace absence is explicit, Markdown brief generation and API timeout runtime helpers have been split out of the large route module, the legacy canvas graph now reuses the shared sticky-card renderer plus red-string path builder, and the E2E harness cleans up Windows frontend process trees while reporting 500 resource URLs
 
 What is not done:
 
@@ -39,7 +39,7 @@ What is not done:
 
 ## Current Focus
 
-Stabilize the published `v0.1.0-alpha.5` OSS prerelease from real user feedback. The current quality pass has addressed the first mobile/source-trace regressions locally, started backend route-module extraction, and made the homepage evidence board the canonical graph/card path while keeping older canvas components as legacy secondary surfaces. The next work should focus on README first-run validation, live Chinese finance query behavior with real provider/search keys, and continued maintainability cleanup around remaining duplicate canvas card rendering plus the large API route module.
+Stabilize the published `v0.1.0-alpha.5` OSS prerelease from real user feedback. The current quality pass has addressed the first mobile/source-trace regressions locally, started backend route-module extraction, and made the homepage evidence board the canonical graph/card path while keeping older canvas components as legacy secondary surfaces. The next work should focus on README first-run validation, live Chinese finance query behavior with real provider/search keys, and continued maintainability cleanup around remaining legacy canvas layout/state logic plus the large API route module.
 
 Current UX focus: keep the OSS version useful and inspectable before adding more Pro behavior. Validate the general Production Brief Harness across real market, policy/geopolitics, postmortem, and Chinese finance questions. Future Pro workflow depth should be designed after OSS stabilization and should be a separate full-stack Rust rewrite rather than an incremental hosted extension of this alpha codebase.
 
@@ -110,7 +110,8 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Added browser regression coverage for narrow viewport panel controls, fixed the mobile panel stacking/width issue, and hardened sticky graph layout/path generation against non-finite values that previously produced SVG `NaN` console errors.
 - Made empty demo/no-key source traces explicit in the browser UI instead of hiding the source-trace panel when `retrieval_trace=[]`.
 - Started backend maintainability cleanup by moving the API timeout helper into `retrocause/api/runtime.py`, leaving `retrocause/api/main.py` focused slightly more on routes and response assembly.
-- Moved Markdown research brief text generation into `retrocause/api/briefs.py` and made legacy `CausalGraphView` reuse the shared sticky graph red-string path builder.
+- Moved Markdown research brief text generation into `retrocause/api/briefs.py` and made legacy `CausalGraphView` reuse the shared sticky-card renderer and sticky graph red-string path builder.
+- Hardened the browser E2E harness by avoiding `networkidle` waits for a page with background requests, reporting 500 resource URLs in console-health failures, and cleaning up Windows `npm`/`next` process trees after autostart.
 
 ## Known Gaps
 
@@ -119,7 +120,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Direct monetization design should be deferred until OSS is solid; future Pro should be revisited as a full-stack Rust architecture rather than incremental hosted work in the current alpha stack.
 - A true live Chinese finance run with real provider/search keys still needs verification after the anchor-preservation fix.
 - The API route module is still very large even after the timeout and Markdown-brief helper extractions; schemas, analysis brief builders, production brief builders, and harness helpers remain candidates for later split.
-- Duplicate frontend sticky-card rendering remains between the canonical homepage evidence board and older legacy canvas component paths.
+- Legacy canvas layout/state logic remains separate from the canonical homepage evidence board, but sticky-card rendering and red-string path math now reuse shared modules.
 
 ## Next Step
 
@@ -127,5 +128,5 @@ Start a new OSS stabilization task from the post-release QA findings:
 
 1. rerun README first-run validation from a clean clone
 2. exercise a live Chinese finance query with real provider/search keys and record source quality
-3. continue the maintainability cleanup from `docs/codebase-audit.md`, next targeting legacy canvas sticky-card rendering or the remaining homepage panel layout/query-flow split
+3. continue the maintainability cleanup from `docs/codebase-audit.md`, next targeting legacy canvas layout/state retirement or the remaining homepage panel layout/query-flow split
 4. continue backend cleanup by moving schemas, analysis brief builders, production brief builders, and harness helpers out of `retrocause/api/main.py` in small verified slices

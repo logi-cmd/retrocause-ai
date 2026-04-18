@@ -66,7 +66,15 @@ def _start_process(args: list[str], cwd: Path) -> subprocess.Popen:
 def _cleanup_started_processes() -> None:
     for process in STARTED_PROCESSES:
         if process.poll() is None:
-            process.terminate()
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+            else:
+                process.terminate()
     time.sleep(0.5)
     for process in STARTED_PROCESSES:
         if process.poll() is None:
@@ -453,12 +461,21 @@ else:
         page.set_default_timeout(15_000)
         console_errors = []
         page_errors = []
+        failed_responses = []
         page.on("console", lambda msg: console_errors.append(msg) if msg.type == "error" else None)
         page.on("pageerror", lambda exc: page_errors.append(exc))
+        page.on(
+            "response",
+            lambda response: failed_responses.append(
+                {"status": response.status, "url": response.url}
+            )
+            if response.status >= 500
+            else None,
+        )
 
         # 11a: Initial load
         print("\n  --- 11a: Initial Load ---")
-        page.goto(FRONTEND, wait_until="networkidle")
+        page.goto(FRONTEND, wait_until="domcontentloaded")
         html = page.content()
         check("UI page loads", "<html" in html.lower())
 
@@ -822,7 +839,7 @@ else:
 
         # 11l: No console errors
         print("\n  --- 11l: Console Health ---")
-        page.reload(wait_until="networkidle")
+        page.reload(wait_until="domcontentloaded")
         time.sleep(2)
         critical_errors = [
             e
@@ -834,7 +851,8 @@ else:
             len(critical_errors) == 0 and len(page_errors) == 0,
             f"{len(critical_errors)} console errors, {len(page_errors)} page errors: "
             f"{[e.text[:80] for e in critical_errors[:3]]} "
-            f"{[str(e)[:80] for e in page_errors[:3]]}",
+            f"{[str(e)[:80] for e in page_errors[:3]]}; "
+            f"500s={failed_responses[:3]}",
         )
 
         browser.close()

@@ -23,7 +23,7 @@ const NOTE_DIMS: Record<StickyColor, [number, number]> = {
 
 export const CANVAS_HEADER_HEIGHT = 64;
 export const NOTE_TOP_SAFE_PX = 24;
-export const NOTE_BOTTOM_SAFE_PX = 42;
+export const NOTE_BOTTOM_SAFE_PX = 50;
 export const NOTE_VISUAL_HEIGHT_BUFFER = 14;
 export const PANEL_SAFE_LEFT_OPEN = 296;
 export const PANEL_SAFE_RIGHT_OPEN = 356;

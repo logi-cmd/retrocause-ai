@@ -2873,3 +2873,64 @@ Final guardrails after commit a2a1769:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` -> passed, trust score 90/100, safe-to-deploy classification, no blocking errors.
 - Nonblocking warnings: commit spans five top-level areas (`.agent-guardrails`, `docs`, `frontend`, `retrocause`, `tests`) and intentionally updates `docs/PROJECT_STATE.md`.
 - Rationale: the user requested both backend cleanup and frontend graph/card cleanup in sequence, with docs synchronized. Future follow-up should return to one module boundary per commit.
+
+## 2026-04-18 legacy canvas sticky-card convergence
+
+Scope:
+- Continued the frontend graph/card maintainability cleanup after making the homepage evidence board canonical.
+- Added a failing static test proving legacy `frontend/src/components/canvas/CausalGraphView.tsx` still carried its own sticky-card renderer.
+- Updated legacy `CausalGraphView` to import the canonical `StickyCard` / `StickyCardNote` from `frontend/src/lib/sticky-card.tsx` and map legacy `CausalNode` data through `toLegacyStickyNote`.
+- Kept the legacy component's position/drag/view-state logic in place for now; this slice only removed duplicate card rendering.
+- Updated `docs/PROJECT_STATE.md` and `docs/codebase-audit.md` so remaining risk is accurately narrowed to legacy layout/state logic rather than card/path rendering.
+
+TDD notes:
+- `python -m pytest tests\test_comprehensive.py::test_legacy_canvas_graph_uses_canonical_sticky_card_component -q --basetemp=.pytest-tmp` failed first because `CausalGraphView.tsx` did not import `@/lib/sticky-card` and still had local card rendering.
+- The same focused test passed after the implementation.
+
+Commands run:
+- `python -m pytest tests\test_comprehensive.py::test_legacy_canvas_graph_uses_canonical_sticky_card_component -q --basetemp=.pytest-tmp` -> failed as expected in RED state.
+- `python -m pytest tests\test_comprehensive.py::test_legacy_canvas_graph_uses_canonical_sticky_card_component tests\test_comprehensive.py::test_legacy_canvas_graph_uses_shared_red_string_path_builder -q --basetemp=.pytest-tmp` -> passed.
+- `npm --prefix frontend run lint` -> passed.
+
+Security / sensitive data:
+- No auth, permission, API-key storage, secret handling, or sensitive-data flow changed.
+
+Dependency impact:
+- No new packages, package upgrades, or lockfile changes.
+
+Performance / load impact:
+- Legacy canvas rendering now reuses an existing component and does not add network, persistence, or extra data work.
+- This affects a legacy secondary frontend surface, not the main homepage evidence board path.
+
+Understanding / tradeoffs:
+- The slice intentionally does not delete legacy canvas components yet. Deletion should happen only after confirming no planned secondary UI still imports them.
+- Remaining duplication is position/drag/view-state logic, not sticky-card rendering or red-string path math.
+
+Continuity and reuse:
+- Reused the canonical `frontend/src/lib/sticky-card.tsx` component and existing i18n labels.
+- No public API, main homepage route, or README first-run behavior changed.
+
+Residual risks / next work:
+- Legacy canvas still owns separate position/drag/view-switching state.
+- `retrocause/api/main.py` still needs schema, production brief, analysis brief, and harness splits.
+- README clean-clone first-run validation and live Chinese finance verification with real keys remain pending.
+
+Follow-up E2E hardening in the same slice:
+- Root cause while running full `npm test`: stale Windows `next start` child processes can outlive `npm.cmd`, then serve obsolete `_next/static/chunks/...css` after a later `next build`.
+- `scripts/e2e_test.py` now kills the process tree on Windows for autostarted services, uses `domcontentloaded` instead of fragile `networkidle` waits, and includes captured 500 response URLs in console-health failure details.
+- `frontend/src/lib/sticky-graph-layout.ts` increases `NOTE_BOTTOM_SAFE_PX` from 42 to 50 so rotated sticky cards keep the browser-tested compact bottom safe area after drag.
+
+Additional commands run:
+- `python scripts\e2e_test.py` -> initially failed before cleanup with stale `http://localhost:3005/_next/static/chunks/0rv.9yz8srvd8.css` 500s, confirming the stale Next process diagnosis.
+- Stopped the repo-owned stale `next start -p 3005` process, then `python scripts\e2e_test.py` -> passed, 608 PASS / 0 FAIL / 0 SKIP.
+- `npm test` -> failed once during E2E because an autostarted Windows child process was not cleaned up after the previous run and `networkidle` timed out.
+- After process-tree cleanup and `domcontentloaded` change, `python scripts\e2e_test.py` -> passed, 608 PASS / 0 FAIL / 0 SKIP.
+- Final `npm test` -> passed: frontend lint, frontend build, `ruff check retrocause/`, 268 pytest tests, and 608 E2E checks.
+
+Updated residual risks:
+- The harness now cleans up services it starts, but it still intentionally does not kill arbitrary pre-existing services unless the operator does so manually.
+- The legacy canvas still owns separate position/drag/view-switching state; the current slice only converges card rendering and improves drag safe-area behavior.
+
+Final guardrails for this slice:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` -> passed, trust score 90/100, safe-to-deploy classification, no blocking errors.
+- Nonblocking warnings: the diff spans five top-level areas and updates `docs/PROJECT_STATE.md`; this is expected because the user explicitly requested code and docs be kept synchronized during maintainability cleanup.

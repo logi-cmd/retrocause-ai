@@ -1214,6 +1214,19 @@ def test_legacy_canvas_graph_uses_shared_red_string_path_builder():
     assert "Legacy canvas view" in legacy_graph_source
 
 
+def test_legacy_canvas_graph_uses_canonical_sticky_card_component():
+    legacy_graph_source = (
+        REPO_ROOT / "frontend" / "src" / "components" / "canvas" / "CausalGraphView.tsx"
+    ).read_text(encoding="utf-8")
+
+    assert "@/lib/sticky-card" in legacy_graph_source
+    assert "StickyCardNote" in legacy_graph_source
+    assert "const StickyCard = ({" not in legacy_graph_source
+    assert "const PushpinSVG" not in legacy_graph_source
+    assert "TAG_COLORS" not in legacy_graph_source
+    assert "toLegacyStickyNote" in legacy_graph_source
+
+
 def test_frontend_localizes_source_trace_status():
     source_trace_source = (
         REPO_ROOT / "frontend" / "src" / "lib" / "source-trace.ts"

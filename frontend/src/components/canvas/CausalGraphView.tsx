@@ -3,6 +3,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { CausalNode, CausalEdge } from '@/data/mockData';
 import { useI18n, type TranslationKey } from '@/lib/i18n';
+import { StickyCard, type StickyCardNote } from '@/lib/sticky-card';
 import { buildEdgePath } from '@/lib/sticky-graph-layout';
 
 interface CausalGraphViewProps {
@@ -41,55 +42,13 @@ function getStickyRotation(nodeId: string): number {
   return STICKY_ROTATIONS[nodeId] ?? (Math.random() * 4 - 2);
 }
 
-const PushpinSVG = () => (
-  <svg 
-    viewBox="0 0 24 24" 
-    className="absolute" 
-    style={{ 
-      top: '-10px', 
-      left: '50%',
-      transform: 'translateX(-50%)',
-      width: '22px',
-      height: '22px',
-      zIndex: 20,
-      filter: 'drop-shadow(0 2px 3px rgba(80, 60, 40, 0.25))'
-    }}
-  >
-    <defs>
-      <linearGradient id="pinRed" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style={{ stopColor: '#d64545' }} />
-        <stop offset="100%" style={{ stopColor: '#a33030' }} />
-      </linearGradient>
-    </defs>
-    <circle cx="12" cy="8" r="6" fill="url(#pinRed)" />
-    <ellipse cx="10" cy="6" rx="2" ry="1.5" fill="rgba(255,255,255,0.35)" />
-    <rect x="11" y="13" width="2" height="8" fill="#b8a080" />
-  </svg>
-);
-
-const TAG_COLORS: Record<string, { bg: string; color: string }> = {
-  cause: { bg: 'rgba(196, 69, 54, 0.15)', color: '#943d30' },
-  effect: { bg: 'rgba(70, 130, 180, 0.15)', color: '#4a7a9e' },
-  evidence: { bg: 'rgba(100, 140, 90, 0.15)', color: '#5a7a52' },
-  mediator: { bg: 'rgba(180, 140, 80, 0.15)', color: '#8a6a40' },
-  factor: { bg: 'rgba(140, 100, 160, 0.15)', color: '#6a5080' },
-};
-
-const StickyCard = ({ 
-  node, 
-  rotation, 
-  isSelected, 
-  onSelect,
-  t,
-  cardWidth = 160
-}: { 
-  node: CausalNode; 
-  rotation: number;
-  isSelected: boolean;
-  onSelect?: () => void;
-  t: (key: TranslationKey) => string;
-  cardWidth?: number;
-}) => {
+function toLegacyStickyNote(
+  node: CausalNode,
+  position: NodePosition,
+  rotation: number,
+  t: (key: TranslationKey) => string,
+  cardWidth = CARD_WIDTH
+): StickyCardNote {
   const stickyColor = getStickyColor(node.id);
   const typeConfig = {
     outcome: { labelKey: 'graph.type.outcome' as TranslationKey, badgeKey: 'graph.badge.outcome' as TranslationKey, tag: 'effect' as const },
@@ -97,68 +56,21 @@ const StickyCard = ({
     intermediate: { labelKey: 'graph.type.intermediate' as TranslationKey, badgeKey: 'graph.badge.intermediate' as TranslationKey, tag: 'mediator' as const },
   };
   const config = typeConfig[node.type];
-  const tagStyle = TAG_COLORS[config.tag] || TAG_COLORS.evidence;
-  
-  return (
-    <div
-      className={`absolute cursor-pointer select-none transition-all duration-200 ${stickyColor}`}
-      style={{
-        width: `${cardWidth}px`,
-        padding: '22px 14px 14px 14px',
-        borderRadius: '2px',
-        boxShadow: isSelected 
-          ? '0 4px 12px rgba(80, 60, 40, 0.2)' 
-          : '0 3px 8px rgba(80, 60, 40, 0.15), 0 1px 3px rgba(80, 60, 40, 0.1)',
-        transform: `rotate(${rotation}deg)`,
-        transformOrigin: 'top center',
-        borderBottom: '3px solid rgba(180, 160, 120, 0.3)',
-      }}
-      onClick={onSelect}
-    >
-      <PushpinSVG />
-      
-      <div style={{ transform: `rotate(${-rotation}deg)` }}>
-        <div 
-          className="mb-1" 
-          style={{ 
-            fontFamily: "'Caveat', cursive", 
-            fontSize: '1.15rem', 
-            color: '#3d3225',
-            lineHeight: 1.2,
-            fontWeight: 600,
-          }}
-        >
-          {node.label}
-        </div>
-        <div 
-          className="text-xs uppercase tracking-wider mb-2 pb-1.5 border-b"
-          style={{ 
-            color: '#7a6b55',
-            borderColor: 'rgba(160, 140, 110, 0.3)',
-            fontSize: '0.6rem',
-            letterSpacing: '0.06em',
-          }}
-        >
-          {t(node.type === 'outcome' ? 'graph.type.outcome' : node.type === 'factor' ? 'graph.type.factor' : 'graph.type.intermediate')}
-        </div>
-        <div className="text-xs leading-relaxed mb-2" style={{ color: '#5c4a32' }}>
-          P: {node.probability}%
-        </div>
-        <span 
-          className="inline-block px-2 py-1 rounded text-xs font-semibold uppercase tracking-wide"
-          style={{ 
-            background: tagStyle.bg,
-            color: tagStyle.color,
-            fontSize: '0.55rem',
-            fontWeight: 600,
-          }}
-        >
-          {t(config.badgeKey)}
-        </span>
-      </div>
-    </div>
-  );
-};
+  return {
+    id: node.id,
+    title: node.label,
+    depth: 0,
+    detail: `${t(config.labelKey)} · P: ${node.probability ?? 0}%`,
+    tag: t(config.badgeKey),
+    tagClass: config.tag,
+    color: stickyColor,
+    top: position.y,
+    left: position.x,
+    rotate: rotation,
+    width: cardWidth,
+    height: 120,
+  };
+}
 
 const CARD_WIDTH = 160;
 
@@ -170,7 +82,6 @@ export default function CausalGraphView({ nodes, edges, selectedNodeId, onNodeSe
   const [positions, setPositions] = useState<NodePosition[]>([]);
   const [dragging, setDragging] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
@@ -203,18 +114,18 @@ export default function CausalGraphView({ nodes, edges, selectedNodeId, onNodeSe
     };
   }, []);
 
-  const handlePointerDown = useCallback((e: React.PointerEvent, nodeId: string) => {
+  const handleCardMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>, nodeId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    containerRef.current?.setPointerCapture(e.pointerId);
+    if (!containerRef.current) return;
 
+    const rect = containerRef.current.getBoundingClientRect();
     const pos = positions.find((p) => p.id === nodeId);
     if (pos) {
-      const { x, y } = getPointerPosition(e);
-      setDragOffset({ x: x - pos.x, y: y - pos.y });
+      setDragOffset({ x: e.clientX - rect.left - pos.x, y: e.clientY - rect.top - pos.y });
       setDragging(nodeId);
     }
-  }, [positions, getPointerPosition]);
+  }, [positions]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragging || !containerRef.current) return;
@@ -228,9 +139,8 @@ export default function CausalGraphView({ nodes, edges, selectedNodeId, onNodeSe
     );
   }, [dragging, dragOffset, getPointerPosition, containerSize]);
 
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+  const handlePointerUp = useCallback(() => {
     if (dragging) {
-      containerRef.current?.releasePointerCapture(e.pointerId);
       setDragging(null);
     }
   }, [dragging]);
@@ -307,31 +217,18 @@ export default function CausalGraphView({ nodes, edges, selectedNodeId, onNodeSe
         const node = nodes.find((n) => n.id === pos.id);
         if (!node) return null;
         const isDragging = dragging === node.id;
-        const isHovered = hoveredNode === node.id;
+        const note = toLegacyStickyNote(node, pos, rotations[node.id], t, CARD_WIDTH);
 
         return (
-          <div
+          <StickyCard
             key={node.id}
-            className="absolute"
-            style={{
-              left: pos.x,
-              top: pos.y,
-              zIndex: isDragging ? 50 : isHovered ? 20 : 10,
-              animation: `scaleIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards`,
-            }}
-            onPointerDown={(e) => handlePointerDown(e, node.id)}
-            onPointerEnter={() => setHoveredNode(node.id)}
-            onPointerLeave={() => setHoveredNode(null)}
-          >
-            <StickyCard
-              node={node}
-              rotation={rotations[node.id]}
-              isSelected={selectedNodeId === node.id}
-              onSelect={() => handleNodeClick(node.id)}
-              t={t}
-              cardWidth={CARD_WIDTH}
-            />
-          </div>
+            note={note}
+            isSelected={selectedNodeId === node.id}
+            isDragging={isDragging}
+            depthLabel={t("graph.nodes")}
+            onClick={() => handleNodeClick(node.id)}
+            onMouseDown={(event) => handleCardMouseDown(event, node.id)}
+          />
         );
       })}
 

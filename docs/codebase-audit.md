@@ -93,7 +93,7 @@ Decision after the current cleanup: the homepage evidence board is canonical. `f
 Evidence:
 
 - `frontend/src/app/page.tsx` uses the canonical `frontend/src/lib/sticky-card.tsx` and `frontend/src/lib/sticky-graph-layout.ts` modules.
-- `frontend/src/components/canvas/CausalGraphView.tsx` now reuses the shared red-string path builder, but still has separate legacy sticky-card rendering, color, rotation, and position logic.
+- `frontend/src/components/canvas/CausalGraphView.tsx` now reuses the shared `StickyCard` renderer and red-string path builder, but still has separate legacy position, drag, and view-switching state.
 - `frontend/src/components/canvas/ChainView.tsx`, `DebateTreeView.tsx`, and `DataTableView.tsx` still exist as componentized views.
 
 Risk:
@@ -101,7 +101,7 @@ Risk:
 - The same UI concept can diverge in behavior, visual language, and bug fixes.
 - A fix in legacy `CausalGraphView.tsx` may not fix the current homepage unless it touches the shared `frontend/src/lib/*` graph/card modules.
 
-Recommendation: keep `page.tsx` plus `frontend/src/lib/sticky-card.tsx` / `sticky-graph-layout.ts` as the canonical evidence board path. Next, either migrate the legacy canvas card rendering to shared modules or retire unused canvas components. Do not grow two graph implementations.
+Recommendation: keep `page.tsx` plus `frontend/src/lib/sticky-card.tsx` / `sticky-graph-layout.ts` as the canonical evidence board path. Next, either retire the unused legacy canvas views or migrate their remaining position/drag/view-state logic toward the canonical modules. Do not grow two graph implementations.
 
 ### 3. Backend API assembly is too concentrated
 
@@ -172,10 +172,16 @@ Recommendation: introduce shared test fixtures only after the next refactor targ
 
 ## Current Non-Code Cleanup Backlog
 
-1. Continue splitting `frontend/src/app/page.tsx` by product section, next targeting duplicated graph/card implementation or the remaining homepage panel layout/query-flow split.
+1. Continue splitting `frontend/src/app/page.tsx` by product section, next targeting remaining homepage panel layout/query-flow split or retiring the legacy canvas state path.
 2. Split `retrocause/api/main.py` by schema, brief builders, harnesses, and route handlers.
 3. Consolidate retrieval quality/fallback semantics around SourceBroker policy.
 4. Add adapter contract tests for source metadata consistency.
+
+## Test Harness Notes
+
+- `scripts/e2e_test.py` is the canonical browser dogfood script for the local OSS app. It autostarts backend/frontend services when needed.
+- On Windows, the cleanup path must terminate the process tree, not only the `npm.cmd` parent, or `next start` can keep serving stale `.next` chunks after a later build.
+- The Playwright page load checks intentionally wait for DOM content plus product elements instead of `networkidle`; the homepage can issue background requests while still being ready for user interaction.
 
 ## Guardrails Notes
 
