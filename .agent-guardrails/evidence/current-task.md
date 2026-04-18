@@ -3554,3 +3554,26 @@ Guardrails scope correction:
 Final guardrails after commit:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
 - Non-blocking warnings: the slice spans 6 top-level areas because it intentionally includes runtime UI labels, provider catalog ordering, API error copy, tests, docs, and evidence; `docs/PROJECT_STATE.md` changed because user-visible behavior changed and docs synchronization is required.
+## OpenRouter DeepSeek Stable Alias Correction
+
+Scope:
+- User clarified they intentionally selected DeepSeek and cannot locally verify GPT.
+- Checked the public OpenRouter model catalog without using or storing the user's API key; `deepseek/deepseek-chat` is available as the current DeepSeek V3 stable alias, while `deepseek/deepseek-chat-v3-0324` is an older fixed snapshot.
+- Changed the OpenRouter provider catalog to prefer `deepseek/deepseek-chat`, added `deepseek/deepseek-v3.2` as an explicit current DeepSeek option, moved `openai/gpt-4o-mini` below the DeepSeek choices, and labeled the 0324 snapshot as `legacy`.
+- Updated README and PROJECT_STATE so project docs no longer claim the OpenRouter default is GPT-first.
+
+Verification so far:
+- RED: `python -m pytest tests\test_comprehensive.py -q -k "openrouter_default_uses_stable_deepseek_alias_before_0324_snapshot" --basetemp=.pytest-tmp` failed because OpenRouter still selected `openai/gpt-4o-mini` first.
+- GREEN: `python -m pytest tests\test_comprehensive.py -q -k "openrouter_default_uses_stable_deepseek_alias_before_0324_snapshot" --basetemp=.pytest-tmp` passed after the provider catalog change.
+
+Risk notes:
+- Security/auth/secrets: no user API key was echoed into commands, files, evidence, or commits; OpenRouter model discovery used the public `/api/v1/models` catalog only.
+- Dependencies: no new packages, lockfile changes, or dependency upgrades.
+- Performance/latency: no new runtime network calls were added; only the static provider-model order and labels changed.
+- Understanding tradeoff: this fixes the explicit DeepSeek path by preferring the stable alias over the older 0324 snapshot instead of routing users to GPT.
+- Continuity: reuses the existing provider catalog and frontend model-picker behavior; no new fallback ladder or provider abstraction was added in this slice.
+- Residual risk: a successful real-key live Chinese finance run still needs operator-side verification because the exposed chat key should not be reused or persisted.Full verification update - DeepSeek stable alias correction:
+- `python -m pytest tests\test_comprehensive.py -q -k "openrouter_default or mojibake_strings or live_failure_messages" --basetemp=.pytest-tmp` completed with exit code 0 (`3 passed`).
+- `npm test` completed with exit code 0. It included frontend lint/build, `python -m ruff check retrocause/`, full pytest (`288 passed`), and browser E2E (`612 PASS, 0 FAIL, 0 SKIP`).Final guardrails after commit:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings: the slice spans 5 top-level areas because it intentionally includes provider catalog behavior, a regression test, README/project-state docs, and guardrails evidence; `docs/PROJECT_STATE.md` changed because the user-visible default model behavior changed and project documentation must stay synchronized.

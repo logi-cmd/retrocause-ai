@@ -205,14 +205,17 @@ def test_api_live_failure_messages_have_no_known_mojibake_strings():
     assert " - empty result" in api_source
 
 
-def test_openrouter_default_uses_stable_json_model_before_deepseek_0324():
+def test_openrouter_default_uses_stable_deepseek_alias_before_0324_snapshot():
     model_ids = list(PROVIDERS["openrouter"]["models"].keys())
 
-    assert model_ids[0] == "openai/gpt-4o-mini"
+    assert model_ids[0] == "deepseek/deepseek-chat"
     assert "deepseek/deepseek-chat-v3-0324" in model_ids
-    assert model_ids.index("openai/gpt-4o-mini") < model_ids.index(
+    assert model_ids.index("deepseek/deepseek-chat") < model_ids.index(
         "deepseek/deepseek-chat-v3-0324"
     )
+    assert "legacy" in PROVIDERS["openrouter"]["models"]["deepseek/deepseek-chat-v3-0324"][
+        "label"
+    ].lower()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
