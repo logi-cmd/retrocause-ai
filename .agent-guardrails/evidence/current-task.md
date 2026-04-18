@@ -3216,3 +3216,52 @@ Risk notes:
   - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
   - `docs/PROJECT_STATE.md` was updated as a state file.
 - Risk disposition: both warnings are expected for this maintainability slice because the backend helper extraction intentionally pairs code, regression coverage, synchronized project docs, and guardrails evidence. No blocking guardrails errors were reported.
+
+## 2026-04-18 API schema extraction
+
+Scope:
+- Continued backend maintainability cleanup by extracting API request/response and V2 schema models from `retrocause/api/main.py` into `retrocause/api/schemas.py`.
+- Kept existing compatibility for current tests that import common schema classes from `retrocause.api.main` by importing the schema names back into `main.py`.
+- Kept route handlers, V2 conversion, provider preflight route orchestration, uploaded evidence route orchestration, and streaming in `main.py` for a later split.
+- Updated `tests/test_comprehensive.py`, `docs/PROJECT_STATE.md`, and `docs/codebase-audit.md` so the maintenance map reflects the new schema boundary.
+
+TDD / verification so far:
+- RED: `python -m pytest tests\test_comprehensive.py::test_api_schema_models_are_extracted -q --basetemp=.pytest-tmp` failed because `retrocause/api/schemas.py` did not exist.
+- GREEN focused regression: `python -m pytest tests\test_comprehensive.py::test_api_schema_models_are_extracted tests\test_comprehensive.py::test_v2_schema_round_trip tests\test_comprehensive.py::test_result_to_v2_minimal tests\test_comprehensive.py::test_result_to_v2_surfaces_challenge_checks_and_analysis_brief tests\test_comprehensive.py::test_run_orchestration_metadata_and_saved_run_round_trip -q --basetemp=.pytest-tmp` passed.
+- `python -m ruff check retrocause\api\main.py retrocause\api\schemas.py tests\test_comprehensive.py`: passed.
+- `git diff --check`: passed with line-ending warnings only for tracked text files that Git will normalize on next touch.
+
+Risk notes:
+- Security/auth/secrets: no auth, permissions, API-key storage, secrets, local runtime data, or sensitive-data paths changed.
+- Dependencies: no package or lockfile changes.
+- Performance: schema relocation changes imports only; no expected latency, IO, network, or concurrency impact.
+- Tradeoff: `main.py` still imports common schema classes so current compatibility and route annotations remain stable. This avoids a larger call-site migration in the same slice.
+- Continuity: follows the small backend module split pattern used by `runtime.py`, `briefs.py`, `analysis_brief.py`, `production_brief.py`, `harness.py`, `scenarios.py`, `provider_preflight.py`, `run_store.py`, and `run_metadata.py`.
+- Residual risk: route orchestration and V2 conversion are still concentrated in `main.py`; future cleanup should split those in separate tested slices.
+
+### Full verification update
+
+- `python -m ruff check retrocause\api\main.py retrocause\api\schemas.py tests\test_comprehensive.py`: passed.
+- `git diff --check`: passed with line-ending warnings only for tracked text files that Git will normalize on next touch.
+- Focused regression: `python -m pytest tests\test_comprehensive.py::test_api_schema_models_are_extracted tests\test_comprehensive.py::test_v2_schema_round_trip tests\test_comprehensive.py::test_result_to_v2_minimal tests\test_comprehensive.py::test_result_to_v2_surfaces_challenge_checks_and_analysis_brief tests\test_comprehensive.py::test_run_orchestration_metadata_and_saved_run_round_trip -q --basetemp=.pytest-tmp`: passed.
+- Required `npm test`: passed after schema extraction.
+  - Frontend lint/build passed.
+  - `ruff check retrocause/`: passed.
+  - Full pytest passed: 276 tests.
+  - Browser E2E passed: 608 pass / 0 fail / 0 skip.
+
+### Final verification refresh
+
+- Re-ran `npm test` after removing the accidental UTF-8 BOM from `retrocause/api/main.py`: passed.
+  - Frontend lint/build passed.
+  - `ruff check retrocause/`: passed.
+  - Full pytest passed: 276 tests.
+  - Browser E2E passed: 608 pass / 0 fail / 0 skip.
+
+### Guardrails final result
+
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`: passed with score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings:
+  - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
+  - `docs/PROJECT_STATE.md` was updated as a state file.
+- Risk disposition: both warnings are expected for this maintainability slice because schema extraction intentionally pairs code, regression coverage, synchronized project docs, and guardrails evidence. No blocking guardrails errors were reported.

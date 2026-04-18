@@ -1322,6 +1322,23 @@ def test_api_product_harness_builders_are_extracted():
     assert "def build_product_harness_payload" in harness_source
 
 
+def test_api_schema_models_are_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    schemas_source = (REPO_ROOT / "retrocause" / "api" / "schemas.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "from retrocause.api.schemas import" in api_source
+    assert "AnalyzeRequest" in api_source
+    assert "AnalyzeResponseV2" in api_source
+    assert "class AnalyzeRequest(BaseModel)" not in api_source
+    assert "class AnalyzeResponseV2(BaseModel)" not in api_source
+    assert "class ProductionHarnessReportV2(BaseModel)" not in api_source
+    assert "class AnalyzeRequest(BaseModel)" in schemas_source
+    assert "class AnalyzeResponseV2(BaseModel)" in schemas_source
+    assert "class ProductionHarnessReportV2(BaseModel)" in schemas_source
+
+
 def test_legacy_canvas_graph_uses_shared_red_string_path_builder():
     legacy_graph_source = (
         REPO_ROOT / "frontend" / "src" / "components" / "canvas" / "CausalGraphView.tsx"

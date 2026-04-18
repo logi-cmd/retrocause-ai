@@ -105,20 +105,19 @@ Recommendation: keep `page.tsx` plus `frontend/src/lib/sticky-card.tsx` / `stick
 
 ### 3. Backend API assembly is too concentrated
 
-Current size: `retrocause/api/main.py` is still large after extracting timeout/runtime execution to `retrocause/api/runtime.py`, Markdown research brief generation to `retrocause/api/briefs.py`, structured analysis brief payload assembly to `retrocause/api/analysis_brief.py`, production brief payload assembly to `retrocause/api/production_brief.py`, production/product harness payload assembly to `retrocause/api/harness.py`, production scenario metadata/keyword scoring to `retrocause/api/scenarios.py`, provider preflight classification/model-resolution helpers to `retrocause/api/provider_preflight.py`, saved-run JSON persistence to `retrocause/api/run_store.py`, and run-step/usage-ledger payload assembly to `retrocause/api/run_metadata.py`.
+Current size: `retrocause/api/main.py` is still large after extracting request/response models to `retrocause/api/schemas.py`, timeout/runtime execution to `retrocause/api/runtime.py`, Markdown research brief generation to `retrocause/api/briefs.py`, structured analysis brief payload assembly to `retrocause/api/analysis_brief.py`, production brief payload assembly to `retrocause/api/production_brief.py`, production/product harness payload assembly to `retrocause/api/harness.py`, production scenario metadata/keyword scoring to `retrocause/api/scenarios.py`, provider preflight classification/model-resolution helpers to `retrocause/api/provider_preflight.py`, saved-run JSON persistence to `retrocause/api/run_store.py`, and run-step/usage-ledger payload assembly to `retrocause/api/run_metadata.py`.
 
-It contains request/response models, V2 conversion, uploaded evidence, provider preflight route orchestration, and streaming. Timeout/runtime execution now lives in `retrocause/api/runtime.py`, Markdown research brief text generation now lives in `retrocause/api/briefs.py`, structured analysis brief payload assembly now lives in `retrocause/api/analysis_brief.py`, production brief payload assembly now lives in `retrocause/api/production_brief.py`, production/product harness payload assembly now lives in `retrocause/api/harness.py`, production scenario detection metadata now lives in `retrocause/api/scenarios.py`, provider/preflight string classification now lives in `retrocause/api/provider_preflight.py`, saved-run JSON IO now lives in `retrocause/api/run_store.py`, and run metadata payload assembly now lives in `retrocause/api/run_metadata.py`.
+It contains V2 conversion, uploaded evidence, provider preflight route orchestration, and streaming. Request/response models now live in `retrocause/api/schemas.py`, timeout/runtime execution now lives in `retrocause/api/runtime.py`, Markdown research brief text generation now lives in `retrocause/api/briefs.py`, structured analysis brief payload assembly now lives in `retrocause/api/analysis_brief.py`, production brief payload assembly now lives in `retrocause/api/production_brief.py`, production/product harness payload assembly now lives in `retrocause/api/harness.py`, production scenario detection metadata now lives in `retrocause/api/scenarios.py`, provider/preflight string classification now lives in `retrocause/api/provider_preflight.py`, saved-run JSON IO now lives in `retrocause/api/run_store.py`, and run metadata payload assembly now lives in `retrocause/api/run_metadata.py`.
 
 Risk:
 
-- API schema changes and product-copy changes are coupled.
-- Brief/harness behavior becomes harder to test without importing the full API module.
+- V2 conversion and route behavior still sit close together.
+- Route orchestration behavior remains harder to test without importing the full API module.
 
 Recommended cleanup sequence:
 
-1. Move V2 schema models into `retrocause/api/schemas.py`.
-2. Move V2 route orchestration helpers into focused modules only after the schema split is stable.
-3. Keep `retrocause/api/main.py` mostly as routing and request orchestration.
+1. Move V2 route orchestration helpers into focused modules now that the schema split is stable.
+2. Keep `retrocause/api/main.py` mostly as routing and request orchestration.
 
 ### 4. Retrieval quality helpers appear in multiple modules
 
@@ -172,7 +171,7 @@ Recommendation: introduce shared test fixtures only after the next refactor targ
 ## Current Non-Code Cleanup Backlog
 
 1. Continue splitting `frontend/src/app/page.tsx` by product section, next targeting remaining homepage panel layout/query-flow split or retiring the legacy canvas state path.
-2. Split `retrocause/api/main.py` by schema and route handlers.
+2. Split `retrocause/api/main.py` by route handlers and V2 conversion orchestration.
 3. Consolidate retrieval quality/fallback semantics around SourceBroker policy.
 4. Add adapter contract tests for source metadata consistency.
 
