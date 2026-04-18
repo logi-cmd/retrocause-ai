@@ -173,6 +173,7 @@ python start.py
 - `BRAVE_SEARCH_API_KEY` enables Brave Search.
 - If those variables are absent, RetroCause uses the built-in OSS source adapters.
 - Hosted providers may enforce rate limits or storage rules. RetroCause exposes those limits in source trace instead of hiding them.
+- The default OpenRouter model is selected for stable JSON preflight first; DeepSeek V3 0324 remains available as an explicit model option.
 
 - `TAVILY_API_KEY` 启用 Tavily Search。
 - `BRAVE_SEARCH_API_KEY` 启用 Brave Search。

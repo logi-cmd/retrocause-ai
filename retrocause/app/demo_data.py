@@ -971,8 +971,9 @@ PROVIDERS: dict[str, dict] = {
         "label": "OpenRouter（多模型中转）",
         "base_url": "https://openrouter.ai/api/v1",
         "models": {
+            "openai/gpt-4o-mini": {"label": "GPT-4o Mini", "json_mode": True},
             "deepseek/deepseek-chat-v3-0324": {
-                "label": "DeepSeek V3（推荐，性价比高）",
+                "label": "DeepSeek V3",
                 "json_mode": True,
             },
             "deepseek/deepseek-r1": {"label": "DeepSeek R1", "json_mode": True},
@@ -980,7 +981,6 @@ PROVIDERS: dict[str, dict] = {
             "google/gemini-2.5-pro-preview": {"label": "Gemini 2.5 Pro", "json_mode": True},
             "anthropic/claude-sonnet-4": {"label": "Claude Sonnet 4", "json_mode": True},
             "anthropic/claude-haiku-4": {"label": "Claude Haiku 4（快速）", "json_mode": True},
-            "openai/gpt-4o-mini": {"label": "GPT-4o Mini", "json_mode": True},
             "openai/gpt-4.1-mini": {"label": "GPT-4.1 Mini", "json_mode": True},
             "openai/gpt-4.1": {"label": "GPT-4.1", "json_mode": True},
             "meta-llama/llama-4-maverick": {"label": "Llama 4 Maverick", "json_mode": True},

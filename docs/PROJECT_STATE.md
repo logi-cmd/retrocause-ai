@@ -113,13 +113,14 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Moved Markdown research brief text generation into `retrocause/api/briefs.py` and made legacy `CausalGraphView` reuse the shared sticky-card renderer and sticky graph red-string path builder.
 - Hardened the browser E2E harness by avoiding `networkidle` waits for a page with background requests, reporting 500 resource URLs in console-health failures, and cleaning up Windows `npm`/`next` process trees after autostart.
 - Added a homepage Chinese A-share intraday sample query for `芯原股份今天盘中为什么下跌？`; the browser now dogfoods that the sample preserves the company anchor and selects the Market scenario before submission.
+- Fixed remaining homepage mojibake in visible Chinese labels around preflight, run orchestration, source coverage, chain comparison, and reason summaries; the default OpenRouter model now starts with `openai/gpt-4o-mini` instead of the more failure-prone DeepSeek V3 0324 option.
 
 ## Known Gaps
 
 - The OSS product can now export a Markdown research brief, show retrieval-health states, reopen local saved runs, has a clean bilingual README, and passes a clean-copy install/test smoke. The brief format still needs real-user polish across more live domains.
 - Degraded-source states now have deterministic API/brief regression coverage plus browser-level source-trace dogfood for representative rate-limited/cached rows; wider visual QA across all bad-path states remains useful.
 - Direct monetization design should be deferred until OSS is solid; future Pro should be revisited as a full-stack Rust architecture rather than incremental hosted work in the current alpha stack.
-- A true live Chinese finance run with real provider/search keys still needs verification after the anchor-preservation fix; the homepage now has a guarded sample entry for this query path, but live source quality is still unverified without real keys.
+- A true live Chinese finance run with real provider/search keys still needs verification after the anchor-preservation fix; the homepage now has a guarded sample entry for this query path and avoids the observed DeepSeek V3 0324 default empty-result path, but live source quality is still unverified without a successful real-key run.
 - The API route module is still large even after the schema, uploaded-evidence route, saved-run route, provider route/preflight, live-failure V2 response, retrieval-trace V2 conversion, timeout, Markdown-brief, structured-analysis-brief, production-brief, production/product harness, production-scenario, provider-preflight, saved-run, and run-metadata helper extractions; streaming and the remaining main result-to-V2 conversion remain backend split candidates.
 - Legacy canvas layout/state logic remains separate from the canonical homepage evidence board, but sticky-card rendering and red-string path math now reuse shared modules.
 

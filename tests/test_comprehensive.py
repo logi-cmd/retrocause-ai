@@ -173,6 +173,48 @@ def test_frontend_exposes_chinese_a_share_market_sample():
     assert "sample-a-share-query" in e2e_source
 
 
+def test_frontend_page_has_no_known_mojibake_strings():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    forbidden_fragments = [
+        "姝ｅ湪",
+        "杩愯",
+        "棰勬",
+        "涓嬩竴",
+        "鎺ㄨ",
+        "鍘熷",
+        "閾捐矾",
+        "鈥?",
+        "閳?",
+    ]
+    for fragment in forbidden_fragments:
+        assert fragment not in page_source
+
+    assert '"\\u8986\\u76d6"' in page_source
+    assert '"\\u6765\\u6e90"' in page_source
+    assert '"\\u6765\\u6e90\\u95ee\\u9898"' in page_source
+
+
+def test_api_live_failure_messages_have_no_known_mojibake_strings():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+
+    assert "閳?" not in api_source
+    assert "鈥?" not in api_source
+    assert " - empty result" in api_source
+
+
+def test_openrouter_default_uses_stable_json_model_before_deepseek_0324():
+    model_ids = list(PROVIDERS["openrouter"]["models"].keys())
+
+    assert model_ids[0] == "openai/gpt-4o-mini"
+    assert "deepseek/deepseek-chat-v3-0324" in model_ids
+    assert model_ids.index("openai/gpt-4o-mini") < model_ids.index(
+        "deepseek/deepseek-chat-v3-0324"
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # 1. Demo topic 覆盖测试
 # ═══════════════════════════════════════════════════════════════════════════════

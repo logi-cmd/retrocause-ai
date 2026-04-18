@@ -3524,3 +3524,33 @@ Risk notes:
 Final guardrails after committing this slice:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
 - Non-blocking warnings: the slice spans 6 top-level areas because it intentionally includes UI, i18n, E2E, tests, README, project-state docs, and guardrails evidence; `docs/PROJECT_STATE.md` changed because the user-visible homepage behavior changed and project documentation must stay synchronized.
+## Live OpenRouter Default And Chinese Mojibake Cleanup
+
+Scope:
+- Investigated a user-reported partial-live failure showing `LLM calls failed for deepseek/deepseek-chat-v3-0324 - empty result`.
+- Changed the default OpenRouter model ordering so `openai/gpt-4o-mini` is selected before the known fragile DeepSeek V3 0324 option, while keeping DeepSeek available as an explicit model choice.
+- Fixed remaining homepage mojibake in visible Chinese labels around model preflight, run orchestration, source coverage, source issues, recommended chains, reason summaries, chain comparison, and action bullets.
+- Cleaned API live-failure/log strings so empty-result messages no longer include mojibake separators.
+- Updated README and project state to record the default-model and Chinese-label cleanup.
+
+Verification:
+- RED: `python -m pytest tests\test_comprehensive.py -q -k "mojibake_strings or openrouter_default" --basetemp=.pytest-tmp` failed because the homepage still contained mojibake and OpenRouter still defaulted to DeepSeek V3 0324.
+- RED extension: `python -m pytest tests\test_comprehensive.py -q -k "mojibake_strings or openrouter_default or live_failure_messages" --basetemp=.pytest-tmp` failed because API empty-result messages still contained a mojibake separator.
+- GREEN: `python -m pytest tests\test_comprehensive.py -q -k "mojibake_strings or openrouter_default or live_failure_messages" --basetemp=.pytest-tmp` passed after the fixes.
+
+Risk notes:
+- Security/auth/secrets: no API keys were written to files, committed, or stored; auth, permissions, and sensitive-data handling are unchanged.
+- Dependencies: no new packages, lockfile changes, or dependency upgrades.
+- Performance/latency: no new network calls or loops; model ordering only changes the default provider model chosen before a live request.
+- Understanding tradeoff: this does not implement a full retry/fallback ladder; it chooses a more stable JSON-first default while preserving explicit DeepSeek selection for users who want it.
+- Continuity: reuses the existing provider catalog ordering and static frontend regression pattern; no intentional continuity break.
+- Residual risk: a successful live Chinese finance run with a real OpenRouter key still needs to be exercised from the UI or an operator-controlled environment variable. The key shared in chat should be rotated because it has been exposed.
+Full verification update - live default and mojibake cleanup:
+- `npm test` completed with exit code 0 after the default-model and Chinese-label fixes.
+- Included frontend lint/build, `python -m ruff check retrocause/`, full pytest (`288 passed`), and browser E2E (`612 PASS, 0 FAIL, 0 SKIP`).
+Guardrails scope correction:
+- First post-commit guardrails check failed with a scope error because `retrocause/app/demo_data.py` owns the provider model catalog but the older maintenance contract only allowed `retrocause/api/` for backend changes.
+- Updated `.agent-guardrails/task-contract.json` to include `retrocause/app/demo_data.py`; this is the existing provider catalog reused by `/api/providers` and live-analysis model resolution, not a new backend boundary.
+Final guardrails after commit:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings: the slice spans 6 top-level areas because it intentionally includes runtime UI labels, provider catalog ordering, API error copy, tests, docs, and evidence; `docs/PROJECT_STATE.md` changed because user-visible behavior changed and docs synchronization is required.

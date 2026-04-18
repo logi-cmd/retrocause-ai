@@ -216,7 +216,7 @@ async def analyze_query_v2(request: AnalyzeRequest):
                 result = None
 
             if result is not None and len(result.hypotheses) == 0:
-                error_msg = f"LLM calls failed for {model_name} 鈥?empty result (check API key balance and model access)"
+                error_msg = f"LLM calls failed for {model_name} - empty result (check API key balance and model access)"
                 result = None
 
             if result is not None:
@@ -286,7 +286,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                     return
 
                 logger.info(
-                    f"[SSE-DEBUG] worker started 鈥?query={request.query!r}, "
+                    f"[SSE-DEBUG] worker started - query={request.query!r}, "
                     f"model={request.model!r}, explicit_model={request.explicit_model!r}, "
                     f"api_key={request.api_key[:8]}..."
                 )
@@ -318,7 +318,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                     )
                     _elapsed = _time.time() - _t0
                     logger.info(
-                        f"[SSE-DEBUG] run_with_timeout returned in {_elapsed:.1f}s 鈥?"
+                        f"[SSE-DEBUG] run_with_timeout returned in {_elapsed:.1f}s - "
                         f"result={'None' if result is None else type(result).__name__}"
                     )
                 except TimeoutError:
@@ -335,8 +335,8 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                     )
 
                 if result is not None and len(result.hypotheses) == 0:
-                    error_msg = f"LLM calls failed for {model_name} 鈥?empty result"
-                    logger.warning("[SSE-DEBUG] zero hypotheses 鈥?falling back to demo")
+                    error_msg = f"LLM calls failed for {model_name} - empty result"
+                    logger.warning("[SSE-DEBUG] zero hypotheses - falling back to demo")
                     result = None
 
                 if result is not None:

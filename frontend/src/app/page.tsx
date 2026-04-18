@@ -1480,7 +1480,7 @@ export default function Home() {
           fallbackToDemo();
         }
       } else {
-        // Non-SSE response (fallback) 鈥?treat as regular JSON
+        // Non-SSE response fallback: treat as regular JSON.
         const payload = (await response.json()) as AnalyzeResponseV2;
         processPayload(payload);
       }
@@ -1657,14 +1657,14 @@ export default function Home() {
             </div>
           <div className="command-chip-row">
             <span className={`command-chip command-chip-${qualityGateTone}`}>
-              {locale === "en" ? "Coverage" : "瑕嗙洊"} {evidenceCoverageScore}%
+              {locale === "en" ? "Coverage" : "\u8986\u76d6"} {evidenceCoverageScore}%
             </span>
             <span className="command-chip">
-              {locale === "en" ? "Sources" : "鏉ユ簮"} {sourceHitCount}
+              {locale === "en" ? "Sources" : "\u6765\u6e90"} {sourceHitCount}
             </span>
             {traceFailureCount > 0 && (
               <span className="command-chip command-chip-caution">
-                {locale === "en" ? "Source issues" : "鏉ユ簮寮傚父"} {traceFailureCount}
+                {locale === "en" ? "Source issues" : "\u6765\u6e90\u95ee\u9898"} {traceFailureCount}
               </span>
             )}
           </div>
@@ -1890,8 +1890,8 @@ export default function Home() {
             }}
           >
             {providerPreflightLoading
-              ? locale === "en" ? "Checking model..." : "姝ｅ湪棰勬妯″瀷..."
-              : locale === "en" ? "Run model preflight" : "杩愯妯″瀷棰勬"}
+              ? locale === "en" ? "Checking model..." : "\u6b63\u5728\u9884\u68c0\u6a21\u578b..."
+              : locale === "en" ? "Run model preflight" : "\u8fd0\u884c\u6a21\u578b\u9884\u68c0"}
           </button>
           {providerPreflight && (
             <div
@@ -1912,8 +1912,8 @@ export default function Home() {
             >
               <strong>
                 {providerPreflight.can_run_analysis
-                  ? locale === "en" ? "Preflight passed" : "棰勬閫氳繃"
-                  : locale === "en" ? "Preflight blocked" : "棰勬鏈€氳繃"}
+                  ? locale === "en" ? "Preflight passed" : "\u9884\u68c0\u901a\u8fc7"
+                  : locale === "en" ? "Preflight blocked" : "\u9884\u68c0\u672a\u901a\u8fc7"}
               </strong>
               {` 路 ${providerPreflight.model_name}`}
               <div style={{ marginTop: "4px", color: "#6b5a42" }}>
@@ -1960,7 +1960,7 @@ export default function Home() {
             }}
           >
             <strong style={{ color: "#315f83" }}>
-              {locale === "en" ? "Run orchestration" : "杩愯缂栨帓"}
+              {locale === "en" ? "Run orchestration" : "\u8fd0\u884c\u7f16\u6392"}
             </strong>
             <div>
               {locale === "en" ? "Status" : "\u72b6\u6001"}: {runStatus}
@@ -2046,7 +2046,7 @@ export default function Home() {
             ))}
             {productHarness.next_actions[0] && (
               <div style={{ marginTop: "6px", fontSize: "0.56rem", color: "#8b7355", lineHeight: 1.45 }}>
-                {locale === "en" ? "Next: " : "涓嬩竴姝ワ細"}
+                {locale === "en" ? "Next: " : "\u4e0b\u4e00\u6b65\uff1a"}
                 {locale === "en"
                   ? productHarness.next_actions[0]
                   : localizeBriefText(productHarness.next_actions[0], locale)}
@@ -2063,7 +2063,7 @@ export default function Home() {
           </div>
           {activeChainIsRecommended && availableChains.length > 0 && (
             <div style={{ marginTop: "6px", fontSize: "0.56rem", color: "#4a7a9e", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-              {locale === "en" ? "Recommended chain" : "鎺ㄨ崘閾捐矾"}
+              {locale === "en" ? "Recommended chain" : "\u63a8\u8350\u94fe\u8def"}
             </div>
           )}
           {hasLowConfidence && (
@@ -2080,7 +2080,7 @@ export default function Home() {
 
         {causalReasonSummaries.length > 0 && (
           <div className="compact-item">
-            <div className="compact-label">{locale === "en" ? "Reason summary" : "鍘熷洜鎽樿"}</div>
+            <div className="compact-label">{locale === "en" ? "Reason summary" : "\u539f\u56e0\u6458\u8981"}</div>
             {causalReasonSummaries.map((reason) => (
               <button
                 type="button"
@@ -2106,13 +2106,13 @@ export default function Home() {
                 }}
               >
                 <div style={{ fontSize: "0.62rem", lineHeight: 1.45 }}>
-                  <strong>{reason.source}</strong> {locale === "en" ? "helped lead to" : "瀵艰嚧"} <strong>{reason.target}</strong>
+                  <strong>{reason.source}</strong> {locale === "en" ? "helped lead to" : "\u5bfc\u81f4"} <strong>{reason.target}</strong>
                 </div>
                 <div style={{ marginTop: "3px", fontSize: "0.54rem", color: "#8b7355", lineHeight: 1.4 }}>
                   {locale === "en"
                     ? `${reason.strength}% edge strength · ${reason.evidenceCount} evidence item(s)`
                     : `${reason.strength}% \u8fb9\u5f3a\u5ea6 · ${reason.evidenceCount} \u6761\u8bc1\u636e`}
-                  {reason.evidenceSource ? ` 路 ${reason.evidenceSource}` : ""}
+                  {reason.evidenceSource ? ` · ${reason.evidenceSource}` : ""}
                 </div>
                 {reason.evidenceExcerpt && (
                   <div style={{ marginTop: "5px", fontSize: "0.58rem", color: "#6b5a42", lineHeight: 1.45 }}>
@@ -2155,7 +2155,7 @@ export default function Home() {
                   <span>{localizeCausalText(chain.label, locale)}</span>
                   {chain.chain_id === recommendedChainId && (
                     <span style={{ fontSize: "0.5rem", color: "#4a7a9e", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                      {locale === "en" ? "Rec" : "鎺ㄨ崘"}
+                      {locale === "en" ? "Rec" : "\u63a8\u8350"}
                     </span>
                   )}
                 </div>
@@ -2167,7 +2167,7 @@ export default function Home() {
 
         {chainCompareItems.length > 1 && (
           <div className="compact-item">
-            <div className="compact-label">{locale === "en" ? "Chain compare" : "閾捐矾姣旇緝"}</div>
+            <div className="compact-label">{locale === "en" ? "Chain compare" : "\u94fe\u8def\u6bd4\u8f83"}</div>
             {chainCompareItems.map((chain) => (
               <button
                 type="button"
@@ -2422,10 +2422,10 @@ export default function Home() {
             style={{
               fontSize: "0.65rem",
               lineHeight: 1.5,
-              color: (statusNote && (statusNote.includes("澶辫触") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "#c0392b" : undefined,
-              background: (statusNote && (statusNote.includes("澶辫触") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "rgba(192, 57, 43, 0.08)" : undefined,
-              borderLeft: (statusNote && (statusNote.includes("澶辫触") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "2px solid #c0392b" : undefined,
-              padding: (statusNote && (statusNote.includes("澶辫触") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "2px 6px" : undefined,
+              color: (statusNote && (statusNote.includes("\u5931\u8d25") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "#c0392b" : undefined,
+              background: (statusNote && (statusNote.includes("\u5931\u8d25") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "rgba(192, 57, 43, 0.08)" : undefined,
+              borderLeft: (statusNote && (statusNote.includes("\u5931\u8d25") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "2px solid #c0392b" : undefined,
+              padding: (statusNote && (statusNote.includes("\u5931\u8d25") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "2px 6px" : undefined,
             }}
           >
             {statusNote || (analysisMode.isDemo ? t("demo.banner") : t("status.liveAnalysis"))}
@@ -2612,10 +2612,10 @@ export default function Home() {
               lineHeight: 1.6,
             }}
           >
-            鈥?{t("home.actions.traceUpstream")}
-            <br />鈥?{t("home.actions.compareChains")}
-            <br />鈥?{t("home.actions.viewCounterfactuals")}
-            <br />鈥?{t("home.actions.dragNotes")}
+            - {t("home.actions.traceUpstream")}
+            <br />- {t("home.actions.compareChains")}
+            <br />- {t("home.actions.viewCounterfactuals")}
+            <br />- {t("home.actions.dragNotes")}
           </div>
         </div>
         )}
