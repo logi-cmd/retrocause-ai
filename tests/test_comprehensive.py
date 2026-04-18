@@ -1238,14 +1238,18 @@ def test_api_provider_preflight_classification_is_extracted():
 
 def test_api_saved_run_persistence_is_extracted():
     api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    run_route_source = (REPO_ROOT / "retrocause" / "api" / "run_routes.py").read_text(
+        encoding="utf-8"
+    )
     run_store_source = (REPO_ROOT / "retrocause" / "api" / "run_store.py").read_text(
         encoding="utf-8"
     )
 
     assert "from retrocause.api.run_store import" in api_source
     assert "create_run_id" in api_source
-    assert "load_saved_run_records" in api_source
     assert "persist_saved_run_payload" in api_source
+    assert "load_saved_run_records" not in api_source
+    assert "load_saved_run_records" in run_route_source
     assert "def _create_run_id" not in api_source
     assert "def _run_store_path" not in api_source
     assert "def _load_saved_run_records" not in api_source
@@ -1352,6 +1356,22 @@ def test_uploaded_evidence_route_is_extracted():
     assert "router = APIRouter()" in evidence_route_source
     assert '@router.post("/api/evidence/upload"' in evidence_route_source
     assert "def upload_evidence" in evidence_route_source
+
+
+def test_saved_run_routes_are_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    run_route_source = (REPO_ROOT / "retrocause" / "api" / "run_routes.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "from retrocause.api.run_routes import" in api_source
+    assert "app.include_router(run_router)" in api_source
+    assert "def list_saved_runs" not in api_source
+    assert "def get_saved_run" not in api_source
+    assert '"/api/runs"' not in api_source
+    assert "router = APIRouter()" in run_route_source
+    assert '@router.get("/api/runs"' in run_route_source
+    assert '@router.get("/api/runs/{run_id}")' in run_route_source
 
 
 def test_legacy_canvas_graph_uses_shared_red_string_path_builder():

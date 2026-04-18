@@ -3303,3 +3303,34 @@ Risk notes:
   - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
   - `docs/PROJECT_STATE.md` was updated as a state file.
 - Risk disposition: both warnings are expected for this maintainability slice because route extraction intentionally pairs code, regression coverage, synchronized project docs, and guardrails evidence. No blocking guardrails errors were reported.
+
+## 2026-04-19 saved run route extraction
+
+Scope:
+- Extracted local saved-run route handlers from `retrocause/api/main.py` into `retrocause/api/run_routes.py`.
+- Kept the public endpoints unchanged: `GET /api/runs` and `GET /api/runs/{run_id}`.
+- Updated `docs/PROJECT_STATE.md` and `docs/codebase-audit.md` so the maintainability map no longer lists saved-run routes as a remaining split candidate.
+
+TDD and verification so far:
+- RED: `python -m pytest tests\test_comprehensive.py::test_saved_run_routes_are_extracted -q --basetemp=.pytest-tmp` failed with `FileNotFoundError` for missing `retrocause/api/run_routes.py`.
+- GREEN: `python -m pytest tests\test_comprehensive.py::test_saved_run_routes_are_extracted tests\test_comprehensive.py::test_run_orchestration_metadata_and_saved_run_round_trip -q --basetemp=.pytest-tmp` passed, preserving saved-run list/detail behavior.
+- Lint: `python -m ruff check retrocause\api\main.py retrocause\api\run_routes.py tests\test_comprehensive.py` passed.
+
+Risk notes:
+- Auth/secrets/permissions/sensitive data: no auth, secret, permission, or storage-policy behavior changed; local saved-run persistence still uses the existing run store.
+- Dependencies: no new packages, no lockfile changes.
+- Performance: neutral; route code moved behind an `APIRouter`, with the same JSON store read path.
+- Maintainability tradeoff: this creates one small route module to mirror `evidence_routes.py`, reducing `main.py` concentration without introducing a new abstraction layer.
+- Residual risk: provider preflight route orchestration, streaming, and V2 conversion still remain in `main.py` and should be split in later verified slices.
+
+Follow-up during full verification:
+- First `npm test` run failed at `tests/test_comprehensive.py::test_api_saved_run_persistence_is_extracted` because the older structural test still expected `main.py` to import `load_saved_run_records` directly.
+- Updated that test to reflect the new boundary: `main.py` still owns run id creation and payload persistence for analysis finalization, while `run_routes.py` owns saved-run reads for list/detail endpoints.
+- Re-ran `python -m pytest tests\test_comprehensive.py::test_api_saved_run_persistence_is_extracted tests\test_comprehensive.py::test_saved_run_routes_are_extracted tests\test_comprehensive.py::test_run_orchestration_metadata_and_saved_run_round_trip -q --basetemp=.pytest-tmp`; all 3 passed.
+
+Full verification:
+- `npm test` passed after the structural test update. It completed frontend lint, Next.js production build, `ruff check retrocause/`, full pytest (`278 passed`), and browser E2E (`608 PASS`, `0 FAIL`, `0 SKIP`).
+
+Guardrails:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings: the slice spans 4 top-level areas (`.agent-guardrails`, `docs`, `retrocause`, `tests`), and `docs/PROJECT_STATE.md` was updated. Both are expected for this maintenance slice because the code refactor required test coverage, docs synchronization, and evidence updates.

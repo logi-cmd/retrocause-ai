@@ -34,9 +34,9 @@ from retrocause.api.run_metadata import (
     build_run_step_payloads,
     build_usage_ledger_payloads,
 )
+from retrocause.api.run_routes import router as run_router
 from retrocause.api.run_store import (
     create_run_id,
-    load_saved_run_records,
     persist_saved_run_payload,
 )
 from retrocause.api.scenarios import detect_production_scenario_payload
@@ -65,8 +65,6 @@ from retrocause.api.schemas import (
     ProviderPreflightResponse,
     RetrievalTraceItemV2,
     RunStepV2,
-    SavedRunListResponse,
-    SavedRunSummaryV2,
     ScenarioV2,
     UncertaintyAssessmentV2,
     UncertaintyReportV2,
@@ -90,6 +88,7 @@ app.add_middleware(
 )
 
 app.include_router(evidence_router)
+app.include_router(run_router)
 
 
 def _detect_production_scenario(
@@ -678,31 +677,6 @@ async def list_providers():
             for key, cfg in PROVIDERS.items()
         }
     }
-
-
-@app.get("/api/runs", response_model=SavedRunListResponse)
-async def list_saved_runs():
-    summaries = [
-        SavedRunSummaryV2(
-            run_id=str(record.get("run_id", "")),
-            query=str(record.get("query", "")),
-            run_status=str(record.get("run_status", "unknown")),
-            analysis_mode=str(record.get("analysis_mode", "unknown")),
-            created_at=str(record.get("created_at", "")),
-            scenario_key=str(record.get("scenario_key", "general")),
-        )
-        for record in load_saved_run_records()
-        if record.get("run_id")
-    ]
-    return SavedRunListResponse(runs=summaries)
-
-
-@app.get("/api/runs/{run_id}")
-async def get_saved_run(run_id: str):
-    for record in load_saved_run_records():
-        if record.get("run_id") == run_id:
-            return record
-    raise HTTPException(status_code=404, detail="Saved run not found")
 
 
 @app.post("/api/providers/preflight", response_model=ProviderPreflightResponse)
