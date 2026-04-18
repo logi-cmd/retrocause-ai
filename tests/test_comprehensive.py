@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import os
 import pytest
+import urllib.request
 from uuid import uuid4
 from pathlib import Path
 
@@ -221,6 +224,28 @@ def test_openrouter_default_uses_stable_deepseek_alias_before_0324_snapshot():
     assert "legacy" in PROVIDERS["openrouter"]["models"]["deepseek/deepseek-chat-v3-0324"][
         "label"
     ].lower()
+
+
+def test_openrouter_catalog_uses_current_flash_and_haiku_model_ids():
+    model_ids = set(PROVIDERS["openrouter"]["models"].keys())
+
+    assert "google/gemini-2.5-flash" in model_ids
+    assert "anthropic/claude-haiku-4.5" in model_ids
+    assert "google/gemini-2.5-flash-preview" not in model_ids
+    assert "anthropic/claude-haiku-4" not in model_ids
+
+
+def test_openrouter_catalog_live_public_model_smoke():
+    if os.environ.get("RETROCAUSE_LIVE_OPENROUTER_CATALOG") != "1":
+        pytest.skip("Set RETROCAUSE_LIVE_OPENROUTER_CATALOG=1 to hit OpenRouter's public catalog.")
+
+    with urllib.request.urlopen("https://openrouter.ai/api/v1/models", timeout=30) as response:
+        payload = json.load(response)
+
+    public_model_ids = {item["id"] for item in payload.get("data", []) if item.get("id")}
+    missing = sorted(set(PROVIDERS["openrouter"]["models"]) - public_model_ids)
+
+    assert missing == []
 
 
 def test_legacy_openrouter_deepseek_snapshot_resolves_to_stable_alias():

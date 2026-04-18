@@ -3603,3 +3603,26 @@ Risk notes:
 Final guardrails after commit:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
 - Non-blocking warnings: the slice spans 7 top-level areas because it intentionally includes backend model resolution, UI mojibake cleanup, API/static/browser regressions, README/project-state docs, and guardrails evidence; `docs/PROJECT_STATE.md` changed because user-visible DeepSeek behavior changed and docs synchronization is required.
+## OpenRouter Catalog Drift Refresh
+
+Scope:
+- Replaced stale OpenRouter picker IDs `google/gemini-2.5-flash-preview` and `anthropic/claude-haiku-4` with current public catalog IDs `google/gemini-2.5-flash` and `anthropic/claude-haiku-4.5`.
+- Added a static regression test so those old IDs cannot silently return to the local picker.
+- Added an opt-in live public-catalog smoke: `RETROCAUSE_LIVE_OPENROUTER_CATALOG=1 python -m pytest tests\test_comprehensive.py::test_openrouter_catalog_live_public_model_smoke -q --basetemp=.pytest-tmp`.
+- Documented the opt-in smoke in README and synchronized PROJECT_STATE.
+
+Verification:
+- RED: `python -m pytest tests\test_comprehensive.py -q -k "openrouter_catalog_uses_current_flash_and_haiku_model_ids or openrouter_catalog_live_public_model_smoke" --basetemp=.pytest-tmp` failed before the catalog refresh because `google/gemini-2.5-flash` was missing and the old preview ID was still present.
+- GREEN/static: the same focused command passed after the catalog refresh (`1 passed, 1 skipped`). The skip is intentional unless `RETROCAUSE_LIVE_OPENROUTER_CATALOG=1` is set.
+- GREEN/live public catalog: `RETROCAUSE_LIVE_OPENROUTER_CATALOG=1 python -m pytest tests\test_comprehensive.py::test_openrouter_catalog_live_public_model_smoke -q --basetemp=.pytest-tmp` passed, confirming all local OpenRouter model IDs were present in the public `/api/v1/models` response at test time.
+- Full required verification: `npm test` completed with exit code 0. It included frontend lint/build, `python -m ruff check retrocause/`, full pytest (`291 passed, 1 skipped`), and browser E2E (`613 PASS, 0 FAIL, 0 SKIP`).
+
+Risk notes:
+- Security/auth/secrets: no API keys, credentials, auth flows, permissions, or sensitive data handling changed. The live catalog smoke uses OpenRouter's public unauthenticated model list only.
+- Dependencies: no package or lockfile changes.
+- Performance/latency: no runtime app network call was added; the public catalog check is opt-in test-only to avoid making normal `npm test` dependent on external network availability.
+- Understanding tradeoff: the static test guards the known stale IDs in normal CI, while the opt-in live smoke catches future provider catalog drift when maintainers intentionally enable network checks.
+- Continuity: reused the existing provider catalog in `retrocause/app/demo_data.py` and the existing comprehensive test file; no new provider abstraction or fallback ladder was introduced.
+- Residual risk: model presence in OpenRouter's public catalog does not prove the user's account has quota or permission for every model; users still need provider preflight before live analysis.Final guardrails after commit:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings: the slice spans 5 top-level areas because it intentionally includes provider catalog behavior, regression tests, README/project-state docs, and guardrails evidence; `docs/PROJECT_STATE.md` changed because user-visible model availability changed and project documentation must stay synchronized.

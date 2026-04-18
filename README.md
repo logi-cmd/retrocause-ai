@@ -267,6 +267,14 @@ This runs:
 - `pytest tests/ --basetemp=.pytest-tmp`
 - full-stack E2E smoke tests
 
+Optional OpenRouter catalog drift smoke:
+
+```bash
+RETROCAUSE_LIVE_OPENROUTER_CATALOG=1 python -m pytest tests/test_comprehensive.py::test_openrouter_catalog_live_public_model_smoke -q
+```
+
+This hits OpenRouter's public `/api/v1/models` catalog and checks that the local OpenRouter picker model IDs still exist. It is opt-in so normal local tests do not depend on external network availability.
+
 ## Tech Stack / 技术栈
 
 - Backend: Python, FastAPI, OpenAI-compatible SDK
