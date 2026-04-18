@@ -134,11 +134,19 @@ def test_frontend_and_e2e_expose_pro_workflow_slices():
     page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
         encoding="utf-8"
     )
+    uploaded_evidence_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "uploaded-evidence-panel.tsx"
+    ).read_text(encoding="utf-8")
+    saved_runs_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "saved-runs-panel.tsx"
+    ).read_text(encoding="utf-8")
     e2e_source = (REPO_ROOT / "scripts" / "e2e_test.py").read_text(encoding="utf-8")
 
     assert 'data-testid="run-orchestration-status"' in page_source
-    assert 'data-testid="upload-evidence-panel"' in page_source
-    assert 'data-testid="saved-runs-panel"' in page_source
+    assert "@/lib/uploaded-evidence-panel" in page_source
+    assert 'data-testid="upload-evidence-panel"' in uploaded_evidence_source
+    assert "@/lib/saved-runs-panel" in page_source
+    assert 'data-testid="saved-runs-panel"' in saved_runs_source
     assert "/api/evidence/upload" in page_source
     assert "/api/runs" in page_source
     assert "Degraded Source Browser Dogfood" in e2e_source
@@ -1011,13 +1019,17 @@ def test_frontend_renders_readable_brief_instead_of_raw_markdown_copy():
     page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
         encoding="utf-8"
     )
+    readable_brief_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "readable-brief-panel.tsx"
+    ).read_text(encoding="utf-8")
 
-    assert 'data-testid="readable-brief"' in page_source
-    assert "Readable brief" in page_source
-    assert "Top reasons" in page_source
-    assert "What to check" in page_source
-    assert 'data-testid="copy-report-button"' in page_source
-    assert "Copy report" in page_source
+    assert "@/lib/readable-brief-panel" in page_source
+    assert 'data-testid="readable-brief"' in readable_brief_source
+    assert "Readable brief" in readable_brief_source
+    assert "Top reasons" in readable_brief_source
+    assert "What to check" in readable_brief_source
+    assert 'data-testid="copy-report-button"' in readable_brief_source
+    assert "Copy report" in readable_brief_source
     assert "Copy Markdown" not in page_source
 
 
@@ -1025,63 +1037,141 @@ def test_frontend_offers_manual_report_copy_fallback():
     page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
         encoding="utf-8"
     )
+    readable_brief_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "readable-brief-panel.tsx"
+    ).read_text(encoding="utf-8")
 
-    assert 'data-testid="manual-copy-report"' in page_source
-    assert "Manual copy" in page_source
-    assert "select()" in page_source
-    assert "readOnly" in page_source
+    assert 'data-testid="manual-copy-report"' in readable_brief_source
+    assert "Manual copy" in readable_brief_source
+    assert "selectManualCopyReport" in page_source
+    assert "onSelectManualCopyReport" in readable_brief_source
+    assert "readOnly" in readable_brief_source
 
 
 def test_frontend_summarizes_source_transparency_in_readable_brief():
     page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
         encoding="utf-8"
     )
+    readable_brief_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "readable-brief-panel.tsx"
+    ).read_text(encoding="utf-8")
 
-    assert 'data-testid="source-health-summary"' in page_source
-    assert "Sources checked" in page_source
-    assert "Stable sources" in page_source
-    assert "Failed sources" in page_source
+    assert "sourceTransparencySummary" in page_source
+    assert 'data-testid="source-health-summary"' in readable_brief_source
+    assert "Sources checked" in readable_brief_source
+    assert "Stable sources" in readable_brief_source
+    assert "Failed sources" in readable_brief_source
 
 
 def test_frontend_surfaces_rate_limited_source_trace_language():
     page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
         encoding="utf-8"
     )
+    source_trace_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "source-trace.ts"
+    ).read_text(encoding="utf-8")
+    source_trace_panel_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "source-trace-panel.tsx"
+    ).read_text(encoding="utf-8")
+    readable_brief_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "readable-brief-panel.tsx"
+    ).read_text(encoding="utf-8")
 
-    assert "formatSourceStatusLabel" in page_source
-    assert "Rate limited" in page_source
-    assert "Source limited" in page_source
-    assert "Timed out" in page_source
-    assert "Source error" in page_source
-    assert "retry_after_seconds" in page_source
-    assert "data-testid=\"source-trace-status\"" in page_source
-    assert "Reviewability" in page_source
+    assert "@/lib/source-trace-panel" in page_source
+    assert "formatSourceStatusLabel" in source_trace_panel_source
+    assert "Rate limited" in source_trace_source
+    assert "Source limited" in source_trace_source
+    assert "Timed out" in source_trace_source
+    assert "Source error" in source_trace_source
+    assert "retry_after_seconds" in source_trace_panel_source
+    assert "data-testid=\"source-trace-status\"" in source_trace_panel_source
+    assert "Reviewability" in readable_brief_source
     assert "Needs source attention" in page_source
 
 
-def test_frontend_localizes_source_trace_status():
+def test_frontend_extracts_source_progress_panel():
     page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
         encoding="utf-8"
     )
+    source_progress_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "source-progress-panel.tsx"
+    ).read_text(encoding="utf-8")
 
-    assert "\\u53ef\\u7528" in page_source
-    assert "\\u7f13\\u5b58" in page_source
-    assert "\\u6765\\u6e90\\u53d7\\u9650" in page_source
-    assert "\\u9650\\u6d41" in page_source
-    assert "\\u65e0\\u6743\\u9650" in page_source
-    assert "\\u8d85\\u65f6" in page_source
-    assert "\\u6765\\u6e90\\u9519\\u8bef" in page_source
+    assert "@/lib/source-progress-panel" in page_source
+    assert "SourceProgressPanel" in page_source
+    assert "Retrieval trace" in source_progress_source
+    assert "Why partial live" in source_progress_source
+    assert "EvidenceCollectionStep" in source_progress_source
+    assert "Finding and reading evidence" in source_progress_source
+
+
+def test_frontend_extracts_challenge_coverage_panel():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    challenge_panel_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "challenge-coverage-panel.tsx"
+    ).read_text(encoding="utf-8")
+    evidence_formatting_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "evidence-formatting.ts"
+    ).read_text(encoding="utf-8")
+
+    assert "@/lib/challenge-coverage-panel" in page_source
+    assert "ChallengeCoveragePanel" in page_source
+    assert "Challenge coverage" in challenge_panel_source
+    assert "challenge item(s)" in challenge_panel_source
+    assert "formatRefutationStatusLabel" in challenge_panel_source
+    assert "checked, no explicit challenge" in evidence_formatting_source
+
+
+def test_frontend_localizes_source_trace_status():
+    source_trace_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "source-trace.ts"
+    ).read_text(encoding="utf-8")
+
+    assert "\\u53ef\\u7528" in source_trace_source
+    assert "\\u7f13\\u5b58" in source_trace_source
+    assert "\\u6765\\u6e90\\u53d7\\u9650" in source_trace_source
+    assert "\\u9650\\u6d41" in source_trace_source
+    assert "\\u65e0\\u6743\\u9650" in source_trace_source
+    assert "\\u8d85\\u65f6" in source_trace_source
+    assert "\\u6765\\u6e90\\u9519\\u8bef" in source_trace_source
+    assert "\\u901a\\u8baf\\u793e\\u65b0\\u95fb" in source_trace_source
+    assert "\\u7f51\\u9875\\u68c0\\u7d22" in source_trace_source
+    assert "\\u5b98\\u65b9\\u8bb0\\u5f55" in source_trace_source
+    assert "\\u7a33\\u5b9a" in source_trace_source
+    assert "\\u4e0d\\u7a33\\u5b9a" in source_trace_source
+
+
+def test_frontend_evidence_formatting_helpers_are_extracted():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    evidence_formatting_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "evidence-formatting.ts"
+    ).read_text(encoding="utf-8")
+
+    assert "@/lib/evidence-formatting" in page_source
+    assert "export function formatEvidenceTierLabel" in evidence_formatting_source
+    assert "export function evidenceQualityCategory" in evidence_formatting_source
+    assert "export function formatFreshnessLabel" in evidence_formatting_source
+    assert "export function formatAnalysisBadge" in evidence_formatting_source
+    assert "function formatEvidenceTierLabel" not in page_source
 
 
 def test_frontend_renders_production_brief_and_use_case_selector():
     page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
         encoding="utf-8"
     )
+    production_brief_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "production-brief-panel.tsx"
+    ).read_text(encoding="utf-8")
 
     assert 'data-testid="scenario-selector"' in page_source
-    assert 'data-testid="production-brief"' in page_source
+    assert "@/lib/production-brief-panel" in page_source
+    assert 'data-testid="production-brief"' in production_brief_source
     assert "scenario_override" in page_source
-    assert "Production brief" in page_source
+    assert "Production brief" in production_brief_source
 
 
 def test_frontend_offers_three_production_use_cases():

@@ -2132,3 +2132,501 @@ Answer whether project documentation was synchronized after `v0.1.0-alpha.5`, an
   - Result: `safe-to-deploy`, 95/100.
   - Non-blocking warning: `docs/PROJECT_STATE.md` changed, expected for this status-sync task.
   - CLI hints still list the old release-task required commands as missing; this documentation sync did not change product behavior, and the prior QA evidence records focused pytest plus `npm test` passing.
+
+## 2026-04-17 Documentation Index And Codebase Audit
+
+### Scope
+
+Organize all tracked project documentation into a single index and audit the codebase for undocumented capabilities plus highly similar code that could grow into maintenance debt. No product behavior changes were intended.
+
+### Files Updated
+
+- `README.md`
+- `docs/INDEX.md`
+- `docs/codebase-audit.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### Commands / Evidence
+
+- `git status --short --branch`
+  - Result before this pass: branch was clean except for the guardrails contract after stashing the interrupted UI-stabilization draft.
+- `git stash push -u -m "wip-ui-stabilization-before-doc-audit" -- frontend/src/app/page.tsx frontend/src/components/canvas/CausalGraphView.tsx package.json scripts/ui_smoke_test.js`
+  - Result: preserved the interrupted UI-stabilization draft so this task stays documentation-only.
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails plan ...`
+  - Result: updated `.agent-guardrails/task-contract.json` for the documentation/index/audit scope.
+  - Note: repeated `--required-commands` collapsed to `npm test` in the generated contract; focused pytest will still be recorded manually if run.
+- `git ls-files *.md **/*.md`
+  - Result: found tracked root docs, docs under `docs/`, superpowers plans/specs, frontend docs, and guardrails/codex instruction docs.
+- `git ls-files ... | Select-String ...`
+  - Result: found current public surfaces, docs headings, API endpoints, source/retrieval docs, TODO/fallback/demo references, and code symbols.
+- Python AST/symbol scan over `retrocause`, `frontend/src`, `scripts`, and `tests`
+  - Result: identified large files and repeated symbol names. Largest hotspots include `frontend/src/app/page.tsx` (~188 KB / 4,700+ lines), `retrocause/api/main.py` (~90 KB / 2,500+ lines), `tests/test_comprehensive.py`, `retrocause/app/demo_data.py`, `retrocause/llm.py`, `scripts/e2e_test.py`, and `retrocause/evidence_access.py`.
+- `Select-String -Path retrocause\api\main.py -Pattern '@app\.(get|post)\('`
+  - Result: confirmed public endpoints `/`, `/api/providers`, `/api/runs`, `/api/runs/{run_id}`, `/api/evidence/upload`, `/api/providers/preflight`, `/api/analyze`, `/api/analyze/v2`, and `/api/analyze/v2/stream`.
+
+### Result
+
+- Added `docs/INDEX.md` as the public documentation map, separating current operating docs, strategy docs, audits/checklists, decision records, implementation plans/specs, and stale/local-only docs.
+- Added `docs/codebase-audit.md` with public API and runnable surfaces, easy-to-miss capabilities, maintainability hotspots, and stale-doc notes.
+- Added README links to the new documentation index and codebase audit.
+
+### Security, Dependency, Performance, And Continuity Notes
+
+- Security/auth/secrets: documentation-only pass; no secrets, keys, auth flows, permissions, or sensitive runtime data were added. `docs-private/` remains local-only and ignored.
+- Dependencies: no package or lockfile changes.
+- Performance/load: no runtime behavior changed. The audit identifies large-file/frontend hydration and retrieval/API assembly as future performance-sensitive maintenance areas.
+- Understandability: the main tradeoff is making current docs easier to navigate without rewriting historical docs; the index labels stale/historical docs instead of deleting them.
+- Continuity: reused existing README/project-state/retrieval/pro-boundary docs as sources of truth. No deliberate continuity break.
+
+### Residual Risks
+
+- The audit is static and does not prove that every component is reachable at runtime.
+- The interrupted UI-stabilization draft is preserved in git stash as `wip-ui-stabilization-before-doc-audit`; it is not part of this documentation task.
+- `rg.exe` returned Access denied in this shell session, so the scan used `git ls-files`, `Select-String`, and a small AST/symbol scan instead.
+
+### Verification update - 2026-04-17
+
+Commands completed for the documentation index and codebase audit task:
+
+- `python -m pytest tests\test_query_routing.py tests\test_evidence_access.py -q --basetemp=.pytest-tmp`
+  - Result: passed, 39 tests.
+- `npm test`
+  - Result: passed. This ran frontend lint, frontend production build, `ruff check retrocause/`, full pytest, and `scripts/e2e_test.py`.
+  - E2E result observed: 606 pass, 0 fail, 0 skip.
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "python -m pytest tests\test_query_routing.py tests\test_evidence_access.py -q --basetemp=.pytest-tmp" --commands-run "npm test"`
+  - Result: exit 0, trust score 95/100, safe-to-deploy.
+  - Non-blocking warning: guardrails reports a status-file continuity warning for `docs/PROJECT_STATE.md` from the compared range. This task did not edit `docs/PROJECT_STATE.md` in the current working tree.
+
+Residual risks after verification:
+
+- Audit depth: this was a static code/documentation audit plus normal regression testing, not a semantic refactor or duplicate-code elimination pass.
+- Similar-code findings are intentionally recorded as backlog rather than fixed in this task, to keep the requested documentation/index scope reviewable.
+- No auth, secrets, permission, package, lockfile, runtime storage, or product behavior changes were made.
+- Performance impact is documentation-only; runtime latency and load behavior are unchanged.
+- Continuity: existing docs were linked from README instead of replacing older documents. Stale docs are identified in `docs/codebase-audit.md` for a future cleanup pass.
+
+### Guardrails CLI note - 2026-04-17
+
+After adding both required commands back to `.agent-guardrails/task-contract.json`, `agent-guardrails check` still reports only one submitted `--commands-run` value at a time:
+
+- Combined check with both `--commands-run` values exited 0 but reported one required command missing.
+- Focused-pytest-only check exited 0 and recognized focused pytest, then reported `npm test` missing.
+- `npm test`-only check exited 0 and recognized `npm test`, then reported focused pytest missing.
+
+Both required commands were executed directly and passed before these checks. This appears to be a guardrails CLI command-reporting limitation, not a test failure or product issue. The remaining guardrails output is one non-blocking continuity warning about `docs/PROJECT_STATE.md` in the compared range; the current working tree for this task does not edit `docs/PROJECT_STATE.md`.
+
+### Follow-up documentation boundary update - 2026-04-17
+
+Follow-up scope after the documentation index/codebase audit:
+
+- Clarified README secondary entry points:
+  - `python start.py` browser evidence board is the supported first-run path.
+  - `retrocause` CLI is a secondary local smoke-check/scripting surface.
+  - Streamlit is a legacy/development demo path via `pip install -e ".[demo]"` and `streamlit run retrocause/app/entry.py`.
+  - `/api/analyze/v2` remains the preferred API; `/api/analyze` is compatibility-only.
+- Updated `docs/codebase-audit.md` so the CLI/Streamlit question is no longer open backlog.
+
+Risk notes:
+
+- Security: no auth, secrets, permission, local storage, or sensitive-data behavior changed.
+- Dependencies: no package or lockfile changes.
+- Performance: documentation-only; no runtime path changed.
+- Understanding: this reduces hidden-entry-point ambiguity for maintainers and first-time users.
+- Continuity: keeps existing CLI/Streamlit code intact and labels their support boundary instead of removing them.
+
+Validation note:
+
+- No product code changed in this follow-up. The immediately preceding verification for this task passed focused pytest, full `npm test`, and guardrails. A final guardrails check is run after this note.
+
+### Frontend README cleanup - 2026-04-17
+
+Follow-up backlog item completed:
+
+- Replaced default create-next-app `frontend/README.md` with RetroCause frontend notes.
+- Updated `docs/INDEX.md` so `frontend/README.md` is no longer marked stale.
+- Updated `docs/codebase-audit.md` stale-doc/backlog sections to remove the completed frontend README item.
+
+Risk notes:
+
+- Security: docs-only; no auth, secrets, permission, or sensitive-data behavior changed.
+- Dependencies: no package or lockfile changes.
+- Performance: docs-only; no runtime path changed.
+- Understanding: frontend contributors now have a local guide that points to root README, `src/app/page.tsx`, historical design spec status, and validation commands.
+- Continuity: kept root README as the setup/product source of truth and used frontend README only for local frontend notes.
+
+Validation note:
+
+- No product code changed. The previous focused pytest, full `npm test`, and guardrails runs still cover the unchanged runtime. A final guardrails check is run after this note.
+
+### Frontend page first refactor slice - 2026-04-18
+
+Scope:
+
+- Created `frontend/src/lib/api-types.ts` and moved API response/UI state TypeScript types out of `frontend/src/app/page.tsx`.
+- Kept source-trace status helpers in `page.tsx` because existing Python tests intentionally assert those source literals in the homepage source text.
+- Updated `docs/codebase-audit.md` with the new `page.tsx` size and the extracted API-types file.
+
+Root-cause note during verification:
+
+- An attempted source-trace helper extraction made `tests/test_comprehensive.py::test_frontend_surfaces_rate_limited_source_trace_language` and `test_frontend_localizes_source_trace_status` fail because those tests inspect `frontend/src/app/page.tsx` source text for the status labels.
+- That helper extraction was reverted; only the API-type extraction remains.
+- A later full `npm test` run initially failed in E2E because an old `next start -p 3005` process was still listening while the backend was not. The E2E autostart logic reused the stale frontend service. Stopping the stale 3005 processes and rerunning E2E proved the code path was healthy.
+
+Commands completed:
+
+- `npm --prefix frontend run lint` - passed.
+- `npm --prefix frontend run build` - passed.
+- `python scripts/e2e_test.py` after stopping stale port 3005 service - passed, 606 pass / 0 fail / 0 skip.
+- `npm test` after stale-service cleanup - passed. This includes frontend lint/build, `ruff check retrocause/`, full pytest, and E2E.
+
+Risk notes:
+
+- Security: refactor only; no auth, secrets, permissions, local storage, or sensitive-data behavior changed.
+- Dependencies: no package or lockfile changes.
+- Performance: runtime behavior should be unchanged; this only moves type declarations into a type-only import.
+- Understanding: `page.tsx` now starts closer to UI logic instead of a long API schema block, while `api-types.ts` gives future refactors a shared type anchor.
+- Continuity: reused the existing `@/lib` alias and kept source-trace literals in `page.tsx` to respect current static regression tests.
+
+### Guardrails scope note - 2026-04-18
+
+The first guardrails check for the frontend refactor exited 1 because the tool checks `HEAD~1...HEAD` and reported `docs/PROJECT_STATE.md` from the compared committed range as out of scope. The current working tree for this task does not edit `docs/PROJECT_STATE.md`; `git status --short` shows no working-tree modification for that file. The task contract was expanded to allow `docs/PROJECT_STATE.md` only so guardrails can evaluate the same diff range it reports.
+
+## Frontend source-trace helper refactor continuation - 2026-04-18
+
+Scope: continued the homepage maintainability cleanup by moving source-trace status normalization, localized status labels, and degraded-source classification from `frontend/src/app/page.tsx` into `frontend/src/lib/source-trace.ts`; updated static frontend source tests to inspect the helper module; updated `docs/codebase-audit.md` to reflect the new module boundary and current homepage size.
+
+Reuse/continuity: reused the existing `ApiRetrievalTrace` type from `frontend/src/lib/api-types.ts` and kept all UI call sites unchanged. No user-visible behavior change is intended.
+
+Security/secrets/data: no auth, secrets, permissions, storage paths, or sensitive-data handling changed. No `.retrocause` runtime data touched.
+
+Dependencies: no package, lockfile, or dependency changes.
+
+Performance: pure helper extraction only; no new runtime fetches or rendering loops. Bundle shape changes minimally by moving existing code into a local module.
+
+Tests pending: frontend lint/build, targeted `tests/test_comprehensive.py` source-trace tests, full `npm test`, and guardrails check.
+
+Residual risk before verification: static tests now follow the helper module, but full browser/E2E verification still needs to confirm no import/build regression.
+
+Verification update - source-trace helper refactor:
+
+Commands run:
+- `npm --prefix frontend run lint` passed.
+- `python -m pytest tests\test_comprehensive.py -q -k "source_trace" --basetemp=.pytest-tmp` passed: 3 selected tests passed.
+- `npm --prefix frontend run build` passed.
+- Initial `npm test` failed only in browser E2E after lint/build/ruff/full pytest passed. Root cause investigation found a half-stale local stack: `next start -p 3005` was listening on port 3005 while backend port 8000 was absent, producing frontend 500 resource errors and missing hydrated UI controls. The listening Node processes were this repository's local test server (`npm run start -- -p 3005` and Next `start -p 3005`).
+- Stopped the stale local frontend test server processes and reran `python scripts\e2e_test.py`; it passed 606/606.
+- Reran full `npm test`; it passed, including frontend lint/build, `ruff check retrocause/`, 257 pytest tests, and E2E 606/606.
+
+Result: helper extraction has no intended user-visible behavior change and passed the full verification suite after clearing the stale test service.
+
+Residual risks: `frontend/src/app/page.tsx` remains large at about 174 KB / 4,378 lines, so future UI edits should continue extracting pure helpers and then product sections with tests following the canonical modules. Local E2E can still be confused by stale port 3005 services; if browser assertions fail with backend 8000 absent, check for leftover `next start -p 3005` before changing code.
+
+Guardrails update - source-trace helper refactor:
+
+Command run:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`
+
+Result: passed with trust score 95/100 (`safe-to-deploy`). No blocking errors. One nonblocking warning remains from the historical `docs/PROJECT_STATE.md` state-file diff visible in the broader `HEAD~1...HEAD` comparison; this continuation did not edit `docs/PROJECT_STATE.md`.
+
+## Frontend source kind/stability label consolidation - 2026-04-18
+
+Scope: continued the source-trace helper boundary by moving source-kind and source-stability label helpers from `frontend/src/app/page.tsx` into `frontend/src/lib/source-trace.ts`. The homepage now imports all source trace label helpers from one module.
+
+Behavior note: while moving the helpers, the Chinese source-kind/stability labels were normalized to Unicode escapes for the intended Chinese labels instead of preserving the existing mojibake text. This is a small user-visible text correction for the source trace metadata chips, not a workflow/API change.
+
+Documentation: updated `docs/codebase-audit.md` with the current homepage size (about 173 KB / 4,351 lines) and the expanded `source-trace.ts` boundary.
+
+Tests updated: extended the existing frontend source-trace static test to cover source-kind and source-stability Chinese label literals in `frontend/src/lib/source-trace.ts`.
+
+Security/secrets/data: no auth, secrets, permissions, storage paths, or sensitive-data handling changed. No local runtime data was touched.
+
+Dependencies: no package, lockfile, or dependency changes.
+
+Performance: pure helper consolidation only; no new network calls, state updates, or render loops.
+
+Residual risk before verification: the source trace labels should build identically except for corrected Chinese metadata labels; full `npm test` and guardrails still need to run after this slice.
+
+Verification update - source kind/stability consolidation:
+
+Commands run:
+- `npm --prefix frontend run lint` passed.
+- `python -m pytest tests\test_comprehensive.py -q -k "source_trace" --basetemp=.pytest-tmp` passed: 3 selected tests passed.
+- `npm --prefix frontend run build` passed.
+- Initial full `npm test` again passed lint/build/ruff/full pytest, then failed in E2E with the same stale-stack pattern: frontend port 3005 was listening via `npm run start -- -p 3005`, while backend port 8000 was absent. Stopped the stale frontend test server processes.
+- `python scripts\e2e_test.py` then passed 606/606.
+- Final full `npm test` passed, including frontend lint/build, `ruff check retrocause/`, 257 pytest tests, and browser E2E 606/606.
+
+Result: source trace label helpers are centralized in `frontend/src/lib/source-trace.ts`; Chinese source-kind/stability labels are now encoded as Unicode escapes to avoid mojibake regressions; docs and static tests reflect the new boundary.
+
+Residual risks: homepage remains large at about 173 KB / 4,351 lines. E2E can leave or encounter a half-stale frontend service on port 3005 after failures; the documented recovery is to check/stop leftover `next start -p 3005` before rerunning browser tests.
+
+Guardrails update - source kind/stability consolidation:
+
+Command run:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`
+
+Result: passed with trust score 95/100 (`safe-to-deploy`). No blocking errors. One nonblocking warning remains from the broader `HEAD~1...HEAD` comparison reporting `docs/PROJECT_STATE.md` as a state-related file; this source-trace continuation did not edit `docs/PROJECT_STATE.md`.
+
+## Frontend evidence formatting helper extraction - 2026-04-18
+
+Scope: moved evidence tier labels, evidence quality categorization/sort weight, evidence category summary labels, freshness labels, time-range labels, and analysis badge labels from `frontend/src/app/page.tsx` into `frontend/src/lib/evidence-formatting.ts`.
+
+Continuity: reused the existing `AnalysisUiState` and `ApiEvidence` types from `frontend/src/lib/api-types.ts`. The homepage now imports these pure helpers instead of defining them inline. No API or state-shape change is intended.
+
+Documentation: updated `docs/codebase-audit.md` with the current homepage size (about 170 KB / 4,240 lines) and the new `frontend/src/lib/evidence-formatting.ts` boundary.
+
+Tests updated: added a static frontend test confirming `page.tsx` imports `@/lib/evidence-formatting` and that the core evidence formatting helpers are exported from the helper module rather than redefined inline.
+
+Security/secrets/data: no auth, secrets, permissions, storage paths, or sensitive-data handling changed. No local runtime data was touched.
+
+Dependencies: no package, lockfile, or dependency changes.
+
+Performance: pure helper extraction only; no new fetches, effects, state updates, or render loops.
+
+Interim verification: `npm --prefix frontend run lint` passed. Initial `npm --prefix frontend run build` caught one missing import for `evidenceQualityCategory`; after importing it from the new helper module, `npm --prefix frontend run build` passed.
+
+Residual risk before full verification: helper extraction should be behavior-preserving, but full `npm test` and guardrails still need to run after the new static test.
+
+Full verification update - evidence formatting helper extraction:
+
+Commands run:
+- `npm test` passed. This included frontend lint, frontend production build, `ruff check retrocause/`, 258 pytest tests, and browser E2E.
+- Browser E2E result: 606 passed, 0 failed, 0 skipped.
+
+Result: the homepage imports evidence formatting helpers from `frontend/src/lib/evidence-formatting.ts`, the focused static test confirms the helper boundary, and the full local verification suite passed without needing stale-service cleanup in this run.
+
+Residual risks: this is still a pure helper extraction from a large homepage file, not a complete page decomposition. `frontend/src/app/page.tsx` remains about 170 KB / 4,240 lines, so future work should continue moving focused sections into modules/components. Auth, secrets, permissions, sensitive-data handling, package dependencies, lockfiles, and runtime storage behavior were unchanged. Performance impact is limited to module boundary shape; no new network calls, effects, or render loops were added.
+
+Guardrails update - evidence formatting helper extraction:
+
+Command run:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`
+
+Result: passed with trust score 95/100 (`safe-to-deploy`). No blocking errors. One nonblocking continuity warning remains from the broader `HEAD~1...HEAD` comparison reporting `docs/PROJECT_STATE.md` as a state-related file; this evidence-formatting continuation did not edit `docs/PROJECT_STATE.md` in the working tree.
+
+## Frontend production brief panel extraction - 2026-04-18
+
+Scope: moved the right-panel production brief card from `frontend/src/app/page.tsx` into `frontend/src/lib/production-brief-panel.tsx` while keeping state orchestration and localization helpers in the homepage.
+
+Continuity: reused the existing `ApiProductionBrief` and `ApiProductionHarness` types from `frontend/src/lib/api-types.ts`. The component accepts the existing `localizeBriefText` function as a prop, so this slice does not move broader localization logic or change UI behavior.
+
+Documentation: updated `docs/codebase-audit.md` with the current homepage size (about 167 KB / 4,190 lines) and the new `frontend/src/lib/production-brief-panel.tsx` boundary.
+
+Tests updated: adjusted the frontend production brief static test so `page.tsx` is checked for the `@/lib/production-brief-panel` import and the component file is checked for the `production-brief` test id and label.
+
+Security/secrets/data: no auth, secrets, permissions, storage paths, runtime data, or sensitive-data handling changed.
+
+Dependencies: no package, lockfile, or dependency changes.
+
+Performance: component extraction only; no new fetches, effects, state updates, rendering loops, or API calls.
+
+Commands run:
+- `npm --prefix frontend run lint` passed.
+- `python -m pytest tests\test_comprehensive.py -q -k "production_brief or evidence_formatting or source_trace" --basetemp=.pytest-tmp` passed: 8 selected tests.
+- `npm --prefix frontend run build` passed.
+- Initial full `npm test` passed lint/build/ruff/full pytest, then failed only in browser E2E. Root cause investigation found the same half-stale local stack pattern as earlier: port 3005 was still listening via this repository's `npm run start -- -p 3005` / `next start -p 3005`, while backend port 8000 was absent. That produced frontend 500 resource errors, 0 sticky cards, and missing hydrated controls.
+- Stopped only those stale local frontend test processes and ran `python scripts\e2e_test.py`; it passed 606/606.
+- Final full `npm test` passed. This included frontend lint/build, `ruff check retrocause/`, 258 pytest tests, and browser E2E 606/606.
+
+Result: production brief rendering now has a focused component boundary, `page.tsx` is reduced to about 167 KB / 4,190 lines, and full verification passes.
+
+Residual risks: this is one product-section extraction, not a complete homepage decomposition. The homepage still contains large state, graph, panel, upload, saved-run, and CSS logic. E2E can still be confused by stale port 3005 services after interrupted runs; the documented recovery is to check and stop leftover local `next start -p 3005` processes before changing code.
+
+Guardrails update - production brief panel extraction:
+
+Command run:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`
+
+Result: passed with trust score 95/100 (`safe-to-deploy`). No blocking errors. One nonblocking continuity warning remains from the broader `HEAD~1...HEAD` comparison reporting `docs/PROJECT_STATE.md` as a state-related file; this production-brief continuation did not edit `docs/PROJECT_STATE.md` in the working tree.
+
+## Frontend saved-runs and uploaded-evidence panel extraction - 2026-04-18
+
+Scope: continued the homepage maintainability cleanup by moving the saved-runs panel into `frontend/src/lib/saved-runs-panel.tsx` and the uploaded-evidence panel into `frontend/src/lib/uploaded-evidence-panel.tsx`. The homepage keeps the existing state, callbacks, fetch paths, and local workflow orchestration, while the presentational panel markup now has focused component boundaries.
+
+Continuity: reused existing `ApiSavedRunSummary` typing from `frontend/src/lib/api-types.ts` and the existing homepage callbacks (`refreshSavedRuns`, `loadSavedRun`, `uploadEvidence`, and input setters). No endpoint, payload, local storage path, run-store behavior, or evidence-store behavior changed.
+
+Documentation: updated `docs/codebase-audit.md` with the current homepage size (about 164 KB / 4,103 lines) and the new component boundaries. Updated `docs/PROJECT_STATE.md` so the project status now points maintainers to the new docs index/code audit and records this frontend decomposition work as the current maintainability direction.
+
+Tests updated: extended `tests/test_comprehensive.py` so the local workflow static coverage follows the new component files and still confirms the homepage imports the saved-runs and uploaded-evidence panels while retaining `/api/runs` and `/api/evidence/upload` usage in the page orchestration layer.
+
+Security/secrets/data: no auth, secrets, permissions, storage paths, runtime store formats, or sensitive-data handling changed. Uploaded evidence remains the same local pasted-evidence workflow; this slice only moved form rendering.
+
+Dependencies: no package, lockfile, or dependency changes.
+
+Performance: component extraction only; no new fetches, effects, state loops, timers, retries, or API calls were added. Bundle shape changes are limited to local module boundaries.
+
+Commands run:
+- `npm --prefix frontend run lint` passed.
+- `python -m pytest tests\test_comprehensive.py -q -k "pro_workflow_slices or production_brief" --basetemp=.pytest-tmp` passed: 5 selected tests.
+- `npm --prefix frontend run build` passed.
+- First full `npm test` after the uploaded-evidence extraction passed lint/build/ruff/full pytest, then failed only in browser E2E with 0 sticky cards, missing submit button, language toggle mismatch, and frontend 500 console errors. Root cause investigation found port 3005 listening via this repository's stale `next start -p 3005` process while backend port 8000 was absent.
+- Stopped only the stale local `next start -p 3005` process (`PID 23408`).
+- `python scripts\e2e_test.py` passed 606/606 after stale process cleanup.
+- Final `npm test` passed. This included frontend lint, frontend production build, `ruff check retrocause/`, 258 pytest tests, and browser E2E 606/606.
+
+Result: saved-runs and uploaded-evidence rendering now have focused component boundaries, `page.tsx` is reduced to about 164 KB / 4,103 lines, docs are synchronized, and the required full verification passes.
+
+Residual risks: this is still an incremental refactor of a large homepage, not a full decomposition. The remaining high-risk frontend areas are readable/source-trace sections, sticky graph/card layout, panel CSS, and duplicated graph/card concepts noted in `docs/codebase-audit.md`. Local E2E can still be confused by stale port 3005 processes after interrupted runs; the recovery is to inspect ports 3005/8000 and stop leftover local `next start -p 3005` before changing code.
+
+Guardrails update - saved-runs/uploaded-evidence panel extraction:
+
+Command run:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`
+
+Result: passed with trust score 95/100 (`safe-to-deploy`). No blocking errors. One nonblocking continuity warning remains because `docs/PROJECT_STATE.md` was intentionally updated to keep project documentation synchronized with this maintenance/refactor pass.
+
+## Frontend rendered source-trace panel extraction - 2026-04-18
+
+Scope: continued the homepage maintainability cleanup by moving the rendered completed-run source trace list from `frontend/src/app/page.tsx` into `frontend/src/lib/source-trace-panel.tsx`. The homepage still owns retrieval state, source summary calculations, and loading/progress UI; the new component owns the reusable completed trace row markup.
+
+Continuity: reused `ApiRetrievalTrace` from `frontend/src/lib/api-types.ts` and the existing source-trace helpers from `frontend/src/lib/source-trace.ts`. No endpoint, payload, source-trace schema, retrieval behavior, saved-run behavior, or evidence-store behavior changed.
+
+Behavior note: while extracting the panel, fragile Chinese homepage strings were normalized to Unicode escapes in `frontend/src/app/page.tsx`. This prevents Windows console encoding rewrites from turning localized copy into invalid TypeScript or mojibake text. The intended behavior is unchanged except for stabilizing already-intended Chinese labels.
+
+Documentation: updated `docs/codebase-audit.md` with the current homepage size (about 162 KB / 3,775 lines), the new `frontend/src/lib/source-trace-panel.tsx` boundary, and the next cleanup priorities. Updated `docs/PROJECT_STATE.md` to record the rendered source-trace extraction and the Chinese string stabilization.
+
+Tests updated: extended `tests/test_comprehensive.py` so source-trace static coverage follows the new component file, verifies the homepage imports `@/lib/source-trace-panel`, and still confirms retry-after/source-status rendering.
+
+Security/secrets/data: no auth, secrets, permissions, storage paths, runtime store formats, or sensitive-data handling changed. No local `.retrocause` runtime data was touched.
+
+Dependencies: no package, lockfile, or dependency changes.
+
+Performance: component extraction and string literal stabilization only; no new fetches, effects, state loops, timers, retries, or API calls were added.
+
+Commands run:
+- `npm --prefix frontend run lint` initially caught invalid TypeScript from encoding-corrupted Chinese string literals; after normalizing the affected literals to Unicode escapes, it passed.
+- `npm --prefix frontend run build` passed.
+- `python -m pytest tests\test_comprehensive.py -q -k "source_trace or readable_brief" --basetemp=.pytest-tmp` passed: 5 selected tests.
+- `python -m pytest tests\test_comprehensive.py -q -k "single_case or source_trace" --basetemp=.pytest-tmp` initially caught a forbidden single-case homepage term (`united states`) in the Chinese label regex; after removing that term from the regex, it passed: 4 selected tests.
+- Initial full `npm test` after the component extraction passed lint/build/ruff/full pytest, then failed only in browser E2E with the same stale-stack pattern: port 3005 was listening via this repository's stale `next start -p 3005`, while backend port 8000 was absent.
+- Stopped only the stale local frontend test process (`PID 16612`).
+- `python scripts\e2e_test.py` passed 606/606 after stale process cleanup.
+- Final `npm test` passed. This included frontend lint, frontend production build, `ruff check retrocause/`, 258 pytest tests, and browser E2E 606/606.
+
+Result: completed source-trace rendering now has a focused component boundary, the homepage is reduced to about 162 KB / 3,775 lines, docs are synchronized, and the required full verification passes.
+
+Residual risks: this is still an incremental refactor of a large homepage, not a full decomposition. Remaining high-risk frontend areas are readable brief rendering, partial-live/source progress, challenge coverage, evidence filters, sticky graph/card layout, and global CSS. Local E2E can still be confused by stale port 3005 processes after interrupted runs; the recovery is to inspect ports 3005/8000 and stop leftover local `next start -p 3005` before changing code.
+
+Guardrails update - rendered source-trace panel extraction:
+
+Command run:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`
+
+Result: passed with trust score 95/100 (`safe-to-deploy`). No blocking errors. One nonblocking continuity warning remains because `docs/PROJECT_STATE.md` was intentionally updated to keep project documentation synchronized with this maintenance/refactor pass.
+
+## Frontend readable brief panel extraction - 2026-04-18
+
+Scope: continued the homepage maintainability cleanup by moving readable brief rendering, copy-report button markup, manual copy fallback markup, and source-health summary markup from `frontend/src/app/page.tsx` into `frontend/src/lib/readable-brief-panel.tsx`. The homepage still owns analysis state, localized brief derivation, copy/select callbacks, challenge summary calculation, and source transparency summary calculation.
+
+Continuity: reused the existing localized analysis brief shape produced by `page.tsx`, the existing `manualCopyReportRef`, existing copy/select callbacks, and the existing source transparency summary data. No endpoint, payload, source-trace schema, retrieval behavior, saved-run behavior, evidence-store behavior, or clipboard workflow changed.
+
+Documentation: updated `docs/codebase-audit.md` with the current homepage size (about 150 KB / 3,832 lines), the new `frontend/src/lib/readable-brief-panel.tsx` boundary, and the next cleanup priorities. Updated `docs/PROJECT_STATE.md` so maintainers know readable brief rendering has moved into `frontend/src/lib/`.
+
+Tests updated: adjusted `tests/test_comprehensive.py` so readable brief, manual-copy fallback, source-health summary, and source-trace reviewability assertions follow the new component file while confirming `page.tsx` imports the component and still owns orchestration callbacks/state.
+
+Security/secrets/data: no auth, secrets, permissions, storage paths, runtime store formats, or sensitive-data handling changed. No local `.retrocause` runtime data was touched.
+
+Dependencies: no package, lockfile, or dependency changes.
+
+Performance: component extraction only; no new fetches, effects, state loops, timers, retries, or API calls were added. Render behavior is equivalent except for the module boundary.
+
+Commands run:
+- `npm --prefix frontend run lint` passed.
+- `python -m pytest tests\test_comprehensive.py -q -k "readable_brief or manual_report or source_transparency" --basetemp=.pytest-tmp` passed: 3 selected tests.
+- `npm --prefix frontend run build` passed.
+- Initial full `npm test` passed lint/build/ruff/full pytest until a static source-trace test still looked for `Reviewability` in `page.tsx`; the assertion was updated to follow `frontend/src/lib/readable-brief-panel.tsx`.
+- `python -m pytest tests\test_comprehensive.py -q -k "source_trace or readable_brief or manual_report or source_transparency" --basetemp=.pytest-tmp` passed: 6 selected tests.
+- A later full `npm test` passed lint/build/ruff/258 pytest tests, then failed only in E2E with a bad-key request timeout. Root cause investigation found the recurring local stale-stack pattern after test interruption: frontend port 3005 was listening via this repository's `next start -p 3005`, while backend port 8000 was absent.
+- Stopped only the stale local frontend test processes (`PID 10164`, `19872`, `16700`).
+- `python scripts\e2e_test.py` passed 606/606 after stale process cleanup.
+- Final `npm test` passed. This included frontend lint, frontend production build, `ruff check retrocause/`, 258 pytest tests, and browser E2E 606/606.
+
+Result: readable brief rendering now has a focused component boundary, docs are synchronized, and the required full verification passes.
+
+Residual risks: this is still an incremental refactor of a large homepage, not a full decomposition. Remaining high-risk frontend areas are partial-live/source progress, challenge coverage, evidence filters, sticky graph/card layout, and global CSS. Local E2E can still be confused by stale port 3005 processes after interrupted runs; the recovery is to inspect ports 3005/8000 and stop leftover local `next start -p 3005` before changing code.
+
+Guardrails update - readable brief panel extraction:
+
+Command run:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`
+
+Result: passed with trust score 95/100 (`safe-to-deploy`). No blocking errors. One nonblocking continuity warning remains because `docs/PROJECT_STATE.md` was intentionally updated to keep project documentation synchronized with this maintenance/refactor pass.
+
+## Frontend source progress panel extraction - 2026-04-18
+
+Scope: continued the homepage maintainability cleanup by moving in-flight retrieval progress rendering and partial-live reason rendering from `frontend/src/app/page.tsx` into `frontend/src/lib/source-progress-panel.tsx`. The homepage still owns pipeline progress state, analysis mode state, partial-live reasons, and source trace data; the new component owns only the small right-panel progress/reason display.
+
+Continuity: reused the existing pipeline progress shape (`step`, `stepIndex`, `totalSteps`, `message`), existing analysis mode values, and the same step labels/order previously defined in `page.tsx`. No endpoint, payload, source-trace schema, retrieval behavior, saved-run behavior, evidence-store behavior, or loading workflow changed.
+
+Documentation: updated `docs/codebase-audit.md` with the current homepage size (about 146 KB / 3,752 lines), the new `frontend/src/lib/source-progress-panel.tsx` boundary, and the next cleanup priorities. Updated `docs/PROJECT_STATE.md` so maintainers know source progress rendering has moved into `frontend/src/lib/`.
+
+Tests updated: added a static frontend test confirming `page.tsx` imports `@/lib/source-progress-panel` and that the component file owns `Retrieval trace`, `Why partial live`, and the existing pipeline stage labels.
+
+Security/secrets/data: no auth, secrets, permissions, storage paths, runtime store formats, or sensitive-data handling changed. No local `.retrocause` runtime data was touched.
+
+Dependencies: no package, lockfile, or dependency changes.
+
+Performance: component extraction only; no new fetches, effects, state loops, timers, retries, or API calls were added. Render behavior is equivalent except for the module boundary.
+
+Commands run:
+- `npm --prefix frontend run lint` passed.
+- Initial `npm --prefix frontend run build` caught a prop type mismatch (`detail` vs existing `message`) in the new component type; after matching the existing progress shape, `npm --prefix frontend run build` passed.
+- `python -m pytest tests\test_comprehensive.py -q -k "source_progress or source_trace" --basetemp=.pytest-tmp` passed: 4 selected tests.
+- First full `npm test` after this slice passed lint/build/ruff/259 pytest tests, then failed only in browser E2E with stale-stack symptoms: 0 sticky cards, missing hydrated submit button, 500 resource errors, frontend port 3005 listening, and backend port 8000 absent.
+- Stopped only the stale local frontend test processes (`PID 7224`, `20100`, `24592`).
+- `python scripts\e2e_test.py` passed 606/606 after stale process cleanup.
+- Final `npm test` passed. This included frontend lint, frontend production build, `ruff check retrocause/`, 259 pytest tests, and browser E2E 606/606.
+
+Result: in-flight source progress and partial-live reason rendering now have a focused component boundary, docs are synchronized, and the required full verification passes.
+
+Residual risks: this is still an incremental refactor of a large homepage, not a full decomposition. Remaining high-risk frontend areas are challenge coverage, evidence filters, sticky graph/card layout, and global CSS. Local E2E can still be confused by stale port 3005 processes after interrupted runs; the recovery is to inspect ports 3005/8000 and stop leftover local `next start -p 3005` before changing code.
+
+## Guardrails update - source progress panel extraction
+
+Command run:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`
+
+Result: passed with trust score 95/100 (`safe-to-deploy`). No blocking errors. One nonblocking continuity warning remains because `docs/PROJECT_STATE.md` was intentionally updated to keep project documentation synchronized with this maintenance/refactor pass.
+
+## Frontend challenge coverage panel extraction - 2026-04-18
+
+Scope:
+- Extracted right-panel challenge/refutation coverage rendering from `frontend/src/app/page.tsx` into `frontend/src/lib/challenge-coverage-panel.tsx`.
+- Moved `formatRefutationStatusLabel` into the existing `frontend/src/lib/evidence-formatting.ts` helper module so challenge, reason, chain-compare, and connected-edge UI reuse the same status labels.
+- Updated `tests/test_comprehensive.py` with a static regression that keeps the challenge coverage panel and shared refutation formatter discoverable outside the homepage.
+- Updated `docs/codebase-audit.md`, `docs/PROJECT_STATE.md`, and `frontend/README.md` so the maintenance/docs map reflects the new module boundary and the next cleanup target.
+
+Commands run:
+- `npm --prefix frontend run lint` - passed.
+- `python -m pytest tests\test_comprehensive.py -q -k "challenge_coverage or source_progress" --basetemp=.pytest-tmp` - passed, 2 selected tests.
+- `npm --prefix frontend run build` - passed.
+- `npm test` - first run failed only in browser E2E after lint/build/ruff/260 pytest passed. Root cause evidence: port 3005 still had this repo's stale `next start -p 3005`/npm processes while port 8000 was absent, causing the E2E browser to hit stale frontend state and report 0 sticky cards, missing submit button, language toggle mismatch, and 500 resource errors.
+- `python scripts\e2e_test.py` after stopping only those stale local 3005 processes - passed, 606/606.
+- `npm test` rerun - passed: frontend lint/build, `ruff check retrocause/`, 260 pytest tests, and browser E2E 606/606.
+
+Security/auth/secrets/sensitive data:
+- No auth, API key, permission, credential, or sensitive-data handling changed.
+- No local run data or `.retrocause` runtime data was added to source control.
+
+Dependencies:
+- No new packages, lockfile changes, or dependency upgrades.
+
+Performance:
+- Runtime behavior is intended to be unchanged. The homepage bundle boundary is more maintainable, with `page.tsx` reduced to about 143 KB / 3,700 lines after this slice.
+
+Understanding and continuity:
+- This follows the existing `frontend/src/lib/*-panel.tsx` extraction pattern used for source trace, source progress, readable brief, production brief, saved runs, and uploaded evidence.
+- The deliberate continuity change is that refutation status labels now come from `evidence-formatting.ts` instead of a local homepage function, reducing duplicate label risk for future challenge UI changes.
+
+Residual risks / next work:
+- `frontend/src/app/page.tsx` still contains evidence filters, sticky graph/card layout, query flow, localization helpers, and global CSS.
+- Existing Windows console mojibake in older Chinese strings remains outside this slice unless touched for type/build safety.
+- Next recommended cleanup target: evidence filters, then sticky graph/card sections.
+
+Guardrails update - challenge coverage panel extraction:
+
+Command run:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`
+
+Result: passed with trust score 95/100 (`safe-to-deploy`). No blocking errors. One nonblocking continuity warning remains because `docs/PROJECT_STATE.md` was intentionally updated to keep project documentation synchronized with this maintenance/refactor pass.

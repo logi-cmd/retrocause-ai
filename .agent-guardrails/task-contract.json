@@ -1,26 +1,21 @@
 {
   "schemaVersion": 3,
-  "task": "Prepare OSS v0.1.0-alpha.5 release-readiness with local run metadata, saved runs, pasted uploaded evidence, degraded-source browser dogfood, README/project-state/pro-boundary docs, and Chinese intraday A-share retrieval reliability; verify focused query/source tests, npm test, and guardrails before tagging.",
+  "task": "Refactor RetroCause frontend homepage by extracting pure TypeScript types and formatting/status helpers from frontend/src/app/page.tsx into frontend/src/lib without changing user-visible behavior; keep the first slice small and verify with frontend lint/build, npm test if needed, and guardrails.",
   "preset": "generic",
-  "createdAt": "2026-04-16T11:29:14.992Z",
+  "createdAt": "2026-04-17T16:32:32.253Z",
   "allowedPaths": [
-    "README.md",
-    "package.json",
-    "frontend/src/app/globals.css",
-    "frontend/src/app/layout.tsx",
     "frontend/src/app/page.tsx",
-    "retrocause/api/main.py",
-    "retrocause/evidence_store.py",
-    "retrocause/llm.py",
-    "retrocause/evidence_access.py",
-    "scripts/e2e_test.py",
-    "tests/",
-    "docs/",
+    "frontend/src/lib/",
+    "tests/test_comprehensive.py",
+    "frontend/README.md",
+    "docs/codebase-audit.md",
+    "docs/INDEX.md",
+    "docs/PROJECT_STATE.md",
+    "README.md",
     ".agent-guardrails/evidence/",
     ".agent-guardrails/task-contract.json"
   ],
   "requiredCommands": [
-    "python -m pytest tests\\test_query_routing.py tests\\test_evidence_access.py -q --basetemp=.pytest-tmp",
     "npm test"
   ],
   "evidencePaths": [
@@ -28,24 +23,30 @@
   ],
   "intendedFiles": [],
   "protectedPaths": [],
-  "allowedChangeTypes": [],
+  "allowedChangeTypes": [
+    "refactor",
+    "frontend",
+    "tests",
+    "docs",
+    "guardrails-internal"
+  ],
   "riskLevel": "medium",
   "requiresReviewNotes": false,
   "validationProfile": "standard",
   "securityRequirements": [
-    "明确说明认证、密钥、权限以及敏感数据处理相关影响。"
+    "Mention auth, secrets, permissions, and sensitive-data handling explicitly."
   ],
   "dependencyRequirements": [
-    "明确说明新增或升级的依赖、lockfile 变化以及依赖影响。"
+    "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
   ],
   "performanceRequirements": [
     "Mention performance, latency, or load impact in evidence."
   ],
   "understandingRequirements": [
-    "解释主要权衡点，方便后续维护者快速理解这次改动。"
+    "Explain the main tradeoffs so future maintainers can follow the change."
   ],
   "continuityRequirements": [
-    "说明复用目标，以及任何刻意打破现有连续性的地方。"
+    "Mention reuse targets and any deliberate continuity break in evidence."
   ],
   "acknowledgedSkips": [],
   "patternSummary": "",
@@ -75,10 +76,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "461d8ca0-d84b-42a4-b9a8-2a172a79b1d2",
-    "createdAt": "2026-04-16T11:29:14.991Z",
+    "sessionId": "12431d85-b3cb-4d7b-929c-e55eab21f63a",
+    "createdAt": "2026-04-17T16:32:32.252Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Prepare OSS v0.1.0-alpha.5 release-readiness with local run metadata, saved runs, pasted uploaded evidence, degraded-source browser dogfood, README/project-state/pro-boundary docs, and Chinese intraday A-share retrieval reliability; verify focused query/source tests, npm test, and guardrails before tagging.",
+    "taskRequest": "Refactor RetroCause frontend homepage by extracting pure TypeScript types and formatting/status helpers from frontend/src/app/page.tsx into frontend/src/lib without changing user-visible behavior; keep the first slice small and verify with frontend lint/build, npm test if needed, and guardrails.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],
@@ -90,41 +91,40 @@
       "连续性要求"
     ],
     "requiredCommandsSuggested": [
-      "python -m pytest tests\\test_query_routing.py tests\\test_evidence_access.py -q --basetemp=.pytest-tmp",
       "npm test"
     ],
     "evidencePathSuggested": ".agent-guardrails/evidence/current-task.md",
     "riskDimensions": {
       "securityRequirements": [
-        "明确说明认证、密钥、权限以及敏感数据处理相关影响。"
+        "Mention auth, secrets, permissions, and sensitive-data handling explicitly."
       ],
       "dependencyRequirements": [
-        "明确说明新增或升级的依赖、lockfile 变化以及依赖影响。"
+        "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
       ],
       "performanceRequirements": [
         "Mention performance, latency, or load impact in evidence."
       ],
       "understandingRequirements": [
-        "解释主要权衡点，方便后续维护者快速理解这次改动。"
+        "Explain the main tradeoffs so future maintainers can follow the change."
       ],
       "continuityRequirements": [
-        "说明复用目标，以及任何刻意打破现有连续性的地方。"
+        "Mention reuse targets and any deliberate continuity break in evidence."
       ]
     },
     "finishCheckHints": [
-      "记录你实际执行过的命令：python -m pytest tests\\test_query_routing.py tests\\test_evidence_access.py -q --basetemp=.pytest-tmp, npm test",
-      "保持证据说明为最新：.agent-guardrails/evidence/current-task.md",
-      "在证据说明和 review 摘要里明确写出这些风险维度：安全、依赖、性能、可理解性、连续性。",
-      "交付或合并前，用 `agent-guardrails check --review` 做最后检查。"
+      "Report the commands you actually ran: npm test",
+      "Keep the evidence note current: .agent-guardrails/evidence/current-task.md",
+      "Keep security, dependency, performance, understanding, and continuity concerns explicit in the evidence note and review summary.",
+      "Finish with npx agent-guardrails check --review before handing off or merging."
     ],
     "riskSignals": [],
     "archaeologyNotes": [],
     "nextActions": [
-      "先完成符合契约的最小改动。",
-      "运行要求的命令：python -m pytest tests\\test_query_routing.py tests\\test_evidence_access.py -q --basetemp=.pytest-tmp, npm test",
-      "更新证据文件：.agent-guardrails/evidence/current-task.md",
-      "在证据说明和 review 摘要里明确写出这些风险维度：安全、依赖、性能、可理解性、连续性。",
-      "完成任务前运行 `agent-guardrails check --review`。"
+      "Implement the smallest change that fits the contract.",
+      "Run required commands: npm test",
+      "Update evidence: .agent-guardrails/evidence/current-task.md",
+      "Keep security, dependency, performance, understanding, continuity concerns explicit in the evidence note and review summary.",
+      "Run npx agent-guardrails check --review before completing the task."
     ],
     "roughIntent": null
   }

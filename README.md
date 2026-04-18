@@ -16,6 +16,10 @@ RetroCause is a research-grade OSS alpha. The current priority is to finish the 
 
 RetroCause 目前是 research-grade OSS alpha。当前优先级是先把 OSS 版本做好，再考虑 Pro。未来 Pro 应该作为独立的全栈 Rust 重构来规划，而不是继续在当前 Python/FastAPI + Next.js alpha 上堆托管功能。
 
+Documentation map: [`docs/INDEX.md`](docs/INDEX.md). Current code/documentation audit: [`docs/codebase-audit.md`](docs/codebase-audit.md).
+
+文档索引见 [`docs/INDEX.md`](docs/INDEX.md)。当前代码与文档审计见 [`docs/codebase-audit.md`](docs/codebase-audit.md)。
+
 What works locally:
 
 - FastAPI backend and Next.js browser app
@@ -228,6 +232,22 @@ curl -X POST http://localhost:8000/api/evidence/upload \
 Windows PowerShell note: for Chinese queries, send UTF-8 JSON bytes. Plain string request bodies can corrupt Chinese text on some Windows consoles.
 
 Windows PowerShell 注意：中文问题建议用 UTF-8 JSON bytes 发送。某些 Windows 控制台直接发送字符串 body 时，中文可能被破坏。
+
+## Secondary Entry Points / 次要入口
+
+The supported first-run path is the browser evidence board started by `python start.py`. The repository also contains two secondary development entry points:
+
+- `retrocause`: a CLI command installed from `pyproject.toml`. Use it for quick local smoke checks or scripting. It is not the primary OSS product surface.
+- Streamlit demo: install `pip install -e ".[demo]"` and run `streamlit run retrocause/app/entry.py`. This is a legacy/development demo path, not the current browser evidence board.
+
+The preferred API is `/api/analyze/v2`. The legacy `/api/analyze` endpoint remains for compatibility but is not the recommended integration path for new work.
+
+推荐的首次运行路径是通过 `python start.py` 打开的浏览器 evidence board。本仓库还保留两个次要开发入口：
+
+- `retrocause`：由 `pyproject.toml` 安装的 CLI 命令，适合快速本地 smoke check 或脚本使用，不是当前 OSS 产品主入口。
+- Streamlit demo：安装 `pip install -e ".[demo]"` 后运行 `streamlit run retrocause/app/entry.py`。这是 legacy/development demo 路径，不是当前浏览器 evidence board。
+
+推荐 API 是 `/api/analyze/v2`。旧的 `/api/analyze` 端点仅作为兼容路径保留，新集成不建议使用。
 
 ## Development / 开发
 

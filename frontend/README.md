@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RetroCause Frontend Notes
 
-## Getting Started
+This folder contains the Next.js browser evidence board for RetroCause. The root
+[`README.md`](../README.md) remains the source of truth for first-time setup,
+product positioning, API usage, and release status.
 
-First, run the development server:
+## Supported Run Path
+
+Start the full local app from the repository root:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+python start.py
 ```
 
-Open [http://localhost:3005](http://localhost:3005) with your browser to see the result.
+Then open:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Frontend: `http://localhost:3005`
+- Backend API: `http://localhost:8000`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Running only the frontend with `npm --prefix frontend run dev` is useful for UI
+development, but many flows depend on the local FastAPI backend.
 
-## Learn More
+## Main Files
 
-To learn more about Next.js, take a look at the following resources:
+- `src/app/page.tsx`: current evidence-board homepage and primary UI surface.
+- `src/app/layout.tsx`: app shell metadata.
+- `src/lib/`: extracted homepage types, formatting helpers, and focused panels
+  for source trace/progress, readable briefs, production briefs, saved runs,
+  uploaded evidence, and challenge coverage.
+- `src/components/canvas/`: older/componentized graph and evidence views that
+  still overlap with homepage concepts.
+- `UI_DESIGN_SPEC.md`: historical design direction. Treat it as design intent,
+  not an exact description of the current homepage.
+- `AGENTS.md`: local Next.js warning. Read it before changing frontend code.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Validation
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+From the repository root, run:
 
-## Deploy on Vercel
+```bash
+npm test
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+That command covers frontend lint/build, backend `ruff`, full Python tests, and
+the full-stack browser E2E smoke test.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+For frontend-only checks:
+
+```bash
+npm --prefix frontend run lint
+npm --prefix frontend run build
+```
+
+## Maintenance Notes
+
+- Keep user-visible behavior and setup docs in the root `README.md`.
+- Keep current project status in `docs/PROJECT_STATE.md`.
+- The current homepage is large; prefer extracting focused components and pure
+  helpers instead of adding more unrelated logic to `src/app/page.tsx`.
+- Do not imply hosted Pro features exist in this frontend. Saved runs and
+  uploaded evidence are local OSS alpha inspectability features.

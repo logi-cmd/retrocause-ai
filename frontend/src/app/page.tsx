@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
@@ -11,534 +11,76 @@ import {
   type EdgeStrength,
   type EvidenceReliability,
 } from "@/data/mockData";
+import type {
+  AnalysisUiState,
+  AnalyzeResponseV2,
+  ApiAnalysisBrief,
+  ApiChallengeCheck,
+  ApiChain,
+  ApiEdge,
+  ApiEvidence,
+  ApiProductionBrief,
+  ApiProductionHarness,
+  ApiProductHarness,
+  ApiProviderPreflight,
+  ApiRetrievalTrace,
+  ApiRunStep,
+  ApiSavedRunSummary,
+  ApiScenario,
+  ApiUsageLedgerItem,
+} from "@/lib/api-types";
+import {
+  evidenceCategorySummaryLabel,
+  evidenceQualityCategory,
+  evidenceSortWeight,
+  formatAnalysisBadge,
+  formatEvidenceTierLabel,
+  formatFreshnessLabel,
+  formatRefutationStatusLabel,
+  formatTimeRangeLabel,
+} from "@/lib/evidence-formatting";
+import {
+  formatSourceKindLabel,
+  isDegradedSourceTrace,
+  sourceTraceStatus,
+} from "@/lib/source-trace";
+import { SourceProgressPanel } from "@/lib/source-progress-panel";
+import { SourceTracePanel } from "@/lib/source-trace-panel";
+import { ReadableBriefPanel } from "@/lib/readable-brief-panel";
+import { ProductionBriefPanel } from "@/lib/production-brief-panel";
+import { SavedRunsPanel } from "@/lib/saved-runs-panel";
+import { UploadedEvidencePanel } from "@/lib/uploaded-evidence-panel";
+import { ChallengeCoveragePanel } from "@/lib/challenge-coverage-panel";
 
 const API_BASE = process.env.NEXT_PUBLIC_RETROCAUSE_API_BASE ?? "http://localhost:8000";
-
-type ApiNode = {
-  id: string;
-  label: string;
-  description: string;
-  probability: number;
-  type: string;
-  depth: number;
-  upstream_ids: string[];
-  supporting_evidence_ids: string[];
-  refuting_evidence_ids: string[];
-  uncertainty?: {
-    uncertainty_types: string[];
-    overall_score: number;
-    data_uncertainty: number;
-    model_uncertainty: number;
-    explanation: string;
-  } | null;
-};
-
-type ApiEdge = {
-  id: string;
-  source: string;
-  target: string;
-  strength: number;
-  type: string;
-  supporting_evidence_ids: string[];
-  refuting_evidence_ids: string[];
-  citation_spans?: Array<{
-    evidence_id: string;
-    start_char: number;
-    end_char: number;
-    quoted_text: string;
-    relevance_score: number;
-  }>;
-  evidence_conflict?: string;
-  refutation_status?: string;
-};
-
-type ApiEvidence = {
-  id: string;
-  content: string;
-  source: string;
-  reliability: string;
-  is_supporting: boolean;
-  source_tier?: string;
-  freshness?: string;
-  timestamp?: string | null;
-  extraction_method?: string;
-  stance?: "supporting" | "refuting" | "context";
-  stance_basis?: string;
-};
-
-type ApiChain = {
-  chain_id: string;
-  label: string;
-  description: string;
-  probability: number;
-  depth: number;
-  nodes: ApiNode[];
-  edges: ApiEdge[];
-  supporting_evidence_ids: string[];
-  refuting_evidence_ids: string[];
-  refutation_status?: string;
-};
-
-type ApiRetrievalTrace = {
-  source: string;
-  source_label?: string;
-  source_kind?: string;
-  stability?: string;
-  query: string;
-  result_count: number;
-  cache_hit?: boolean;
-  error?: string | null;
-  status?: string | null;
-  retry_after_seconds?: number | null;
-  cache_policy?: string | null;
-};
-
-type ApiChallengeCheck = {
-  edge_id: string;
-  source: string;
-  target: string;
-  query: string;
-  result_count: number;
-  refuting_count: number;
-  context_count: number;
-  status: string;
-};
-
-type ApiAnalysisBrief = {
-  answer: string;
-  confidence: number;
-  top_reasons: string[];
-  challenge_summary: string;
-  missing_evidence: string[];
-  source_coverage: string;
-};
-
-type ApiHarnessCheck = {
-  id: string;
-  label: string;
-  status: "pass" | "warn" | "fail" | string;
-  detail: string;
-};
-
-type ApiProductHarness = {
-  name: string;
-  score: number;
-  status: string;
-  user_value_summary: string;
-  checks: ApiHarnessCheck[];
-  next_actions: string[];
-};
-
-type ApiScenario = {
-  key: string;
-  label: string;
-  confidence: number;
-  detection_method: string;
-  user_value: string;
-};
-
-type ApiProductionBriefItem = {
-  title: string;
-  summary: string;
-  evidence_ids: string[];
-  confidence: number;
-};
-
-type ApiProductionBriefSection = {
-  kind: string;
-  title: string;
-  items: ApiProductionBriefItem[];
-};
-
-type ApiProductionBrief = {
-  title: string;
-  scenario_key: string;
-  executive_summary: string;
-  sections: ApiProductionBriefSection[];
-  limits: string[];
-  next_verification_steps: string[];
-};
-
-type ApiProductionHarness = {
-  status: string;
-  score: number;
-  scenario_key: string;
-  checks: Array<{
-    name: string;
-    passed: boolean;
-    severity: string;
-    message: string;
-  }>;
-  next_actions: string[];
-};
-
-type ApiProviderPreflight = {
-  provider: string;
-  model_name: string;
-  status: string;
-  can_run_analysis: boolean;
-  failure_code?: string | null;
-  diagnosis: string;
-  user_action: string;
-  checks: ApiHarnessCheck[];
-};
-
-type ApiRunStep = {
-  id: string;
-  label: string;
-  status: string;
-  detail: string;
-};
-
-type ApiUsageLedgerItem = {
-  category: string;
-  name: string;
-  quota_owner: string;
-  status: string;
-  count: number;
-  detail: string;
-};
-
-type ApiSavedRunSummary = {
-  run_id: string;
-  query: string;
-  run_status: string;
-  analysis_mode: string;
-  created_at: string;
-  scenario_key: string;
-};
-
-type AnalyzeResponseV2 = {
-  query: string;
-  run_id?: string | null;
-  run_status?: string;
-  run_steps?: ApiRunStep[];
-  usage_ledger?: ApiUsageLedgerItem[];
-  is_demo: boolean;
-  demo_topic: string | null;
-  analysis_mode: "live" | "partial_live" | "demo";
-  freshness_status: string;
-  time_range?: string | null;
-  partial_live_reasons?: string[];
-  recommended_chain_id: string | null;
-  evidences: ApiEvidence[];
-  chains: ApiChain[];
-  retrieval_trace?: ApiRetrievalTrace[];
-  challenge_checks?: ApiChallengeCheck[];
-  analysis_brief?: ApiAnalysisBrief | null;
-  markdown_brief?: string | null;
-  product_harness?: ApiProductHarness | null;
-  scenario?: ApiScenario | null;
-  production_brief?: ApiProductionBrief | null;
-  production_harness?: ApiProductionHarness | null;
-  evaluation?: {
-    evidence_sufficiency: number;
-    probability_coherence: number;
-    chain_diversity: number;
-    overall_confidence: number;
-    weaknesses: string[];
-    recommended_actions: string[];
-  } | null;
-  uncertainty_report?: {
-    per_node: Record<
-      string,
-      {
-        uncertainty_types: string[];
-        overall_score: number;
-        data_uncertainty: number;
-        model_uncertainty: number;
-        explanation: string;
-      }
-    >;
-    per_edge: Record<
-      string,
-      {
-        uncertainty_types: string[];
-        overall_score: number;
-        data_uncertainty: number;
-        model_uncertainty: number;
-        explanation: string;
-      }
-    >;
-    evidence_conflicts: Record<string, string>;
-    overall_uncertainty: number;
-    dominant_uncertainty_type: string | null;
-    summary: string;
-  } | null;
-  error?: string | null;
-};
-
-type AnalysisUiState = {
-  isDemo: boolean;
-  demoTopic: string | null;
-  loading: boolean;
-  mode: "live" | "partial_live" | "demo";
-  freshnessStatus: string;
-  timeRange: string | null;
-  partialLiveReasons: string[];
-};
-
-function formatEvidenceTierLabel(
-  item: ApiEvidence,
-  locale: "zh" | "en"
-): string {
-  if (item.source_tier === "fresh") {
-    return locale === "en" ? "Fresh source" : "实时来源";
-  }
-  if (item.extraction_method === "llm_fulltext_trusted") {
-    return locale === "en" ? "Trusted full text" : "可信正文";
-  }
-  if (item.extraction_method === "llm_fulltext") {
-    return locale === "en" ? "Full text" : "正文";
-  }
-  if (item.extraction_method === "store_cache") {
-    return locale === "en" ? "Store cache" : "证据缓存";
-  }
-  if (item.extraction_method === "fallback_summary") {
-    return locale === "en" ? "Fallback summary" : "降级摘要";
-  }
-  if (item.source_tier === "base") {
-    return locale === "en" ? "Base source" : "基础来源";
-  }
-  return locale === "en" ? "Derived evidence" : "衍生证据";
-}
-
-function evidenceQualityCategory(
-  item: ApiEvidence
-): "trusted_fulltext" | "fulltext" | "store_cache" | "fallback" | "base" | "other" {
-  if (item.extraction_method === "llm_fulltext_trusted") return "trusted_fulltext";
-  if (item.extraction_method === "llm_fulltext") return "fulltext";
-  if (item.extraction_method === "store_cache") return "store_cache";
-  if (item.extraction_method === "fallback_summary") return "fallback";
-  if (item.source_tier === "base" || item.source_tier === "fresh") return "base";
-  return "other";
-}
-
-function evidenceSortWeight(item: ApiEvidence): number {
-  switch (evidenceQualityCategory(item)) {
-    case "trusted_fulltext":
-      return 0;
-    case "fulltext":
-      return 1;
-    case "store_cache":
-      return 2;
-    case "base":
-      return 3;
-    case "fallback":
-      return 4;
-    default:
-      return 5;
-  }
-}
-
-function evidenceCategorySummaryLabel(
-  category: "fallback" | "base",
-  count: number,
-  locale: "zh" | "en"
-): string {
-  if (locale === "en") {
-    return category === "fallback"
-      ? `${count} fallback summary`
-      : `${count} base or fresh source`;
-  }
-  return category === "fallback"
-    ? `${count} 条降级摘要`
-    : `${count} 条基础或实时来源`;
-}
-
-function formatTimeRangeLabel(
-  timeRange: string | null | undefined,
-  locale: "zh" | "en"
-): string | null {
-  if (!timeRange) return null;
-
-  const labels: Record<string, { en: string; zh: string }> = {
-    today: { en: "Today", zh: "今天" },
-    yesterday: { en: "Yesterday", zh: "昨天" },
-    last_24h: { en: "Last 24h", zh: "最近 24 小时" },
-    last_7d: { en: "Last 7 days", zh: "最近 7 天" },
-    trading_day: { en: "Current trading day", zh: "当前交易日" },
-    evergreen: { en: "Evergreen background", zh: "长期背景" },
-  };
-
-  const normalized = labels[timeRange];
-  if (normalized) {
-    return locale === "en" ? normalized.en : normalized.zh;
-  }
-
-  return timeRange.replaceAll("_", " ");
-}
-
-function formatFreshnessLabel(
-  freshnessStatus: string | null | undefined,
-  locale: "zh" | "en"
-): string {
-  switch (freshnessStatus) {
-    case "fresh":
-      return locale === "en" ? "Fresh evidence" : "新鲜证据";
-    case "mixed":
-      return locale === "en" ? "Mixed freshness" : "新鲜度混合";
-    case "stable":
-      return locale === "en" ? "Mostly stable evidence" : "以稳定证据为主";
-    case "stale":
-      return locale === "en" ? "Stale evidence" : "证据偏旧";
-    default:
-      return locale === "en" ? "Freshness unknown" : "新鲜度未知";
-  }
-}
-
-function formatAnalysisBadge(mode: AnalysisUiState["mode"], locale: "zh" | "en"): string {
-  if (mode === "demo") {
-    return locale === "en" ? "Demo" : "Demo";
-  }
-  if (mode === "partial_live") {
-    return locale === "en" ? "Partial Live" : "部分 Live";
-  }
-  return locale === "en" ? "Live" : "Live";
-}
-
-function formatSourceKindLabel(kind: string | null | undefined, locale: "zh" | "en"): string {
-  const labels: Record<string, { en: string; zh: string }> = {
-    wire_news: { en: "wire news", zh: "通讯社新闻" },
-    news_index: { en: "news index", zh: "新闻索引" },
-    web_search: { en: "web search", zh: "网页检索" },
-    official_record: { en: "official record", zh: "官方记录" },
-    academic_index: { en: "academic index", zh: "学术索引" },
-    unknown: { en: "unknown source", zh: "未知来源" },
-  };
-  const label = labels[kind ?? "unknown"] ?? labels.unknown;
-  return locale === "en" ? label.en : label.zh;
-}
-
-function formatSourceStabilityLabel(
-  stability: string | null | undefined,
-  locale: "zh" | "en"
-): string {
-  switch (stability) {
-    case "high":
-      return locale === "en" ? "stable" : "稳定";
-    case "medium":
-      return locale === "en" ? "best-effort" : "尽力稳定";
-    case "low":
-      return locale === "en" ? "fragile" : "不稳定";
-    default:
-      return locale === "en" ? "unknown" : "未知";
-  }
-}
-
-function sourceTraceStatus(item: ApiRetrievalTrace): string {
-  if (item.status) return item.status;
-  if (item.cache_hit) return "cached";
-  if (item.error) return item.error;
-  return "ok";
-}
-
-function formatSourceStatusLabel(status: string | null | undefined, locale: "zh" | "en"): string {
-  switch (status) {
-    case "ok":
-      return locale === "en" ? "Ready" : "\u53ef\u7528";
-    case "cached":
-      return locale === "en" ? "Cached" : "\u7f13\u5b58";
-    case "source_limited":
-      return locale === "en" ? "Source limited" : "\u6765\u6e90\u53d7\u9650";
-    case "rate_limited":
-      return locale === "en" ? "Rate limited" : "\u9650\u6d41";
-    case "forbidden":
-      return locale === "en" ? "Forbidden" : "\u65e0\u6743\u9650";
-    case "timeout":
-      return locale === "en" ? "Timed out" : "\u8d85\u65f6";
-    case "source_error":
-      return locale === "en" ? "Source error" : "\u6765\u6e90\u9519\u8bef";
-    default:
-      return locale === "en" ? "Source error" : "\u6765\u6e90\u9519\u8bef";
-  }
-}
-
-function isDegradedSourceTrace(item: ApiRetrievalTrace): boolean {
-  return ["source_limited", "rate_limited", "forbidden", "timeout", "source_error"].includes(
-    sourceTraceStatus(item)
-  );
-}
-
-function formatRefutationStatusLabel(
-  status: string | null | undefined,
-  locale: "zh" | "en"
-): string {
-  switch (status) {
-    case "has_refutation":
-      return locale === "en" ? "challenge found" : "发现反证";
-    case "checked_no_refuting_claims":
-      return locale === "en" ? "checked, no explicit challenge" : "已检查，未见明确反证";
-    case "checked_context_only":
-      return locale === "en" ? "checked, context only" : "已检查，仅有背景证据";
-    case "checked_no_results":
-      return locale === "en" ? "checked, no source results" : "已检查，但未取回来源结果";
-    case "no_refutation_in_retrieved_evidence":
-      return locale === "en"
-        ? "no challenge in retrieved evidence"
-        : "已检索证据中未见反证";
-    default:
-      return locale === "en" ? "challenge coverage not checked" : "反证覆盖未检验";
-  }
-}
 
 function localizeBriefText(text: string, locale: "zh" | "en"): string {
   if (locale === "en") return text;
   return localizeCausalText(text, locale)
-    .replace(/Most likely explanation:/gi, "最可能解释：")
-    .replace(/confidence signal/gi, "置信信号")
-    .replace(/Found/gi, "发现")
-    .replace(/challenge evidence item\(s\)/gi, "条反证证据")
-    .replace(/Checked/gi, "已检查")
-    .replace(/key edge\(s\)/gi, "条关键因果边")
-    .replace(/source type\(s\)/gi, "类来源")
-    .replace(/high-quality evidence item\(s\)/gi, "条高质量证据")
-    .replace(/total evidence item\(s\)/gi, "条总证据");
+    .replace(/Most likely explanation:/gi, "\u6700\u53ef\u80fd\u89e3\u91ca\uff1a")
+    .replace(/confidence signal/gi, "缃俊淇″彿")
+    .replace(/Found/gi, "鍙戠幇")
+    .replace(/challenge evidence item\(s\)/gi, "\u6761\u53cd\u8bc1\u8bc1\u636e")
+    .replace(/Checked/gi, "\u5df2\u68c0\u67e5")
+    .replace(/key edge\(s\)/gi, "鏉″叧閿洜鏋滆竟")
+    .replace(/source type\(s\)/gi, "\u7c7b\u6765\u6e90")
+    .replace(/high-quality evidence item\(s\)/gi, "鏉￠珮璐ㄩ噺璇佹嵁")
+    .replace(/total evidence item\(s\)/gi, "\u6761\u603b\u8bc1\u636e");
 }
 
 function formatEvidenceStanceLabel(item: ApiEvidence, locale: "zh" | "en"): string {
   if (item.stance === "context") {
-    return locale === "en" ? "Context" : "背景";
+    return locale === "en" ? "Context" : "鑳屾櫙";
   }
   if (item.stance === "refuting" || !item.is_supporting) {
-    return locale === "en" ? "Challenges" : "反证";
+    return locale === "en" ? "Challenges" : "鍙嶈瘉";
   }
-  return locale === "en" ? "Supports" : "支持";
+  return locale === "en" ? "Supports" : "鏀寔";
 }
 
 function localizeEvidenceContent(content: string, locale: "zh" | "en"): string {
   if (locale === "en") return content;
   return localizeCausalText(content, locale);
-}
-
-const progressStageOrder = [
-  "EvidenceCollectionStep",
-  "GraphBuildingStep",
-  "HypothesisGenerationStep",
-  "EvidenceAnchoringStep",
-  "CausalRAGStep",
-  "RefutationCoverageStep",
-  "CounterfactualVerificationStep",
-  "UncertaintyAssessmentStep",
-  "EvaluationStep",
-];
-
-function progressStageLabel(step: string, locale: "zh" | "en"): string {
-  const labels: Record<string, { en: string; zh: string }> = {
-    EvidenceCollectionStep: { en: "Finding and reading evidence", zh: "检索并读取证据" },
-    GraphBuildingStep: { en: "Building the causal map", zh: "构建因果图" },
-    HypothesisGenerationStep: { en: "Comparing explanation chains", zh: "生成解释链" },
-    EvidenceAnchoringStep: { en: "Linking evidence to edges", zh: "绑定证据链" },
-    CausalRAGStep: { en: "Filling weak coverage", zh: "补充薄弱证据" },
-    RefutationCoverageStep: { en: "Searching for challenges", zh: "检索反证与替代解释" },
-    CounterfactualVerificationStep: { en: "Checking what-if signals", zh: "校验反事实信号" },
-    DebateRefinementStep: { en: "Refining claims", zh: "精炼结论" },
-    UncertaintyAssessmentStep: { en: "Estimating uncertainty", zh: "评估不确定性" },
-    EvaluationStep: { en: "Scoring result quality", zh: "评估结果质量" },
-  };
-  const label = labels[step];
-  if (label) return locale === "en" ? label.en : label.zh;
-  return step.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
 function buildAnalysisStatusNote(
@@ -553,142 +95,104 @@ function buildAnalysisStatusNote(
     if (payload.error) {
       return locale === "en"
         ? `Analysis failed (${payload.error}). Showing demo fallback.`
-        : `分析失败（${payload.error}），当前显示 demo 回退结果。`;
+        : `\u5206\u6790\u5931\u8d25\uff08${payload.error}\uff09\uff0c\u5f53\u524d\u663e\u793a demo \u56de\u9000\u7ed3\u679c\u3002`;
     }
     return locale === "en"
       ? "Backend returned demo fallback data. Treat this as a structured example, not validated analysis."
-      : "后端返回了 demo fallback 数据。请将其视为结构化示例，而非已验证分析。";
+      : "\u540e\u7aef\u8fd4\u56de\u4e86 demo fallback \u6570\u636e\u3002\u8bf7\u5c06\u5176\u89c6\u4e3a\u7ed3\u6784\u5316\u793a\u4f8b\uff0c\u800c\u975e\u5df2\u9a8c\u8bc1\u5206\u6790\u3002";
   }
 
   if (payload.analysis_mode === "partial_live") {
     const detail = firstAction
       ? locale === "en"
         ? ` Next best action: ${firstAction}`
-        : ` 建议优先动作：${firstAction}`
+        : ` \u5efa\u8bae\u4f18\u5148\u52a8\u4f5c\uff1a${firstAction}`
       : "";
     const errorDetail = payload.error
       ? locale === "en"
         ? ` Error: ${payload.error}`
-        : ` 错误：${payload.error}`
+        : ` \u9519\u8bef\uff1a${payload.error}`
       : "";
     if (timeLabel) {
       return locale === "en"
         ? `Partial live analysis for ${timeLabel}. ${freshnessLabel}.${detail}${errorDetail}`
-        : `这是针对${timeLabel}的部分 live 分析。${freshnessLabel}。${detail}${errorDetail}`;
+        : `\u8fd9\u662f\u9488\u5bf9${timeLabel}\u7684\u90e8\u5206 live \u5206\u6790\u3002${freshnessLabel}\u3002${detail}${errorDetail}`;
     }
     return locale === "en"
       ? `Partial live analysis returned. ${freshnessLabel}.${detail}${errorDetail}`
-      : `当前返回的是部分 live 分析。${freshnessLabel}。${detail}${errorDetail}`;
+      : `\u5f53\u524d\u8fd4\u56de\u7684\u662f\u90e8\u5206 live \u5206\u6790\u3002${freshnessLabel}\u3002${detail}${errorDetail}`;
   }
 
   if (timeLabel) {
     return locale === "en"
       ? `Live analysis returned for ${timeLabel}. ${freshnessLabel}. Review evidence coverage before trusting it.`
-      : `已返回针对${timeLabel}的 live 分析。${freshnessLabel}。请先检查证据覆盖，再决定是否信任结果。`;
+      : `\u5df2\u8fd4\u56de\u9488\u5bf9${timeLabel}\u7684 live \u5206\u6790\u3002${freshnessLabel}\u3002\u8bf7\u5148\u68c0\u67e5\u8bc1\u636e\u8986\u76d6\uff0c\u518d\u51b3\u5b9a\u662f\u5426\u4fe1\u4efb\u7ed3\u679c\u3002`;
   }
 
   return locale === "en"
     ? `Live analysis returned. ${freshnessLabel}. Review evidence coverage before trusting it.`
-    : `已返回 live 分析。${freshnessLabel}。请先检查证据覆盖，再决定是否信任结果。`;
+    : `\u5df2\u8fd4\u56de live \u5206\u6790\u3002${freshnessLabel}\u3002\u8bf7\u5148\u68c0\u67e5\u8bc1\u636e\u8986\u76d6\uff0c\u518d\u51b3\u5b9a\u662f\u5426\u4fe1\u4efb\u7ed3\u679c\u3002`;
 }
 
 const ZH_CAUSAL_LABELS: Array<[RegExp, string]> = [
-  [/deal reached/gi, "\u8fbe\u6210\u534f\u8bae"],
+  [/evidence-wide causal map/gi, "\u8bc1\u636e\u5168\u56fe"],
+  [/supported dag context/gi, "\u8bc1\u636e\u652f\u6491\u7684 DAG \u4e0a\u4e0b\u6587"],
+  [/single root-to-outcome path/gi, "\u5355\u6761\u6839\u56e0\u5230\u7ed3\u679c\u8def\u5f84"],
+  [/deal reached|agreement/gi, "\u8fbe\u6210\u534f\u8bae"],
   [/ceasefire/gi, "\u505c\u706b"],
-  [/agreement/gi, "\u534f\u8bae"],
+  [/bitcoin|btc/gi, "\u6bd4\u7279\u5e01"],
+  [/cryptocurrenc(?:y|ies)|crypto assets?|crypto/gi, "\u52a0\u5bc6\u8d27\u5e01"],
+  [/price drop|price decline|sell-?off|market drop|crash/gi, "\u4ef7\u683c\u4e0b\u8dcc"],
+  [/spot etfs?|etf flows?|exchange-traded funds?/gi, "\u73b0\u8d27 ETF \u8d44\u91d1\u6d41"],
+  [/liquidations?|leveraged liquidations?/gi, "\u6760\u6746\u6e05\u7b97"],
+  [/risk sentiment|risk appetite|market sentiment|sentiment/gi, "\u98ce\u9669\u60c5\u7eea"],
+  [/political uncertainty/gi, "\u653f\u6cbb\u4e0d\u786e\u5b9a\u6027"],
+  [/investors?/gi, "\u6295\u8d44\u8005"],
+  [/digital currencies/gi, "\u6570\u5b57\u8d27\u5e01"],
+  [/gold/gi, "\u9ec4\u91d1"],
+  [/silver/gi, "\u767d\u94f6"],
+  [/macro(?:economic)? pressure|macro factors?|interest rates?|rate expectations/gi, "\u5b8f\u89c2\u538b\u529b"],
+  [/dollar strength|u\.s\. dollar/gi, "\u7f8e\u5143\u8d70\u5f3a"],
+  [/profit taking/gi, "\u83b7\u5229\u4e86\u7ed3"],
+  [/regulatory concerns?|regulatory pressure|regulation|regulating/gi, "\u76d1\u7ba1\u538b\u529b"],
+  [/government discussions?|policy discussions?|talks?/gi, "\u653f\u7b56\u8ba8\u8bba"],
+  [/government|administration/gi, "\u653f\u5e9c"],
+  [/trump administration|trump/gi, "\u7279\u6717\u666e\u653f\u5e9c"],
+  [/expectations?/gi, "\u9884\u671f"],
+  [/favorable|friendly/gi, "\u5229\u597d"],
+  [/lack of progress|stalled/gi, "\u8fdb\u5c55\u4e0d\u8db3"],
+  [/bill in congress|congress(?:ional)? bill|congress|bill/gi, "\u56fd\u4f1a\u6cd5\u6848"],
+  [/institutional flows?|fund flows?|capital flows?/gi, "\u8d44\u91d1\u6d41\u5411"],
+  [/institutional selling|selling/gi, "\u673a\u6784\u5356\u51fa"],
+  [/large financial institutions?|financial institutions?/gi, "\u91d1\u878d\u673a\u6784"],
+  [/market volatility|volatility/gi, "\u5e02\u573a\u6ce2\u52a8"],
+  [/trading volume|volume/gi, "\u6210\u4ea4\u91cf"],
+  [/mining difficulty|hashrate|hash rate/gi, "\u6316\u77ff\u96be\u5ea6\u4e0e\u7b97\u529b"],
+  [/on-chain activity|onchain activity/gi, "\u94fe\u4e0a\u6d3b\u52a8"],
+  [/exchange inflows?|exchange outflows?/gi, "\u4ea4\u6613\u6240\u8d44\u91d1\u6d41"],
+  [/whale activity|large holders?/gi, "\u5927\u6237\u6d3b\u52a8"],
+  [/futures open interest|open interest/gi, "\u671f\u8d27\u672a\u5e73\u4ed3\u5408\u7ea6"],
+  [/funding rates?/gi, "\u8d44\u91d1\u8d39\u7387"],
+  [/bureau of industry and security|bis/gi, "\u7f8e\u56fd\u5de5\u4e1a\u4e0e\u5b89\u5168\u5c40"],
+  [/\b(?:export administration regulations|ear)\b/gi, "\u51fa\u53e3\u7ba1\u7406\u6761\u4f8b"],
+  [/export controls?|export restrictions?/gi, "\u51fa\u53e3\u7ba1\u5236"],
+  [/semiconductor manufacturing items?/gi, "\u534a\u5bfc\u4f53\u5236\u9020\u9879\u76ee"],
+  [/semiconductor chips?|semiconductors?/gi, "\u534a\u5bfc\u4f53\u82af\u7247"],
+  [/advanced computing integrated circuits?|advanced computing items?/gi, "\u5148\u8fdb\u8ba1\u7b97\u82af\u7247"],
+  [/national security concerns?/gi, "\u56fd\u5bb6\u5b89\u5168\u62c5\u5fe7"],
+  [/military modernization/gi, "\u519b\u4e8b\u73b0\u4ee3\u5316"],
+  [/china'?s access/gi, "\u4e2d\u56fd\u83b7\u53d6\u80fd\u529b"],
+  [/critical technolog(?:y|ies)/gi, "\u5173\u952e\u6280\u672f"],
+  [/supply chains?/gi, "\u4f9b\u5e94\u94fe"],
+  [/policy rationale/gi, "\u653f\u7b56\u7406\u7531"],
+  [/commerce department/gi, "\u7f8e\u56fd\u5546\u52a1\u90e8"],
+  [/official statements?/gi, "\u5b98\u65b9\u58f0\u660e"],
+  [/taiwan/gi, "\u53f0\u6e7e"],
+  [/huawei/gi, "\u534e\u4e3a"],
+  [/smic/gi, "\u4e2d\u82af\u56fd\u9645"],
+  [/nexperia/gi, "\u5b89\u4e16\u534a\u5bfc\u4f53"],
   [/u\.s\./gi, "\u7f8e\u56fd"],
-  [/evidence-wide causal map/gi, "证据全图"],
-  [/supported dag context/gi, "证据支撑的 DAG 上下文"],
-  [/single root-to-outcome path/gi, "单条根因到结果路径"],
-  [/bitcoin|btc/gi, "比特币"],
-  [/cryptocurrenc(?:y|ies)|crypto assets?|crypto/gi, "加密货币"],
-  [/price drop|price decline|sell-?off|market drop|crash/gi, "价格跳水"],
-  [/bitcoin price/gi, "比特币价格"],
-  [/spot etfs?|etf flows?|exchange-traded funds?/gi, "现货 ETF 资金流"],
-  [/liquidations?|leveraged liquidations?/gi, "杠杆清算"],
-  [/leverage|leveraged positions?/gi, "杠杆仓位"],
-  [/risk sentiment|risk appetite|market sentiment/gi, "风险情绪"],
-  [/political uncertainty/gi, "政治不确定性"],
-  [/sentiment/gi, "情绪"],
-  [/overall/gi, "整体"],
-  [/among/gi, "中的"],
-  [/speculative assets?/gi, "投机资产"],
-  [/investors? pulling out of/gi, "投资者撤出"],
-  [/investors?/gi, "投资者"],
-  [/pulling out of/gi, "撤出"],
-  [/digital currencies/gi, "数字货币"],
-  [/gold/gi, "黄金"],
-  [/silver/gi, "白银"],
-  [/macro(?:economic)? pressure|macro factors?|interest rates?|rate expectations/gi, "宏观压力"],
-  [/dollar strength|u\.s\. dollar/gi, "美元走强"],
-  [/profit taking/gi, "获利了结"],
-  [/regulatory concerns?|regulatory pressure/gi, "监管压力"],
-  [/heightened concerns about potential/gi, "市场对潜在"],
-  [/concerns about potential/gi, "对潜在"],
-  [/potential/gi, "潜在"],
-  [/concerns?/gi, "担忧"],
-  [/washington/gi, "华盛顿"],
-  [/stablecoin regulation stalled/gi, "稳定币监管停滞"],
-  [/stablecoins?/gi, "稳定币"],
-  [/regulation/gi, "监管"],
-  [/regulating/gi, "监管"],
-  [/government discussions?|policy discussions?|talks?/gi, "政策讨论"],
-  [/government/gi, "政府"],
-  [/trump administration/gi, "特朗普政府"],
-  [/trump/gi, "特朗普"],
-  [/administration/gi, "政府"],
-  [/expectations?/gi, "预期"],
-  [/favorable/gi, "利好"],
-  [/friendly/gi, "友好"],
-  [/of a more/gi, "更加"],
-  [/investors'/gi, "投资者的"],
-  [/policies/gi, "政策"],
-  [/lack of progress/gi, "进展不足"],
-  [/bill in congress|congress(?:ional)? bill/gi, "国会法案"],
-  [/congress/gi, "国会"],
-  [/bill/gi, "法案"],
-  [/stalled/gi, "停滞"],
-  [/institutional flows?|fund flows?|capital flows?/gi, "资金流向"],
-  [/institutional selling/gi, "机构卖出"],
-  [/large financial institutions?/gi, "大型金融机构"],
-  [/financial institutions?/gi, "金融机构"],
-  [/holdings?/gi, "持仓"],
-  [/reducing their/gi, "减少其"],
-  [/selling/gi, "卖出"],
-  [/market volatility|volatility/gi, "市场波动"],
-  [/trading volume|volume/gi, "成交量"],
-  [/velocity/gi, "流通速度"],
-  [/speed of/gi, "速度"],
-  [/circulation/gi, "流通"],
-  [/economy/gi, "经济"],
-  [/economic activity/gi, "经济活动"],
-  [/mining difficulty|hashrate|hash rate/gi, "挖矿难度与算力"],
-  [/on-chain activity|onchain activity/gi, "链上活动"],
-  [/exchange inflows?|exchange outflows?/gi, "交易所资金流"],
-  [/whale activity|large holders?/gi, "大户活动"],
-  [/futures open interest|open interest/gi, "期货未平仓合约"],
-  [/funding rates?/gi, "资金费率"],
-  [/bureau of industry and security|bis/gi, "美国工业与安全局"],
-  [/\b(?:export administration regulations|ear)\b/gi, "出口管理条例"],
-  [/export controls?/gi, "出口管制"],
-  [/export restrictions?/gi, "出口限制"],
-  [/semiconductor manufacturing items?/gi, "半导体制造项目"],
-  [/semiconductor chips?|semiconductors?/gi, "半导体芯片"],
-  [/advanced computing integrated circuits?|advanced computing items?/gi, "先进计算芯片"],
-  [/national security concerns?/gi, "国家安全担忧"],
-  [/military modernization/gi, "军事现代化"],
-  [/china'?s access/gi, "中国获取能力"],
-  [/critical technolog(?:y|ies)/gi, "关键技术"],
-  [/supply chains?/gi, "供应链"],
-  [/policy rationale/gi, "政策理由"],
-  [/commerce department/gi, "美国商务部"],
-  [/official statements?/gi, "官方声明"],
-  [/taiwan/gi, "台湾"],
-  [/huawei/gi, "华为"],
-  [/smic/gi, "中芯国际"],
-  [/nexperia/gi, "安世半导体"],
-  [/u\.s\./gi, "美国"],
-  [/china/gi, "中国"],
+  [/china/gi, "\u4e2d\u56fd"],
 ];
 
 function localizeCausalText(text: string, locale: "zh" | "en"): string {
@@ -700,19 +204,19 @@ function localizeCausalText(text: string, locale: "zh" | "en"): string {
   }
 
   return localized
-    .replace(/\bcontrols\b/gi, "管制")
-    .replace(/\brestrictions\b/gi, "限制")
-    .replace(/\brules\b/gi, "规则")
-    .replace(/\bpolicy\b/gi, "政策")
-    .replace(/\breasons\b/gi, "原因")
-    .replace(/\bmarket\b/gi, "市场")
-    .replace(/\bprice\b/gi, "价格")
-    .replace(/\bdrop\b/gi, "下跌")
-    .replace(/\btoday\b/gi, "今日")
-    .replace(/\bspeed\b/gi, "速度")
-    .replace(/\bfactors?\b/gi, "因素")
-    .replace(/\bcauses?\b/gi, "原因")
-    .replace(/\bin\b/gi, "在")
+    .replace(/\bcontrols\b/gi, "\u7ba1\u5236")
+    .replace(/\brestrictions\b/gi, "\u9650\u5236")
+    .replace(/\brules\b/gi, "\u89c4\u5219")
+    .replace(/\bpolicy\b/gi, "\u653f\u7b56")
+    .replace(/\breasons\b/gi, "\u539f\u56e0")
+    .replace(/\bmarket\b/gi, "\u5e02\u573a")
+    .replace(/\bprice\b/gi, "\u4ef7\u683c")
+    .replace(/\bdrop\b/gi, "\u4e0b\u8dcc")
+    .replace(/\btoday\b/gi, "\u4eca\u65e5")
+    .replace(/\bspeed\b/gi, "\u901f\u5ea6")
+    .replace(/\bfactors?\b/gi, "\u56e0\u7d20")
+    .replace(/\bcauses?\b/gi, "\u539f\u56e0")
+    .replace(/\bin\b/gi, "\u5728")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -730,7 +234,7 @@ function localizeCausalLabel(text: string, locale: "zh" | "en"): string {
 function localizeCausalDescription(text: string, label: string, locale: "zh" | "en"): string {
   const localized = localizeCausalText(text, locale);
   if (locale === "zh" && hasUnlocalizedEnglish(localized)) {
-    return `与${label}相关的证据支撑因素`;
+    return `\u4e0e${label}\u76f8\u5173\u7684\u8bc1\u636e\u652f\u6491\u56e0\u7d20`;
   }
   return localized;
 }
@@ -777,10 +281,10 @@ function toLocalChain(
       confidence: chain.probability,
       primaryEvidenceCount: chain.supporting_evidence_ids.length,
       counterfactualSummary: {
-        intervention: locale === "en" ? "Counterfactual details remain limited in the OSS evidence board" : "当前 OSS 证据墙中的反事实详情仍然有限",
-        outcomeChange: locale === "en" ? "Detailed counterfactual summary not yet rendered on homepage" : "首页暂未完整渲染反事实摘要",
+        intervention: locale === "en" ? "Counterfactual details remain limited in the OSS evidence board" : "\u5f53\u524d OSS \u8bc1\u636e\u5899\u4e2d\u7684\u53cd\u4e8b\u5b9e\u8be6\u60c5\u4ecd\u7136\u6709\u9650",
+        outcomeChange: locale === "en" ? "Detailed counterfactual summary not yet rendered on homepage" : "\u9996\u9875\u6682\u672a\u5b8c\u6574\u6e32\u67d3\u53cd\u4e8b\u5b9e\u6458\u8981",
         probabilityShift: 0,
-        description: locale === "en" ? "This homepage currently renders the selected causal chain and labels whether the result is live or demo." : "当前首页会渲染所选因果链，并标注结果来自 real analysis 还是 demo。",
+        description: locale === "en" ? "This homepage currently renders the selected causal chain and labels whether the result is live or demo." : "\u5f53\u524d\u9996\u9875\u4f1a\u6e32\u67d3\u6240\u9009\u56e0\u679c\u94fe\uff0c\u5e76\u6807\u6ce8\u7ed3\u679c\u6765\u81ea real analysis \u8fd8\u662f demo\u3002",
       },
     },
     nodes: chain.nodes.map((node) => ({
@@ -840,7 +344,7 @@ function makePlaceholderChain(query: string, locale: "zh" | "en"): CausalChain {
   return {
     metadata: {
       id: "EMPTY-CHAIN",
-      title: locale === "en" ? "No causal chain available" : "暂无可展示的因果链",
+      title: locale === "en" ? "No causal chain available" : "\u6682\u65e0\u53ef\u5c55\u793a\u7684\u56e0\u679c\u94fe",
       outcomeLabel: query,
       totalNodes: 0,
       totalEdges: 0,
@@ -849,14 +353,14 @@ function makePlaceholderChain(query: string, locale: "zh" | "en"): CausalChain {
       primaryEvidenceCount: 0,
       counterfactualSummary: {
         intervention:
-          locale === "en" ? "No counterfactual summary available" : "暂无反事实摘要",
+          locale === "en" ? "No counterfactual summary available" : "\u6682\u65e0\u53cd\u4e8b\u5b9e\u6458\u8981",
         outcomeChange:
-          locale === "en" ? "Live analysis did not produce a usable chain" : "本次 live 分析未产出可用链路",
+          locale === "en" ? "Live analysis did not produce a usable chain" : "\u672c\u6b21 live \u5206\u6790\u672a\u4ea7\u51fa\u53ef\u7528\u94fe\u8def",
         probabilityShift: 0,
         description:
           locale === "en"
             ? "Inspect the status note and error details before retrying."
-            : "请先查看状态说明和错误信息，再决定是否重试。",
+            : "\u8bf7\u5148\u67e5\u770b\u72b6\u6001\u8bf4\u660e\u548c\u9519\u8bef\u4fe1\u606f\uff0c\u518d\u51b3\u5b9a\u662f\u5426\u91cd\u8bd5\u3002",
       },
     },
     nodes: [],
@@ -1014,7 +518,7 @@ function computeLayout(
     prelimPositions.push({ node, x: cx + ox, y: cy + oy });
   });
 
-  // Collision avoidance — generous minimum gap + more passes
+  // Collision avoidance 鈥?generous minimum gap + more passes
   const minGapX = 210;
   const minGapY = 170;
 
@@ -1101,7 +605,7 @@ function buildEdgePath(
   // Control point offset based on distance and direction
   const cpOffset = Math.min(Math.max(absDx, absDy) * 0.4, 120);
 
-  // Natural gravity sag — string droops in the middle
+  // Natural gravity sag 鈥?string droops in the middle
   const sag = Math.min(dist * 0.15, 40) * Math.sign(dy === 0 ? 1 : dy);
 
   // Choose control point configuration based on dominant direction
@@ -1707,9 +1211,6 @@ export default function Home() {
   const analysisBadgeLabel = formatAnalysisBadge(analysisMode.mode, locale);
   const freshnessLabel = formatFreshnessLabel(analysisMode.freshnessStatus, locale);
   const timeRangeLabel = formatTimeRangeLabel(analysisMode.timeRange, locale);
-  const activeProgressIndex = pipelineProgress
-    ? Math.max(progressStageOrder.indexOf(pipelineProgress.step), Math.max(0, pipelineProgress.stepIndex - 1))
-    : -1;
   const sourceHitCount = retrievalTrace.reduce((sum, item) => sum + Math.max(0, item.result_count), 0);
   const traceFailureCount = retrievalTrace.filter((item) => isDegradedSourceTrace(item)).length;
   const sourceTransparencySummary = useMemo(() => {
@@ -1974,7 +1475,7 @@ export default function Home() {
   }, [locale]);
 
   const refreshSavedRuns = useCallback(async () => {
-    setSavedRunsStatus(locale === "en" ? "Loading saved runs..." : "正在加载历史运行...");
+    setSavedRunsStatus(locale === "en" ? "Loading saved runs..." : "\u6b63\u5728\u52a0\u8f7d\u5386\u53f2\u8fd0\u884c...");
     try {
       const response = await fetch(`${API_BASE}/api/runs`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1982,31 +1483,31 @@ export default function Home() {
       setSavedRuns(payload.runs ?? []);
       setSavedRunsStatus(
         payload.runs?.length
-          ? locale === "en" ? "Saved runs loaded." : "历史运行已加载。"
-          : locale === "en" ? "No saved runs yet." : "暂无历史运行。"
+          ? locale === "en" ? "Saved runs loaded." : "\u5386\u53f2\u8fd0\u884c\u5df2\u52a0\u8f7d\u3002"
+          : locale === "en" ? "No saved runs yet." : "\u6682\u65e0\u5386\u53f2\u8fd0\u884c\u3002"
       );
     } catch (error) {
       setSavedRunsStatus(
         error instanceof Error
           ? error.message
-          : locale === "en" ? "Could not load saved runs." : "无法加载历史运行。"
+          : locale === "en" ? "Could not load saved runs." : "\u65e0\u6cd5\u52a0\u8f7d\u5386\u53f2\u8fd0\u884c\u3002"
       );
     }
   }, [locale]);
 
   const loadSavedRun = useCallback(async (targetRunId: string) => {
-    setSavedRunsStatus(locale === "en" ? "Opening saved run..." : "正在打开历史运行...");
+    setSavedRunsStatus(locale === "en" ? "Opening saved run..." : "\u6b63\u5728\u6253\u5f00\u5386\u53f2\u8fd0\u884c...");
     try {
       const response = await fetch(`${API_BASE}/api/runs/${targetRunId}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const payload = (await response.json()) as { response: AnalyzeResponseV2 };
       applySavedPayload(payload.response);
-      setSavedRunsStatus(locale === "en" ? "Saved run opened." : "历史运行已打开。");
+      setSavedRunsStatus(locale === "en" ? "Saved run opened." : "\u5386\u53f2\u8fd0\u884c\u5df2\u6253\u5f00\u3002");
     } catch (error) {
       setSavedRunsStatus(
         error instanceof Error
           ? error.message
-          : locale === "en" ? "Could not open saved run." : "无法打开历史运行。"
+          : locale === "en" ? "Could not open saved run." : "\u65e0\u6cd5\u6253\u5f00\u5386\u53f2\u8fd0\u884c\u3002"
       );
     }
   }, [applySavedPayload, locale]);
@@ -2014,7 +1515,7 @@ export default function Home() {
   const uploadEvidence = useCallback(async () => {
     const content = uploadedEvidenceText.trim();
     if (!content) return;
-    setUploadedEvidenceStatus(locale === "en" ? "Uploading evidence..." : "正在上传证据...");
+    setUploadedEvidenceStatus(locale === "en" ? "Uploading evidence..." : "\u6b63\u5728\u4e0a\u4f20\u8bc1\u636e...");
     try {
       const response = await fetch(`${API_BASE}/api/evidence/upload`, {
         method: "POST",
@@ -2032,14 +1533,14 @@ export default function Home() {
       setUploadedEvidenceStatus(
         locale === "en"
           ? `Stored ${payload.evidence_id}. It can be reused as user-owned evidence.`
-          : `已保存 ${payload.evidence_id}，后续可作为用户自有证据复用。`
+          : `\u5df2\u4fdd\u5b58 ${payload.evidence_id}\uff0c\u540e\u7eed\u53ef\u4f5c\u4e3a\u7528\u6237\u81ea\u6709\u8bc1\u636e\u590d\u7528\u3002`
       );
       setUploadedEvidenceText("");
     } catch (error) {
       setUploadedEvidenceStatus(
         error instanceof Error
           ? error.message
-          : locale === "en" ? "Evidence upload failed." : "证据上传失败。"
+          : locale === "en" ? "Evidence upload failed." : "\u8bc1\u636e\u4e0a\u4f20\u5931\u8d25\u3002"
       );
     }
   }, [currentQuery, lastQuery, locale, scenario?.key, uploadedEvidenceText, uploadedEvidenceTitle]);
@@ -2075,7 +1576,7 @@ export default function Home() {
         user_action:
           locale === "en"
             ? "Check that the backend is running, then retry preflight."
-            : "请确认后端正在运行，然后重新预检。",
+            : "\u8bf7\u786e\u8ba4\u540e\u7aef\u6b63\u5728\u8fd0\u884c\uff0c\u7136\u540e\u91cd\u65b0\u9884\u68c0\u3002",
         checks: [],
       });
     } finally {
@@ -2124,7 +1625,7 @@ export default function Home() {
       partialLiveReasons: [],
     });
     setPipelineProgress(null);
-    setStatusNote(locale === "en" ? "Running live analysis…" : "正在执行真实分析…");
+    setStatusNote(locale === "en" ? "Running live analysis..." : "\u6b63\u5728\u6267\u884c\u771f\u5b9e\u5206\u6790...");
     setLastQuery(query);
 
     const body: Record<string, unknown> = {
@@ -2226,25 +1727,6 @@ export default function Home() {
       setSelectedEvidenceId(null);
       setPanOffset({ x: 0, y: 0 });
       setStatusNote(buildAnalysisStatusNote(payload, locale));
-      if (false && payload.is_demo && payload.error) {
-        setStatusNote(
-          locale === "en"
-            ? `Analysis failed (${payload.error}). Showing demo fallback.`
-            : `分析失败（${payload.error}），当前显示 demo 回退数据。`
-        );
-      } else if (payload.is_demo) {
-        setStatusNote(
-          locale === "en"
-            ? "Backend returned demo fallback data. Treat this as a structured example, not validated analysis."
-            : "后端返回了 demo fallback 数据。请将其视为结构化示例，而非已验证分析。"
-        );
-      } else {
-        setStatusNote(
-          locale === "en"
-            ? "Live analysis returned a recommended causal chain. Review evidence coverage before trusting it."
-            : "真实分析已返回推荐因果链。请先检查证据覆盖，再决定是否相信结果。"
-        );
-      }
     };
 
     // Helper for fallback on error
@@ -2289,7 +1771,7 @@ export default function Home() {
       setStatusNote(
         locale === "en"
           ? "Live analysis failed; showing local demo board instead."
-          : "真实分析失败，当前回退到本地 demo 证据墙。"
+          : "\u771f\u5b9e\u5206\u6790\u5931\u8d25\uff0c\u5f53\u524d\u56de\u9000\u5230\u672c\u5730 demo \u8bc1\u636e\u5899\u3002"
       );
     };
 
@@ -2362,7 +1844,7 @@ export default function Home() {
                 setStatusNote(
                   locale === "en"
                     ? `Analysis error: ${event.error}. Showing demo fallback.`
-                    : `分析错误：${event.error}，当前显示 demo 回退数据。`
+                    : `\u5206\u6790\u9519\u8bef\uff1a${event.error}\uff0c\u5f53\u524d\u663e\u793a demo \u56de\u9000\u6570\u636e\u3002`
                 );
                 // Load demo data as fallback
                 fallbackToDemo();
@@ -2380,7 +1862,7 @@ export default function Home() {
           fallbackToDemo();
         }
       } else {
-        // Non-SSE response (fallback) — treat as regular JSON
+        // Non-SSE response (fallback) 鈥?treat as regular JSON
         const payload = (await response.json()) as AnalyzeResponseV2;
         processPayload(payload);
       }
@@ -2557,14 +2039,14 @@ export default function Home() {
             </div>
           <div className="command-chip-row">
             <span className={`command-chip command-chip-${qualityGateTone}`}>
-              {locale === "en" ? "Coverage" : "覆盖"} {evidenceCoverageScore}%
+              {locale === "en" ? "Coverage" : "瑕嗙洊"} {evidenceCoverageScore}%
             </span>
             <span className="command-chip">
-              {locale === "en" ? "Sources" : "来源"} {sourceHitCount}
+              {locale === "en" ? "Sources" : "鏉ユ簮"} {sourceHitCount}
             </span>
             {traceFailureCount > 0 && (
               <span className="command-chip command-chip-caution">
-                {locale === "en" ? "Source issues" : "来源异常"} {traceFailureCount}
+                {locale === "en" ? "Source issues" : "鏉ユ簮寮傚父"} {traceFailureCount}
               </span>
             )}
           </div>
@@ -2607,7 +2089,7 @@ export default function Home() {
               cursor: "pointer",
             }}
           >
-            {locale === "en" ? "EN" : "中"}
+            {locale === "en" ? "EN" : "\u4e2d"}
           </button>
         </div>
       </header>
@@ -2779,8 +2261,8 @@ export default function Home() {
             }}
           >
             {providerPreflightLoading
-              ? locale === "en" ? "Checking model..." : "正在预检模型..."
-              : locale === "en" ? "Run model preflight" : "运行模型预检"}
+              ? locale === "en" ? "Checking model..." : "姝ｅ湪棰勬妯″瀷..."
+              : locale === "en" ? "Run model preflight" : "杩愯妯″瀷棰勬"}
           </button>
           {providerPreflight && (
             <div
@@ -2801,10 +2283,10 @@ export default function Home() {
             >
               <strong>
                 {providerPreflight.can_run_analysis
-                  ? locale === "en" ? "Preflight passed" : "预检通过"
-                  : locale === "en" ? "Preflight blocked" : "预检未通过"}
+                  ? locale === "en" ? "Preflight passed" : "棰勬閫氳繃"
+                  : locale === "en" ? "Preflight blocked" : "棰勬鏈€氳繃"}
               </strong>
-              {` · ${providerPreflight.model_name}`}
+              {` 路 ${providerPreflight.model_name}`}
               <div style={{ marginTop: "4px", color: "#6b5a42" }}>
                 {providerPreflight.user_action || providerPreflight.diagnosis}
               </div>
@@ -2849,10 +2331,10 @@ export default function Home() {
             }}
           >
             <strong style={{ color: "#315f83" }}>
-              {locale === "en" ? "Run orchestration" : "运行编排"}
+              {locale === "en" ? "Run orchestration" : "杩愯缂栨帓"}
             </strong>
             <div>
-              {locale === "en" ? "Status" : "状态"}: {runStatus}
+              {locale === "en" ? "Status" : "\u72b6\u6001"}: {runStatus}
               {runId ? ` / ${runId}` : ""}
             </div>
             {runSteps.slice(0, 4).map((step) => (
@@ -2868,365 +2350,48 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="compact-item" data-testid="upload-evidence-panel">
-          <div className="compact-label">{locale === "en" ? "Uploaded evidence" : "上传证据"}</div>
-          <input
-            value={uploadedEvidenceTitle}
-            onChange={(event) => setUploadedEvidenceTitle(event.target.value)}
-            placeholder={locale === "en" ? "Source title" : "来源标题"}
-            className="analyst-input"
-          />
-          <textarea
-            value={uploadedEvidenceText}
-            onChange={(event) => setUploadedEvidenceText(event.target.value)}
-            placeholder={
-              locale === "en"
-                ? "Paste a short note, CSV excerpt, ticket, or source snippet."
-                : "粘贴短笔记、CSV 摘要、工单或来源片段。"
-            }
-            className="analyst-textarea"
-            style={{
-              marginTop: "7px",
-              width: "100%",
-              minHeight: "74px",
-              resize: "vertical",
-              border: "1px solid var(--analyst-border)",
-              borderRadius: "8px",
-              padding: "8px",
-              background: "rgba(255,255,255,0.70)",
-              color: "var(--analyst-ink)",
-              fontSize: "0.64rem",
-              lineHeight: 1.45,
-            }}
-          />
-          <button
-            type="button"
-            onClick={uploadEvidence}
-            disabled={!uploadedEvidenceText.trim()}
-            style={{
-              marginTop: "7px",
-              width: "100%",
-              padding: "8px 10px",
-              borderRadius: "8px",
-              border: "1px solid rgba(49, 95, 131, 0.24)",
-              background: "rgba(255,255,255,0.66)",
-              color: "#315f83",
-              cursor: uploadedEvidenceText.trim() ? "pointer" : "not-allowed",
-              fontSize: "0.58rem",
-              fontWeight: 800,
-            }}
-          >
-            {locale === "en" ? "Store evidence" : "保存证据"}
-          </button>
-          {uploadedEvidenceStatus && (
-            <div style={{ marginTop: "6px", fontSize: "0.54rem", color: "#7a6b55", lineHeight: 1.4 }}>
-              {uploadedEvidenceStatus}
-            </div>
-          )}
-        </div>
+        <UploadedEvidencePanel
+          title={uploadedEvidenceTitle}
+          text={uploadedEvidenceText}
+          status={uploadedEvidenceStatus}
+          locale={locale}
+          onTitleChange={setUploadedEvidenceTitle}
+          onTextChange={setUploadedEvidenceText}
+          onUpload={uploadEvidence}
+        />
 
-        <div className="compact-item" data-testid="saved-runs-panel">
-          <div className="compact-label">{locale === "en" ? "Saved runs" : "历史运行"}</div>
-          <button
-            type="button"
-            onClick={refreshSavedRuns}
-            style={{
-              width: "100%",
-              padding: "7px 9px",
-              borderRadius: "8px",
-              border: "1px solid rgba(49, 95, 131, 0.22)",
-              background: "rgba(255,255,255,0.66)",
-              color: "#315f83",
-              cursor: "pointer",
-              fontSize: "0.56rem",
-              fontWeight: 800,
-            }}
-          >
-            {locale === "en" ? "Refresh saved runs" : "刷新历史运行"}
-          </button>
-          {savedRuns.slice(0, 3).map((run) => (
-            <button
-              type="button"
-              key={run.run_id}
-              onClick={() => loadSavedRun(run.run_id)}
-              style={{
-                width: "100%",
-                marginTop: "7px",
-                padding: "7px 8px",
-                borderRadius: "8px",
-                border: "1px solid rgba(160,140,110,0.14)",
-                background: "rgba(255,255,255,0.48)",
-                color: "#5c4a32",
-                cursor: "pointer",
-                textAlign: "left",
-                fontSize: "0.56rem",
-                lineHeight: 1.35,
-              }}
-            >
-              <strong>{run.run_status}</strong> / {run.analysis_mode}
-              <br />
-              {run.query}
-            </button>
-          ))}
-          {savedRunsStatus && (
-            <div style={{ marginTop: "6px", fontSize: "0.54rem", color: "#7a6b55", lineHeight: 1.4 }}>
-              {savedRunsStatus}
-            </div>
-          )}
-        </div>
+        <SavedRunsPanel
+          runs={savedRuns}
+          status={savedRunsStatus}
+          locale={locale}
+          onRefresh={refreshSavedRuns}
+          onOpenRun={loadSavedRun}
+        />
 
         <h2 className="panel-title">{t("panel.hypotheses")}</h2>
 
         {localizedAnalysisBrief && (
-          <div
-            className="compact-item"
-            data-testid="readable-brief"
-            style={{ background: "rgba(255,255,255,0.78)" }}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-              <div className="compact-label" style={{ marginBottom: 0 }}>
-                {locale === "en" ? "Readable brief" : "\u9605\u8bfb\u7248\u7b80\u62a5"}
-              </div>
-              {localizedMarkdownBrief && (
-                <button
-                  type="button"
-                  data-testid="copy-report-button"
-                  onClick={copyMarkdownBrief}
-                  title={
-                    locale === "en"
-                      ? "Copy the portable Markdown report"
-                      : "\u590d\u5236 Markdown \u62a5\u544a"
-                  }
-                  style={{
-                    border: "1px solid rgba(49, 95, 131, 0.22)",
-                    borderRadius: "8px",
-                    padding: "4px 7px",
-                    background: markdownCopyStatus === "copied" ? "rgba(118, 166, 119, 0.18)" : "rgba(255,255,255,0.66)",
-                    color: markdownCopyStatus === "failed" ? "#a0503c" : "#315f83",
-                    cursor: "pointer",
-                    fontSize: "0.54rem",
-                    fontWeight: 800,
-                    letterSpacing: 0,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {markdownCopyStatus === "copied"
-                    ? locale === "en" ? "Copied" : "\u5df2\u590d\u5236"
-                    : markdownCopyStatus === "failed"
-                      ? locale === "en" ? "Copy failed" : "\u590d\u5236\u5931\u8d25"
-                      : locale === "en" ? "Copy report" : "\u590d\u5236\u62a5\u544a"}
-                </button>
-              )}
-            </div>
-            <div style={{ marginTop: "7px", fontSize: "0.7rem", color: "#4d3c28", lineHeight: 1.5, fontWeight: 700 }}>
-              {localizedAnalysisBrief.answer}
-            </div>
-            <div style={{ marginTop: "5px", fontSize: "0.58rem", color: "#7a6b55" }}>
-              {locale === "en" ? "Confidence signal" : "\u7f6e\u4fe1\u4fe1\u53f7"} {localizedAnalysisBrief.confidence}%
-            </div>
-
-            <div style={{ marginTop: "10px" }}>
-              <div style={{ fontSize: "0.58rem", color: "#315f83", fontWeight: 800 }}>
-                {locale === "en" ? "Top reasons" : "\u5173\u952e\u539f\u56e0"}
-              </div>
-              {localizedAnalysisBrief.topReasons.slice(0, 3).map((reason, index) => (
-                <div
-                  key={`brief-reason-${index}`}
-                  style={{
-                    marginTop: "6px",
-                    display: "grid",
-                    gridTemplateColumns: "18px minmax(0, 1fr)",
-                    gap: "5px",
-                    fontSize: "0.6rem",
-                    color: "#5c4a32",
-                    lineHeight: 1.45,
-                  }}
-                >
-                  <strong style={{ color: "#315f83" }}>{index + 1}.</strong>
-                  <span>{reason}</span>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ marginTop: "10px" }}>
-              <div style={{ fontSize: "0.58rem", color: "#315f83", fontWeight: 800 }}>
-                {locale === "en" ? "What to check" : "\u5ba1\u9605\u91cd\u70b9"}
-              </div>
-              <div style={{ marginTop: "5px", fontSize: "0.58rem", color: challengeCheckSummary.refuting > 0 ? "#a0503c" : "#6b5a42", lineHeight: 1.45 }}>
-                {localizedAnalysisBrief.challengeSummary}
-              </div>
-              {localizedAnalysisBrief.missingEvidence.slice(0, 2).map((item, index) => (
-                <div
-                  key={`brief-gap-${index}`}
-                  style={{ marginTop: "5px", fontSize: "0.56rem", color: "#8b7355", lineHeight: 1.45 }}
-                >
-                  {locale === "en" ? "Gap: " : "\u7f3a\u53e3\uff1a"}{item}
-                </div>
-              ))}
-            </div>
-
-            <div style={{ marginTop: "9px", fontSize: "0.56rem", color: "#7a6b55", lineHeight: 1.45 }}>
-              {locale === "en" ? "Evidence coverage: " : "\u8bc1\u636e\u8986\u76d6\uff1a"}
-              {localizedAnalysisBrief.sourceCoverage}
-            </div>
-            {sourceTransparencySummary.checked > 0 && (
-              <div
-                data-testid="source-health-summary"
-                style={{
-                  marginTop: "9px",
-                  padding: "7px 8px",
-                  border: "1px solid rgba(49, 95, 131, 0.14)",
-                  borderRadius: "8px",
-                  background: "rgba(255,255,255,0.56)",
-                  fontSize: "0.55rem",
-                  color: "#6b5a42",
-                  lineHeight: 1.45,
-                }}
-              >
-                <div style={{ color: "#315f83", fontWeight: 800 }}>
-                  {locale === "en" ? "Sources checked" : "\u5df2\u68c0\u7d22\u6765\u6e90"}:{" "}
-                  {sourceTransparencySummary.labels.join(", ") ||
-                    (locale === "en" ? "source trace available" : "\u5df2\u8fd4\u56de\u6765\u6e90\u8f68\u8ff9")}
-                </div>
-                <div style={{ marginTop: "3px" }}>
-                  {locale === "en" ? "Stable sources" : "\u7a33\u5b9a\u6765\u6e90"}:{" "}
-                  {sourceTransparencySummary.stable}/{sourceTransparencySummary.checked}
-                  {" · "}
-                  {locale === "en" ? "Failed sources" : "\u5931\u8d25\u6765\u6e90"}:{" "}
-                  {sourceTransparencySummary.failed}
-                  {" · "}
-                  {locale === "en" ? "Hits" : "\u547d\u4e2d"}: {sourceTransparencySummary.hits}
-                </div>
-                <div style={{ marginTop: "3px" }}>
-                  {locale === "en" ? "Successful sources" : "\u6210\u529f\u6765\u6e90"}:{" "}
-                  {sourceTransparencySummary.successful}
-                  {" / "}
-                  {locale === "en" ? "Cached sources" : "\u7f13\u5b58\u6765\u6e90"}:{" "}
-                  {sourceTransparencySummary.cached}
-                  {" / "}
-                  {locale === "en" ? "Degraded sources" : "\u53d7\u9650\u6765\u6e90"}:{" "}
-                  {sourceTransparencySummary.failed}
-                </div>
-                <div style={{ marginTop: "3px", fontWeight: 800 }}>
-                  {locale === "en" ? "Reviewability" : "\u53ef\u5ba1\u9605\u6027"}:{" "}
-                  {sourceTransparencySummary.reviewability}
-                </div>
-              </div>
-            )}
-            {localizedMarkdownBrief && showManualCopyReport && (
-              <div style={{ marginTop: "10px" }}>
-                <div style={{ fontSize: "0.58rem", color: "#a0503c", fontWeight: 800 }}>
-                  {locale === "en" ? "Manual copy" : "\u624b\u52a8\u590d\u5236"}
-                </div>
-                <div style={{ marginTop: "4px", fontSize: "0.55rem", color: "#7a6b55", lineHeight: 1.45 }}>
-                  {locale === "en"
-                    ? "Clipboard permission was blocked. Select the report text below and copy it manually."
-                    : "\u6d4f\u89c8\u5668\u62e6\u622a\u4e86\u526a\u8d34\u677f\u6743\u9650\u3002\u9009\u4e2d\u4e0b\u65b9\u62a5\u544a\u6587\u672c\u540e\u624b\u52a8\u590d\u5236\u3002"}
-                </div>
-                <button
-                  type="button"
-                  onClick={selectManualCopyReport}
-                  style={{
-                    marginTop: "6px",
-                    border: "1px solid rgba(49, 95, 131, 0.22)",
-                    borderRadius: "8px",
-                    padding: "5px 8px",
-                    background: "rgba(255,255,255,0.66)",
-                    color: "#315f83",
-                    cursor: "pointer",
-                    fontSize: "0.54rem",
-                    fontWeight: 800,
-                  }}
-                >
-                  {locale === "en" ? "Select report text" : "\u9009\u4e2d\u62a5\u544a\u6587\u672c"}
-                </button>
-                <textarea
-                  ref={manualCopyReportRef}
-                  data-testid="manual-copy-report"
-                  readOnly
-                  value={localizedMarkdownBrief}
-                  onFocus={selectManualCopyReport}
-                  style={{
-                    marginTop: "6px",
-                    width: "100%",
-                    minHeight: "132px",
-                    maxHeight: "220px",
-                    resize: "vertical",
-                    border: "1px solid rgba(160, 80, 60, 0.20)",
-                    borderRadius: "8px",
-                    padding: "8px",
-                    background: "rgba(255,255,255,0.72)",
-                    color: "#4d3c28",
-                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-                    fontSize: "0.56rem",
-                    lineHeight: 1.5,
-                    whiteSpace: "pre-wrap",
-                  }}
-                />
-              </div>
-            )}
-          </div>
+          <ReadableBriefPanel
+            brief={localizedAnalysisBrief}
+            markdownBrief={localizedMarkdownBrief}
+            markdownCopyStatus={markdownCopyStatus}
+            showManualCopyReport={showManualCopyReport}
+            sourceTransparencySummary={sourceTransparencySummary}
+            hasRefutingChallenges={challengeCheckSummary.refuting > 0}
+            locale={locale}
+            manualCopyReportRef={manualCopyReportRef}
+            onCopyMarkdown={copyMarkdownBrief}
+            onSelectManualCopyReport={selectManualCopyReport}
+          />
         )}
 
         {productionBrief && (
-          <div
-            className="compact-item"
-            data-testid="production-brief"
-            style={{ background: "rgba(255,255,255,0.80)" }}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-              <div className="compact-label" style={{ marginBottom: 0 }}>
-                {locale === "en" ? "Production brief" : "\u751f\u4ea7\u7ea7\u7b80\u62a5"}
-              </div>
-              {productionHarness && (
-                <span
-                  style={{
-                    fontSize: "0.54rem",
-                    color: productionHarness.status === "ready_for_brief" ? "#526f44" : "#a0503c",
-                    fontWeight: 800,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.04em",
-                  }}
-                >
-                  {productionHarness.status.replaceAll("_", " ")}
-                </span>
-              )}
-            </div>
-            <div style={{ marginTop: "7px", fontSize: "0.66rem", color: "#4d3c28", lineHeight: 1.5, fontWeight: 700 }}>
-              {locale === "en"
-                ? productionBrief.executive_summary
-                : localizeBriefText(productionBrief.executive_summary, locale)}
-            </div>
-            {productionBrief.sections.slice(0, 3).map((section) => (
-              <div key={section.kind} style={{ marginTop: "10px" }}>
-                <div style={{ fontSize: "0.58rem", color: "#315f83", fontWeight: 800 }}>
-                  {locale === "en" ? section.title : localizeBriefText(section.title, locale)}
-                </div>
-                {section.items.slice(0, 3).map((item) => (
-                  <div
-                    key={`${section.kind}-${item.title}`}
-                    style={{ marginTop: "6px", fontSize: "0.58rem", color: "#5c4a32", lineHeight: 1.45 }}
-                  >
-                    {locale === "en" ? item.summary : localizeBriefText(item.summary, locale)}
-                    {item.evidence_ids.length > 0 && (
-                      <span style={{ color: "#8b7355" }}>
-                        {" "}
-                        {locale === "en" ? "Evidence" : "\u8bc1\u636e"}: {item.evidence_ids.join(", ")}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ))}
-            {productionBrief.limits.length > 0 && (
-              <div style={{ marginTop: "9px", fontSize: "0.56rem", color: "#8b7355", lineHeight: 1.45 }}>
-                {locale === "en" ? "Limit: " : "\u9650\u5236\uff1a"}
-                {locale === "en"
-                  ? productionBrief.limits[0]
-                  : localizeBriefText(productionBrief.limits[0], locale)}
-              </div>
-            )}
-          </div>
+          <ProductionBriefPanel
+            brief={productionBrief}
+            harness={productionHarness}
+            locale={locale}
+            localizeText={localizeBriefText}
+          />
         )}
 
         {productHarness && (
@@ -3247,12 +2412,12 @@ export default function Home() {
             </div>
             {productHarness.checks.slice(0, 3).map((check) => (
               <div key={check.id} style={{ marginTop: "6px", fontSize: "0.56rem", color: check.status === "pass" ? "#526f44" : check.status === "warn" ? "#8a6a40" : "#a0503c", lineHeight: 1.35 }}>
-                {check.status.toUpperCase()} · {check.label}
+                {check.status.toUpperCase()} 路 {check.label}
               </div>
             ))}
             {productHarness.next_actions[0] && (
               <div style={{ marginTop: "6px", fontSize: "0.56rem", color: "#8b7355", lineHeight: 1.45 }}>
-                {locale === "en" ? "Next: " : "下一步："}
+                {locale === "en" ? "Next: " : "涓嬩竴姝ワ細"}
                 {locale === "en"
                   ? productHarness.next_actions[0]
                   : localizeBriefText(productHarness.next_actions[0], locale)}
@@ -3269,24 +2434,24 @@ export default function Home() {
           </div>
           {activeChainIsRecommended && availableChains.length > 0 && (
             <div style={{ marginTop: "6px", fontSize: "0.56rem", color: "#4a7a9e", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-              {locale === "en" ? "Recommended chain" : "推荐链路"}
+              {locale === "en" ? "Recommended chain" : "鎺ㄨ崘閾捐矾"}
             </div>
           )}
           {hasLowConfidence && (
             <div style={{ marginTop: "6px", fontSize: "0.58rem", color: "#a0503c", lineHeight: 1.5 }}>
-              {locale === "en" ? "Low confidence. Treat this chain as a tentative explanation." : "当前链路置信偏低，请将其视为暂定解释。"}
+              {locale === "en" ? "Low confidence. Treat this chain as a tentative explanation." : "\u5f53\u524d\u94fe\u8def\u7f6e\u4fe1\u504f\u4f4e\uff0c\u8bf7\u5c06\u5176\u89c6\u4e3a\u6682\u5b9a\u89e3\u91ca\u3002"}
             </div>
           )}
           {hasLowEvidenceCoverage && (
             <div style={{ marginTop: "4px", fontSize: "0.58rem", color: "#a0503c", lineHeight: 1.5 }}>
-              {locale === "en" ? "Evidence coverage is thin. Inspect sources before trusting the result." : "当前证据覆盖偏薄，信任结果前请先检查来源。"}
+              {locale === "en" ? "Evidence coverage is thin. Inspect sources before trusting the result." : "\u5f53\u524d\u8bc1\u636e\u8986\u76d6\u504f\u8584\uff0c\u4fe1\u4efb\u7ed3\u679c\u524d\u8bf7\u5148\u68c0\u67e5\u6765\u6e90\u3002"}
             </div>
           )}
         </div>
 
         {causalReasonSummaries.length > 0 && (
           <div className="compact-item">
-            <div className="compact-label">{locale === "en" ? "Reason summary" : "原因摘要"}</div>
+            <div className="compact-label">{locale === "en" ? "Reason summary" : "鍘熷洜鎽樿"}</div>
             {causalReasonSummaries.map((reason) => (
               <button
                 type="button"
@@ -3312,13 +2477,13 @@ export default function Home() {
                 }}
               >
                 <div style={{ fontSize: "0.62rem", lineHeight: 1.45 }}>
-                  <strong>{reason.source}</strong> {locale === "en" ? "helped lead to" : "导致"} <strong>{reason.target}</strong>
+                  <strong>{reason.source}</strong> {locale === "en" ? "helped lead to" : "瀵艰嚧"} <strong>{reason.target}</strong>
                 </div>
                 <div style={{ marginTop: "3px", fontSize: "0.54rem", color: "#8b7355", lineHeight: 1.4 }}>
                   {locale === "en"
                     ? `${reason.strength}% edge strength · ${reason.evidenceCount} evidence item(s)`
-                    : `${reason.strength}% 边强度 · ${reason.evidenceCount} 条证据`}
-                  {reason.evidenceSource ? ` · ${reason.evidenceSource}` : ""}
+                    : `${reason.strength}% \u8fb9\u5f3a\u5ea6 · ${reason.evidenceCount} \u6761\u8bc1\u636e`}
+                  {reason.evidenceSource ? ` 路 ${reason.evidenceSource}` : ""}
                 </div>
                 {reason.evidenceExcerpt && (
                   <div style={{ marginTop: "5px", fontSize: "0.58rem", color: "#6b5a42", lineHeight: 1.45 }}>
@@ -3361,7 +2526,7 @@ export default function Home() {
                   <span>{localizeCausalText(chain.label, locale)}</span>
                   {chain.chain_id === recommendedChainId && (
                     <span style={{ fontSize: "0.5rem", color: "#4a7a9e", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                      {locale === "en" ? "Rec" : "推荐"}
+                      {locale === "en" ? "Rec" : "鎺ㄨ崘"}
                     </span>
                   )}
                 </div>
@@ -3373,7 +2538,7 @@ export default function Home() {
 
         {chainCompareItems.length > 1 && (
           <div className="compact-item">
-            <div className="compact-label">{locale === "en" ? "Chain compare" : "链路比较"}</div>
+            <div className="compact-label">{locale === "en" ? "Chain compare" : "閾捐矾姣旇緝"}</div>
             {chainCompareItems.map((chain) => (
               <button
                 type="button"
@@ -3425,7 +2590,7 @@ export default function Home() {
         <div className="compact-item">
           <div className="compact-label">{t("home.summary.structure")}</div>
           <div>
-            {mockPrimaryChain.metadata.totalNodes} {t("graph.nodes")} · {mockPrimaryChain.metadata.totalEdges} {t("graph.edges")}
+            {mockPrimaryChain.metadata.totalNodes} {t("graph.nodes")} 路 {mockPrimaryChain.metadata.totalEdges} {t("graph.edges")}
           </div>
           <div style={{ marginTop: "4px", fontSize: "0.6rem", color: "#7a6b55" }}>
             {t("graph.depth")} {mockPrimaryChain.metadata.maxDepth}
@@ -3435,7 +2600,7 @@ export default function Home() {
         <div className="compact-item">
           <div className="compact-label">{t("home.summary.nodeMix")}</div>
           <div>
-            {nodeTypeCounts.factor} {t("graph.type.factor")} · {nodeTypeCounts.intermediate} {t("graph.type.intermediate")} · {nodeTypeCounts.outcome} {t("graph.type.outcome")}
+            {nodeTypeCounts.factor} {t("graph.type.factor")} 路 {nodeTypeCounts.intermediate} {t("graph.type.intermediate")} 路 {nodeTypeCounts.outcome} {t("graph.type.outcome")}
           </div>
         </div>
 
@@ -3467,7 +2632,7 @@ export default function Home() {
           <div style={{ color: "#8b7355" }}>{t("home.stats.uncertainty")}</div>
           {hasHighUncertainty && (
             <div style={{ marginTop: "4px", fontSize: "0.56rem", color: "#a0503c", lineHeight: 1.5 }}>
-              {locale === "en" ? "High uncertainty. Review upstream assumptions and evidence quality." : "当前不确定性较高，请重点检查上游假设与证据质量。"}
+              {locale === "en" ? "High uncertainty. Review upstream assumptions and evidence quality." : "\u5f53\u524d\u4e0d\u786e\u5b9a\u6027\u8f83\u9ad8\uff0c\u8bf7\u91cd\u70b9\u68c0\u67e5\u4e0a\u6e38\u5047\u8bbe\u4e0e\u8bc1\u636e\u8d28\u91cf\u3002"}
             </div>
           )}
         </div>
@@ -3628,171 +2793,52 @@ export default function Home() {
             style={{
               fontSize: "0.65rem",
               lineHeight: 1.5,
-              color: (statusNote && (statusNote.includes("失败") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "#c0392b" : undefined,
-              background: (statusNote && (statusNote.includes("失败") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "rgba(192, 57, 43, 0.08)" : undefined,
-              borderLeft: (statusNote && (statusNote.includes("失败") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "2px solid #c0392b" : undefined,
-              padding: (statusNote && (statusNote.includes("失败") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "2px 6px" : undefined,
+              color: (statusNote && (statusNote.includes("澶辫触") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "#c0392b" : undefined,
+              background: (statusNote && (statusNote.includes("澶辫触") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "rgba(192, 57, 43, 0.08)" : undefined,
+              borderLeft: (statusNote && (statusNote.includes("澶辫触") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "2px solid #c0392b" : undefined,
+              padding: (statusNote && (statusNote.includes("澶辫触") || statusNote.includes("failed") || statusNote.includes("error") || statusNote.includes("Error"))) ? "2px 6px" : undefined,
             }}
           >
             {statusNote || (analysisMode.isDemo ? t("demo.banner") : t("status.liveAnalysis"))}
           </div>
-          {analysisMode.loading && pipelineProgress && (
-            <div className="retrieval-progress" style={{ marginTop: "10px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "8px" }}>
-                <span style={{ fontSize: "0.52rem", color: "#4a7a9e", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                  {locale === "en" ? "Retrieval trace" : "检索轨迹"}
-                </span>
-                <span style={{ fontSize: "0.52rem", color: "#8b7355" }}>
-                  {pipelineProgress.stepIndex}/{pipelineProgress.totalSteps}
-                </span>
-              </div>
-              <div style={{ display: "grid", gap: "4px" }}>
-                {progressStageOrder.map((step, index) => {
-                  const isActive = index === activeProgressIndex;
-                  const isDone = index < activeProgressIndex;
-                  return (
-                    <div
-                      key={step}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        fontSize: "0.55rem",
-                        color: isActive ? "#3b6ea5" : isDone ? "#5a7a52" : "#8b7355",
-                        opacity: isActive || isDone ? 1 : 0.58,
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: "7px",
-                          height: "7px",
-                          borderRadius: "999px",
-                          background: isActive ? "#3b6ea5" : isDone ? "#5a7a52" : "rgba(160,140,110,0.28)",
-                          boxShadow: isActive ? "0 0 0 4px rgba(59,110,165,0.12)" : undefined,
-                          flex: "0 0 auto",
-                        }}
-                      />
-                      <span>{progressStageLabel(step, locale)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          {!analysisMode.loading && retrievalTrace.length > 0 && (
-            <div className="retrieval-progress" style={{ marginTop: "10px" }}>
-              <div style={{ fontSize: "0.52rem", color: "#4a7a9e", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "6px" }}>
-                {locale === "en" ? "Source trace" : "检索来源轨迹"}
-              </div>
-              <div style={{ display: "grid", gap: "5px" }}>
-                {retrievalTrace.slice(0, 6).map((item, index) => (
-                  <div
-                    key={`${item.source}-${item.query}-${index}`}
-                    style={{
-                      display: "grid",
-                      gap: "2px",
-                      padding: "5px 6px",
-                      borderRadius: "8px",
-                      background: isDegradedSourceTrace(item) ? "rgba(192,57,43,0.08)" : "rgba(255,255,255,0.55)",
-                      border: isDegradedSourceTrace(item) ? "1px solid rgba(192,57,43,0.18)" : "1px solid rgba(160,140,110,0.14)",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "6px", fontSize: "0.55rem", color: isDegradedSourceTrace(item) ? "#a13b2f" : "#5c4a32" }}>
-                      <span>
-                        {item.source_label || item.source}
-                        {item.cache_hit ? (locale === "en" ? " cache" : " 缓存") : ""}
-                      </span>
-                      <span data-testid="source-trace-status">
-                        {formatSourceStatusLabel(sourceTraceStatus(item), locale)}
-                        {item.retry_after_seconds
-                          ? ` / ${locale === "en" ? "retry after" : "\u91cd\u8bd5\u7b49\u5f85"} ${item.retry_after_seconds}s`
-                          : ""}
-                      </span>
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", fontSize: "0.5rem", color: "#8b7355", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                      <span>{formatSourceKindLabel(item.source_kind, locale)}</span>
-                      <span>·</span>
-                      <span>{formatSourceStabilityLabel(item.stability, locale)}</span>
-                    </div>
-                    <div style={{ fontSize: "0.54rem", color: "#8b7355", lineHeight: 1.35 }}>
-                      {item.query}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {analysisMode.mode === "partial_live" && analysisMode.partialLiveReasons.length > 0 && (
-            <div style={{ marginTop: "8px", paddingTop: "8px", borderTop: "1px dashed rgba(160,140,110,0.18)" }}>
-              <div style={{ fontSize: "0.52rem", color: "#8b7355", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
-                {locale === "en" ? "Why partial live" : "部分 live 原因"}
-              </div>
-              {analysisMode.partialLiveReasons.slice(0, 3).map((reason, index) => (
-                <div key={`${reason}-${index}`} style={{ fontSize: "0.58rem", color: "#6b5a42", lineHeight: 1.45, marginBottom: "3px" }}>
-                  {locale === "en" ? "- " : "· "}{reason}
-                </div>
-              ))}
-            </div>
+          <SourceProgressPanel
+            loading={analysisMode.loading}
+            mode={analysisMode.mode}
+            pipelineProgress={pipelineProgress}
+            partialLiveReasons={analysisMode.partialLiveReasons}
+            locale={locale}
+          />
+          {!analysisMode.loading && (
+            <SourceTracePanel locale={locale} retrievalTrace={retrievalTrace} />
           )}
         </div>
 
         {uncertaintyReport && !analysisMode.isDemo && (
           <div className="compact-item" style={{ background: "rgba(255,255,255,0.72)" }}>
-            <div className="compact-label">{locale === "en" ? "Uncertainty report" : "不确定性报告"}</div>
+            <div className="compact-label">{locale === "en" ? "Uncertainty report" : "\u4e0d\u786e\u5b9a\u6027\u62a5\u544a"}</div>
             <div style={{ fontSize: "0.65rem", color: "#5c4a32", lineHeight: 1.5 }}>
-              {Math.round(uncertaintyReport.overall_uncertainty * 100)}% · {uncertaintyReport.summary}
+              {Math.round(uncertaintyReport.overall_uncertainty * 100)}% 路 {uncertaintyReport.summary}
             </div>
             {uncertaintyReport.dominant_uncertainty_type && (
               <div style={{ fontSize: "0.56rem", color: "#8b7355", marginTop: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                {locale === "en" ? "Dominant" : "主导类型"}: {uncertaintyReport.dominant_uncertainty_type}
+                {locale === "en" ? "Dominant" : "\u4e3b\u5bfc\u7c7b\u578b"}: {uncertaintyReport.dominant_uncertainty_type}
               </div>
             )}
           </div>
         )}
 
-        {challengeChecks.length > 0 && (
-          <div className="compact-item" style={{ background: "rgba(255,255,255,0.72)" }}>
-            <div className="compact-label">{locale === "en" ? "Challenge coverage" : "反证覆盖"}</div>
-            <div style={{ fontSize: "0.6rem", color: "#6b5a42", lineHeight: 1.45, marginBottom: "8px" }}>
-              {locale === "en"
-                ? `${challengeCheckSummary.checked} edge(s) checked · ${challengeCheckSummary.refuting} challenge item(s)`
-                : `已检查 ${challengeCheckSummary.checked} 条边 · ${challengeCheckSummary.refuting} 条反证`}
-            </div>
-            {challengeChecks.slice(0, 3).map((check) => (
-              <button
-                type="button"
-                key={`${check.edge_id}-challenge`}
-                onClick={() => {
-                  const edge = activeApiChain?.edges.find((item) => item.source === check.source && item.target === check.target);
-                  if (edge) focusEdge(edge);
-                }}
-                style={{
-                  width: "100%",
-                  marginBottom: "8px",
-                  padding: "7px 8px",
-                  borderRadius: "6px",
-                  border: "1px solid rgba(160,140,110,0.14)",
-                  background: check.refuting_count > 0 ? "rgba(160,80,60,0.08)" : "rgba(255,255,255,0.50)",
-                  color: "#5c4a32",
-                  cursor: "pointer",
-                  textAlign: "left",
-                }}
-              >
-                <div style={{ fontSize: "0.58rem", lineHeight: 1.4 }}>
-                  <strong>{localizeCausalText(check.source, locale)}</strong>{" -> "}<strong>{localizeCausalText(check.target, locale)}</strong>
-                </div>
-                <div style={{ marginTop: "3px", fontSize: "0.52rem", color: check.refuting_count > 0 ? "#a0503c" : "#8b7355", lineHeight: 1.35 }}>
-                  {formatRefutationStatusLabel(check.status, locale)}
-                  {` · ${check.result_count} ${locale === "en" ? "result(s)" : "条结果"}`}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
+        <ChallengeCoveragePanel
+          challengeChecks={challengeChecks}
+          challengeCheckSummary={challengeCheckSummary}
+          activeEdges={activeApiChain?.edges ?? []}
+          locale={locale}
+          localizeText={localizeCausalText}
+          onFocusEdge={focusEdge}
+        />
 
         {selectedApiEdges.length > 0 && (
           <div className="compact-item" style={{ background: "rgba(255,255,255,0.72)" }}>
-            <div className="compact-label">{locale === "en" ? "Connected edges" : "关联边"}</div>
+            <div className="compact-label">{locale === "en" ? "Connected edges" : "\u5173\u8054\u8fb9"}</div>
             {selectedApiEdges.slice(0, 3).map((edge) => (
               <button
                 type="button"
@@ -3814,7 +2860,7 @@ export default function Home() {
                   <strong>{localizeCausalText(edge.source, locale)}</strong> → <strong>{localizeCausalText(edge.target, locale)}</strong>
                 </div>
                 <div style={{ fontSize: "0.56rem", color: edge.evidence_conflict && edge.evidence_conflict !== "none" ? "#a0503c" : "#8b7355", marginTop: "3px" }}>
-                  {locale === "en" ? "Conflict" : "冲突"}: {edge.evidence_conflict ?? "none"}
+                  {locale === "en" ? "Conflict" : "\u51b2\u7a81"}: {edge.evidence_conflict ?? "none"}
                 </div>
                 <div style={{ fontSize: "0.54rem", color: edge.refuting_evidence_ids.length > 0 ? "#a0503c" : "#8b7355", marginTop: "3px" }}>
                   {formatRefutationStatusLabel(edge.refutation_status, locale)}
@@ -3839,7 +2885,7 @@ export default function Home() {
             >
               {sourceFilterOptions.map((source) => (
                 <option key={source} value={source}>
-                  {source === "all" ? (locale === "en" ? "All sources" : "全部来源") : source}
+                  {source === "all" ? (locale === "en" ? "All sources" : "鍏ㄩ儴鏉ユ簮") : source}
                 </option>
               ))}
             </select>
@@ -3848,16 +2894,16 @@ export default function Home() {
               onChange={(event) => setEvidenceStanceFilter(event.target.value as "all" | "supporting" | "refuting")}
               style={{ fontSize: "0.56rem", padding: "4px 6px", borderRadius: "4px", border: "1px solid rgba(160,140,110,0.18)", background: "rgba(255,255,255,0.92)", color: "#5c4a32" }}
             >
-              <option value="all">{locale === "en" ? "All stance" : "全部立场"}</option>
-              <option value="supporting">{locale === "en" ? "Supporting" : "支撑"}</option>
-              <option value="refuting">{locale === "en" ? "Refuting" : "反驳"}</option>
+              <option value="all">{locale === "en" ? "All stance" : "鍏ㄩ儴绔嬪満"}</option>
+              <option value="supporting">{locale === "en" ? "Supporting" : "鏀拺"}</option>
+              <option value="refuting">{locale === "en" ? "Refuting" : "鍙嶉┏"}</option>
             </select>
             <select
               value={evidenceConfidenceFilter}
               onChange={(event) => setEvidenceConfidenceFilter(event.target.value as "all" | "strong" | "medium" | "weak")}
               style={{ gridColumn: "1 / -1", fontSize: "0.56rem", padding: "4px 6px", borderRadius: "4px", border: "1px solid rgba(160,140,110,0.18)", background: "rgba(255,255,255,0.92)", color: "#5c4a32" }}
             >
-              <option value="all">{locale === "en" ? "All confidence" : "全部可信度"}</option>
+              <option value="all">{locale === "en" ? "All confidence" : "\u5168\u90e8\u53ef\u4fe1\u5ea6"}</option>
               <option value="strong">{t("home.evidence.strong")}</option>
               <option value="medium">{t("home.evidence.medium")}</option>
               <option value="weak">{t("home.evidence.weak")}</option>
@@ -3877,12 +2923,12 @@ export default function Home() {
               }
               style={{ gridColumn: "1 / -1", fontSize: "0.56rem", padding: "4px 6px", borderRadius: "4px", border: "1px solid rgba(160,140,110,0.18)", background: "rgba(255,255,255,0.92)", color: "#5c4a32" }}
             >
-              <option value="all">{locale === "en" ? "All evidence types" : "全部证据类型"}</option>
-              <option value="trusted_fulltext">{locale === "en" ? "Trusted full text" : "可信正文"}</option>
-              <option value="fulltext">{locale === "en" ? "Full text" : "正文"}</option>
-              <option value="store_cache">{locale === "en" ? "Store cache" : "证据缓存"}</option>
-              <option value="fallback">{locale === "en" ? "Fallback summary" : "降级摘要"}</option>
-              <option value="base">{locale === "en" ? "Base / fresh sources" : "基础 / 实时来源"}</option>
+              <option value="all">{locale === "en" ? "All evidence types" : "鍏ㄩ儴璇佹嵁绫诲瀷"}</option>
+              <option value="trusted_fulltext">{locale === "en" ? "Trusted full text" : "鍙俊姝ｆ枃"}</option>
+              <option value="fulltext">{locale === "en" ? "Full text" : "姝ｆ枃"}</option>
+              <option value="store_cache">{locale === "en" ? "Store cache" : "璇佹嵁缂撳瓨"}</option>
+              <option value="fallback">{locale === "en" ? "Fallback summary" : "闄嶇骇鎽樿"}</option>
+              <option value="base">{locale === "en" ? "Base / fresh sources" : "鍩虹 / 瀹炴椂鏉ユ簮"}</option>
             </select>
           </div>
           {hiddenEvidenceCount > 0 && evidenceQualityFilter === "all" && (
@@ -3890,7 +2936,7 @@ export default function Home() {
               <div style={{ fontSize: "0.58rem", color: "#6b5a42", lineHeight: 1.45, marginBottom: "6px" }}>
                 {locale === "en"
                   ? `${hiddenEvidenceCount} lower-priority evidence item(s) are hidden by default so stronger evidence appears first.`
-                  : `默认已收起 ${hiddenEvidenceCount} 条低优先级证据，让更强的证据先展示。`}
+                  : `\u9ed8\u8ba4\u5df2\u6536\u8d77 ${hiddenEvidenceCount} \u6761\u4f4e\u4f18\u5148\u7ea7\u8bc1\u636e\uff0c\u8ba9\u66f4\u5f3a\u7684\u8bc1\u636e\u5148\u5c55\u793a\u3002`}
               </div>
               <div style={{ fontSize: "0.54rem", color: "#8b7355", lineHeight: 1.45, marginBottom: "6px" }}>
                 {[
@@ -3902,7 +2948,7 @@ export default function Home() {
                     : null,
                 ]
                   .filter(Boolean)
-                  .join(locale === "en" ? " · " : "，")}
+                  .join(locale === "en" ? " · " : "\uff1b")}
               </div>
               <button
                 type="button"
@@ -3918,8 +2964,8 @@ export default function Home() {
                 }}
               >
                 {showAllEvidence
-                  ? (locale === "en" ? "Show prioritized only" : "只看高优先级证据")
-                  : (locale === "en" ? "Show all evidence" : "显示全部证据")}
+                  ? (locale === "en" ? "Show prioritized only" : "鍙湅楂樹紭鍏堢骇璇佹嵁")
+                  : (locale === "en" ? "Show all evidence" : "鏄剧ず鍏ㄩ儴璇佹嵁")}
               </button>
             </div>
           )}
@@ -3967,8 +3013,8 @@ export default function Home() {
                   </div>
                 )}
                 <div style={{ fontSize: "0.56rem", color: "#8b7355", marginTop: "2px" }}>
-                  {locale === "en" ? "Source" : "来源"}: {item.source}
-                  {item.timestamp ? ` · ${item.timestamp}` : ""}
+                  {locale === "en" ? "Source" : "鏉ユ簮"}: {item.source}
+                  {item.timestamp ? ` 路 ${item.timestamp}` : ""}
                 </div>
               </button>
             ))
@@ -4056,10 +3102,10 @@ export default function Home() {
               lineHeight: 1.6,
             }}
           >
-            • {t("home.actions.traceUpstream")}
-            <br />• {t("home.actions.compareChains")}
-            <br />• {t("home.actions.viewCounterfactuals")}
-            <br />• {t("home.actions.dragNotes")}
+            鈥?{t("home.actions.traceUpstream")}
+            <br />鈥?{t("home.actions.compareChains")}
+            <br />鈥?{t("home.actions.viewCounterfactuals")}
+            <br />鈥?{t("home.actions.dragNotes")}
           </div>
         </div>
         )}
