@@ -3626,3 +3626,30 @@ Risk notes:
 - Residual risk: model presence in OpenRouter's public catalog does not prove the user's account has quota or permission for every model; users still need provider preflight before live analysis.Final guardrails after commit:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
 - Non-blocking warnings: the slice spans 5 top-level areas because it intentionally includes provider catalog behavior, regression tests, README/project-state docs, and guardrails evidence; `docs/PROJECT_STATE.md` changed because user-visible model availability changed and project documentation must stay synchronized.
+
+## Running Backend OpenRouter Catalog E2E Guard
+
+Scope:
+- User reported that the app still failed after the OpenRouter model catalog refresh and asked whether a real end-to-end test had been done.
+- Confirmed the previous verification covered local API/browser E2E and public catalog smoke, but not a real-key live OpenRouter analysis because `OPENROUTER_API_KEY` is unset locally.
+- Root cause for the current repeated failure was a stale local `python start.py` process tree serving the old `/api/providers` catalog even after the repository code had current OpenRouter IDs.
+- Added full-stack E2E assertions against the running backend provider catalog so stale service state fails visibly: current `google/gemini-2.5-flash` and `anthropic/claude-haiku-4.5` must be present, while stale `google/gemini-2.5-flash-preview` and `anthropic/claude-haiku-4` must be absent.
+- Synchronized README and PROJECT_STATE to document the restart requirement and the E2E guard.
+
+Verification:
+- RED/live local service check: `python scripts\e2e_test.py` against the stale running backend failed exactly the new provider-catalog checks (`613 PASS, 4 FAIL, 0 SKIP`). This proved the E2E guard catches the stale-service problem.
+- Stale service cleanup: stopped the old `python start.py` process tree, then restarted the app from the current workspace.
+- GREEN/local E2E: `python scripts\e2e_test.py` passed after restart (`617 PASS, 0 FAIL, 0 SKIP`).
+- Required full verification: `npm test` completed with exit code 0. It included frontend lint/build, `python -m ruff check retrocause/`, full pytest (`291 passed, 1 skipped`), and browser E2E (`617 PASS, 0 FAIL, 0 SKIP`).
+
+Risk notes:
+- Security/auth/secrets: no API keys were written to files, committed, echoed in commands, or stored. The key previously pasted in chat should be treated as exposed and rotated. A true live OpenRouter analysis still requires an operator-provided `OPENROUTER_API_KEY` in the environment.
+- Dependencies: no package, lockfile, or dependency changes.
+- Performance/latency: the new checks add four set-membership assertions to the test harness only; no runtime application cost.
+- Understanding tradeoff: this catches stale local backend/provider catalog state in normal E2E, while keeping real external provider checks opt-in because they depend on live credentials and quota.
+- Continuity: reused the existing `/api/providers` endpoint and `scripts/e2e_test.py` harness instead of adding a new test framework or provider abstraction.
+- Residual risk: local E2E now proves the running app serves current model IDs, but it still does not prove account-level OpenRouter permissions, quota, or live model response quality for every listed model.
+
+Final guardrails after commit:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings: the slice spans 4 top-level areas because it intentionally includes the E2E guard, README/PROJECT_STATE synchronization, and guardrails evidence; `docs/PROJECT_STATE.md` changed because test behavior and local operating guidance changed.

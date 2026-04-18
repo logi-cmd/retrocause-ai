@@ -115,6 +115,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Added a homepage Chinese A-share intraday sample query for `芯原股份今天盘中为什么下跌？`; the browser now dogfoods that the sample preserves the company anchor and selects the Market scenario before submission.
 - Fixed remaining homepage mojibake in visible Chinese labels around preflight, run orchestration, source coverage, chain comparison, and reason summaries; the default OpenRouter model now starts with the current DeepSeek stable alias `deepseek/deepseek-chat`, and older requests that still send `deepseek/deepseek-chat-v3-0324` are normalized to that stable alias before live analysis.
 - Refreshed OpenRouter picker model IDs for current public catalog availability by replacing `google/gemini-2.5-flash-preview` with `google/gemini-2.5-flash` and `anthropic/claude-haiku-4` with `anthropic/claude-haiku-4.5`; added an opt-in `RETROCAUSE_LIVE_OPENROUTER_CATALOG=1` pytest smoke that compares the local catalog to OpenRouter's public `/api/v1/models` list.
+- Added an E2E guard for the running backend provider catalog so stale local `python start.py` processes fail visibly when `/api/providers` still serves old OpenRouter IDs.
 
 ## Known Gaps
 
@@ -122,6 +123,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Degraded-source states now have deterministic API/brief regression coverage plus browser-level source-trace dogfood for representative rate-limited/cached rows; wider visual QA across all bad-path states remains useful.
 - Direct monetization design should be deferred until OSS is solid; future Pro should be revisited as a full-stack Rust architecture rather than incremental hosted work in the current alpha stack.
 - A true live Chinese finance run with real provider/search keys still needs verification after the anchor-preservation fix; the homepage now has a guarded sample entry for this query path, the OpenRouter picker/API resolver prefer `deepseek/deepseek-chat` over the observed DeepSeek V3 0324 empty-result path, and the local OpenRouter model catalog has a live public-catalog smoke, but live source quality is still unverified without a successful real-key run.
+- Local browser/API E2E now verifies that the currently running backend exposes current OpenRouter picker IDs. This catches stale local services, but it is not a substitute for a real-key provider run; `OPENROUTER_API_KEY` must be provided by the operator and any key pasted into chat should be rotated.
 - The API route module is still large even after the schema, uploaded-evidence route, saved-run route, provider route/preflight, live-failure V2 response, retrieval-trace V2 conversion, timeout, Markdown-brief, structured-analysis-brief, production-brief, production/product harness, production-scenario, provider-preflight, saved-run, and run-metadata helper extractions; streaming and the remaining main result-to-V2 conversion remain backend split candidates.
 - Legacy canvas layout/state logic remains separate from the canonical homepage evidence board, but sticky-card rendering and red-string path math now reuse shared modules.
 

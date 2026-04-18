@@ -240,6 +240,17 @@ r = httpx.get(f"{BASE}/api/providers", timeout=10)
 check("providers endpoint 200", r.status_code == 200)
 providers = r.json().get("providers", {})
 check("providers non-empty", len(providers) > 0, f"got {providers}")
+openrouter_models = set(providers.get("openrouter", {}).get("models", {}))
+check("OpenRouter catalog has current Gemini Flash ID", "google/gemini-2.5-flash" in openrouter_models)
+check(
+    "OpenRouter catalog removed stale Gemini Flash preview ID",
+    "google/gemini-2.5-flash-preview" not in openrouter_models,
+)
+check("OpenRouter catalog has current Claude Haiku ID", "anthropic/claude-haiku-4.5" in openrouter_models)
+check(
+    "OpenRouter catalog removed stale Claude Haiku 4 ID",
+    "anthropic/claude-haiku-4" not in openrouter_models,
+)
 
 # ═══════════════════════════════════════════════════════════════════════
 # SECTION 2: V2 API — Dinosaur (default demo, 2 chains)

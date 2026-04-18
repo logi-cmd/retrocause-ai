@@ -275,6 +275,8 @@ RETROCAUSE_LIVE_OPENROUTER_CATALOG=1 python -m pytest tests/test_comprehensive.p
 
 This hits OpenRouter's public `/api/v1/models` catalog and checks that the local OpenRouter picker model IDs still exist. It is opt-in so normal local tests do not depend on external network availability.
 
+After changing provider catalogs or backend model resolution, restart `python start.py` before manual browser testing. The full-stack E2E suite now checks the running `/api/providers` response for current OpenRouter IDs, so stale local backend processes fail fast instead of silently serving old picker data.
+
 ## Tech Stack / 技术栈
 
 - Backend: Python, FastAPI, OpenAI-compatible SDK
