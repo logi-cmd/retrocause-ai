@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "task": "Refactor RetroCause frontend homepage by extracting pure TypeScript types and formatting/status helpers from frontend/src/app/page.tsx into frontend/src/lib without changing user-visible behavior; keep the first slice small and verify with frontend lint/build, npm test if needed, and guardrails.",
+  "task": "Refactor RetroCause frontend homepage by extracting TypeScript types, formatting/status helpers, and focused UI panel components from frontend/src/app/page.tsx into frontend/src/lib without changing user-visible behavior; keep each slice reviewable and verify with npm test and guardrails.",
   "preset": "generic",
   "createdAt": "2026-04-17T16:32:32.253Z",
   "allowedPaths": [
@@ -12,6 +12,7 @@
     "docs/INDEX.md",
     "docs/PROJECT_STATE.md",
     "README.md",
+    "scripts/e2e_test.py",
     ".agent-guardrails/evidence/",
     ".agent-guardrails/task-contract.json"
   ],
@@ -26,8 +27,10 @@
   "allowedChangeTypes": [
     "refactor",
     "frontend",
+    "interface",
     "tests",
     "docs",
+    "other",
     "guardrails-internal"
   ],
   "riskLevel": "medium",
