@@ -1124,6 +1124,59 @@ def test_frontend_extracts_challenge_coverage_panel():
     assert "checked, no explicit challenge" in evidence_formatting_source
 
 
+def test_frontend_extracts_evidence_filter_panel():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    evidence_filter_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "evidence-filter-panel.tsx"
+    ).read_text(encoding="utf-8")
+
+    assert "@/lib/evidence-filter-panel" in page_source
+    assert "EvidenceFilterPanel" in page_source
+    assert "All evidence types" in evidence_filter_source
+    assert "lower-priority evidence item(s)" in evidence_filter_source
+    assert "formatEvidenceTierLabel" in evidence_filter_source
+    assert "selectedNodeCitationByEvidenceId" in evidence_filter_source
+
+
+def test_frontend_extracts_sticky_card_component():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    sticky_card_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "sticky-card.tsx"
+    ).read_text(encoding="utf-8")
+
+    assert "@/lib/sticky-card" in page_source
+    assert "StickyCard" in page_source
+    assert "function StickyCard" not in page_source
+    assert "function Pushpin" not in page_source
+    assert "export function StickyCard" in sticky_card_source
+    assert "function Pushpin" in sticky_card_source
+    assert "sticky-card-${note.id}" in sticky_card_source
+    assert "paper-texture" in sticky_card_source
+    assert "card-title" in sticky_card_source
+
+
+def test_frontend_extracts_sticky_graph_layout_helpers():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    sticky_layout_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "sticky-graph-layout.ts"
+    ).read_text(encoding="utf-8")
+
+    assert "@/lib/sticky-graph-layout" in page_source
+    assert "function computeLayout" not in page_source
+    assert "function computeCausalStrings" not in page_source
+    assert "export function computeLayout" in sticky_layout_source
+    assert "export function computeCausalStrings" in sticky_layout_source
+    assert "export function buildEdgePath" in sticky_layout_source
+    assert "PANEL_SAFE_LEFT_OPEN" in sticky_layout_source
+    assert "NOTE_VISUAL_HEIGHT_BUFFER" in sticky_layout_source
+
+
 def test_frontend_localizes_source_trace_status():
     source_trace_source = (
         REPO_ROOT / "frontend" / "src" / "lib" / "source-trace.ts"

@@ -6,7 +6,6 @@ import {
   getLocalizedMockData,
   type CausalChain,
   type ChainNode,
-  type ChainEdge,
   type CausalNodeType,
   type EdgeStrength,
   type EvidenceReliability,
@@ -30,11 +29,9 @@ import type {
   ApiUsageLedgerItem,
 } from "@/lib/api-types";
 import {
-  evidenceCategorySummaryLabel,
   evidenceQualityCategory,
   evidenceSortWeight,
   formatAnalysisBadge,
-  formatEvidenceTierLabel,
   formatFreshnessLabel,
   formatRefutationStatusLabel,
   formatTimeRangeLabel,
@@ -51,6 +48,25 @@ import { ProductionBriefPanel } from "@/lib/production-brief-panel";
 import { SavedRunsPanel } from "@/lib/saved-runs-panel";
 import { UploadedEvidencePanel } from "@/lib/uploaded-evidence-panel";
 import { ChallengeCoveragePanel } from "@/lib/challenge-coverage-panel";
+import {
+  EvidenceFilterPanel,
+  type EvidenceConfidenceFilter,
+  type EvidenceQualityFilter,
+  type EvidenceStanceFilter,
+} from "@/lib/evidence-filter-panel";
+import { StickyCard } from "@/lib/sticky-card";
+import {
+  CANVAS_HEADER_HEIGHT,
+  NOTE_BOTTOM_SAFE_PX,
+  NOTE_TOP_SAFE_PX,
+  NOTE_VISUAL_HEIGHT_BUFFER,
+  PANEL_SAFE_CLOSED,
+  PANEL_SAFE_LEFT_OPEN,
+  PANEL_SAFE_RIGHT_OPEN,
+  computeCausalStrings,
+  computeLayout,
+  type StickyNote,
+} from "@/lib/sticky-graph-layout";
 
 const API_BASE = process.env.NEXT_PUBLIC_RETROCAUSE_API_BASE ?? "http://localhost:8000";
 
@@ -66,16 +82,6 @@ function localizeBriefText(text: string, locale: "zh" | "en"): string {
     .replace(/source type\(s\)/gi, "\u7c7b\u6765\u6e90")
     .replace(/high-quality evidence item\(s\)/gi, "鏉￠珮璐ㄩ噺璇佹嵁")
     .replace(/total evidence item\(s\)/gi, "\u6761\u603b\u8bc1\u636e");
-}
-
-function formatEvidenceStanceLabel(item: ApiEvidence, locale: "zh" | "en"): string {
-  if (item.stance === "context") {
-    return locale === "en" ? "Context" : "鑳屾櫙";
-  }
-  if (item.stance === "refuting" || !item.is_supporting) {
-    return locale === "en" ? "Challenges" : "鍙嶈瘉";
-  }
-  return locale === "en" ? "Supports" : "鏀寔";
 }
 
 function localizeEvidenceContent(content: string, locale: "zh" | "en"): string {
@@ -369,82 +375,12 @@ function makePlaceholderChain(query: string, locale: "zh" | "en"): CausalChain {
   };
 }
 
-// Color palette for different node types
-const STICKY_COLORS = [
-  "sticky-yellow",
-  "sticky-cream",
-  "sticky-blue",
-  "sticky-pink",
-  "sticky-mint",
-  "sticky-lavender",
-] as const;
-
-type StickyColor = (typeof STICKY_COLORS)[number];
-
-// Note dimensions (width, height) for anchor calculation
-const NOTE_DIMS: Record<StickyColor, [number, number]> = {
-  "sticky-yellow": [180, 130],
-  "sticky-cream": [170, 125],
-  "sticky-blue": [165, 122],
-  "sticky-pink": [160, 120],
-  "sticky-mint": [170, 125],
-  "sticky-lavender": [155, 118],
-};
-
-const CANVAS_HEADER_HEIGHT = 64;
-const NOTE_TOP_SAFE_PX = 24;
-const NOTE_BOTTOM_SAFE_PX = 42;
-const NOTE_VISUAL_HEIGHT_BUFFER = 14;
-const PANEL_SAFE_LEFT_OPEN = 296;
-const PANEL_SAFE_RIGHT_OPEN = 356;
-const PANEL_SAFE_CLOSED = 24;
-
-// Derived sticky note from ChainNode
-interface StickyNote {
-  id: string;
-  title: string;
-  depth: number;
-  detail: string;
-  tag: string;
-  tagClass: string;
-  color: StickyColor;
-  top: number;
-  left: number;
-  rotate: number;
-  // Geometry for anchor calculation
-  width: number;
-  height: number;
-}
-
 interface DragState {
   id: string;
   pointerX: number;
   pointerY: number;
   left: number;
   top: number;
-}
-
-interface CausalStringPath {
-  id: string;
-  source: string;
-  target: string;
-  d: string;
-  opacity: number;
-  width: number;
-}
-
-// Map node type to tag class
-function getTagClass(type: ChainNode["type"]): string {
-  switch (type) {
-    case "outcome":
-      return "tag-effect";
-    case "factor":
-      return "tag-cause";
-    case "intermediate":
-      return "tag-mediator";
-    default:
-      return "tag-cause";
-  }
 }
 
 function getTagLabel(type: ChainNode["type"], t: (key: TranslationKey) => string): string {
@@ -460,325 +396,7 @@ function getTagLabel(type: ChainNode["type"], t: (key: TranslationKey) => string
   }
 }
 
-// Get sticky color based on node properties for visual variety
-function getStickyColor(index: number, depth: number): StickyColor {
-  // Rotate through colors based on index and depth for variety
-  const combined = (index * 3 + depth * 2) % STICKY_COLORS.length;
-  return STICKY_COLORS[combined];
-}
 
-function computeLayout(
-  nodes: ChainNode[],
-  boardWidth: number,
-  boardHeight: number,
-  headerHeight: number,
-  getLabel: (type: ChainNode["type"]) => string,
-  leftPanelOpen = true,
-  rightPanelOpen = true
-): StickyNote[] {
-  if (nodes.length === 0) return [];
-
-  const leftMargin = leftPanelOpen ? Math.min(340, Math.max(230, boardWidth * 0.22)) : 88;
-  const rightMargin = rightPanelOpen ? Math.min(400, Math.max(260, boardWidth * 0.26)) : 88;
-  const canvasHeight = Math.max(0, boardHeight - headerHeight);
-  const topMargin = NOTE_TOP_SAFE_PX;
-  const bottomMargin = NOTE_BOTTOM_SAFE_PX + NOTE_VISUAL_HEIGHT_BUFFER;
-  const usableWidth = boardWidth - leftMargin - rightMargin;
-  const usableHeight = canvasHeight - topMargin - bottomMargin;
-
-  const rotations = [-3, -1.5, 0.5, 2, -2, 1.5, -0.5, 3, -2.5, 1];
-
-  const n = nodes.length;
-
-  const sortedNodes = [...nodes].sort((a, b) => a.depth - b.depth);
-
-  // Distribute nodes in a staggered grid-like pattern across the canvas.
-  // Each node gets a unique cell so they never start on top of each other.
-  const cols = Math.min(n, Math.max(2, Math.ceil(Math.sqrt(n * (usableWidth / usableHeight)))));
-  const rows = Math.ceil(n / cols);
-
-  const cellW = usableWidth / cols;
-  const cellH = usableHeight / rows;
-
-  const prelimPositions: { node: ChainNode; x: number; y: number }[] = [];
-
-  sortedNodes.forEach((node, i) => {
-    // Fill in a zigzag pattern: even rows left-to-right, odd rows right-to-left
-    const row = Math.floor(i / cols);
-    const colInRow = i % cols;
-    const col = row % 2 === 0 ? colInRow : (cols - 1 - colInRow);
-
-    const cx = leftMargin + col * cellW + cellW / 2;
-    const cy = topMargin + row * cellH + cellH / 2;
-
-    // Small deterministic offset within cell for organic feel
-    const ox = ((i * 37) % 17 - 8) * 2;
-    const oy = ((i * 23) % 13 - 6) * 2;
-
-    prelimPositions.push({ node, x: cx + ox, y: cy + oy });
-  });
-
-  // Collision avoidance 鈥?generous minimum gap + more passes
-  const minGapX = 210;
-  const minGapY = 170;
-
-  for (let pass = 0; pass < 10; pass++) {
-    for (let i = 0; i < prelimPositions.length; i++) {
-      for (let j = i + 1; j < prelimPositions.length; j++) {
-        const a = prelimPositions[i];
-        const b = prelimPositions[j];
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const overlapX = minGapX - Math.abs(dx);
-        const overlapY = minGapY - Math.abs(dy);
-
-        if (overlapX > 0 && overlapY > 0) {
-          const pushX = overlapX / 2 + 8;
-          const pushY = overlapY / 2 + 8;
-          if (overlapX < overlapY) {
-            a.x -= Math.sign(dx || 1) * pushX;
-            b.x += Math.sign(dx || 1) * pushX;
-          } else {
-            a.y -= Math.sign(dy || 1) * pushY;
-            b.y += Math.sign(dy || 1) * pushY;
-          }
-        }
-      }
-    }
-  }
-
-  return prelimPositions.map((pos, i) => {
-    const color = getStickyColor(i, pos.node.depth);
-    const [width, height] = NOTE_DIMS[color];
-    const left = Math.max(leftMargin, Math.min(pos.x, boardWidth - rightMargin - width));
-    const visualHeight = height + NOTE_VISUAL_HEIGHT_BUFFER;
-    const maxTop = canvasHeight - bottomMargin - visualHeight;
-    const row = Math.floor(i / cols);
-    const rowOffset = ((i * 23) % 13 - 6) * 2;
-    const layoutTopMargin = Math.min(96, Math.max(NOTE_TOP_SAFE_PX + 48, canvasHeight * 0.12));
-    const rowRatio = rows > 1 ? row / (rows - 1) : 0.5;
-    const intendedTop =
-      rows > 1
-        ? layoutTopMargin + rowRatio * Math.max(0, maxTop - layoutTopMargin) + rowOffset
-        : topMargin + Math.max(0, (canvasHeight - topMargin - bottomMargin - visualHeight) / 2);
-    const top = Math.max(topMargin, Math.min(intendedTop, maxTop));
-
-    return {
-      id: pos.node.id,
-      title: pos.node.label,
-      depth: pos.node.depth,
-      detail: pos.node.description.brief,
-      tag: getLabel(pos.node.type),
-      tagClass: getTagClass(pos.node.type),
-      color,
-      top,
-      left,
-      rotate: rotations[i % rotations.length],
-      width,
-      height,
-    };
-  });
-}
-
-// Compute pushpin anchor from note geometry
-// Pushpin SVG: 22x22, positioned top:-10px left:50% transform:translateX(-50%)
-// Circle center in SVG: cx=12, cy=8
-// Anchor is at card_width/2 horizontally, card_top-2 vertically
-function getPushpinAnchor(note: StickyNote): [number, number] {
-  return [note.left + note.width / 2, note.top - 2];
-}
-
-// Build a causal edge path between two notes with natural catenary sag
-function buildEdgePath(
-  sx: number,
-  sy: number,
-  tx: number,
-  ty: number,
-  strength: number
-): { d: string; opacity: number; width: number } {
-  const dx = tx - sx;
-  const dy = ty - sy;
-  const absDx = Math.abs(dx);
-  const absDy = Math.abs(dy);
-  const dist = Math.sqrt(dx * dx + dy * dy);
-
-  // Control point offset based on distance and direction
-  const cpOffset = Math.min(Math.max(absDx, absDy) * 0.4, 120);
-
-  // Natural gravity sag 鈥?string droops in the middle
-  const sag = Math.min(dist * 0.15, 40) * Math.sign(dy === 0 ? 1 : dy);
-
-  // Choose control point configuration based on dominant direction
-  let c1x: number, c1y: number, c2x: number, c2y: number;
-
-  if (absDy > absDx * 1.5) {
-    // Primarily vertical: s-curve with sag
-    c1x = sx;
-    c1y = sy + cpOffset * Math.sign(dy) + sag * 0.3;
-    c2x = tx;
-    c2y = ty - cpOffset * Math.sign(dy) + sag * 0.3;
-  } else if (absDx > absDy * 1.5) {
-    // Primarily horizontal: arc with natural droop
-    c1x = sx + cpOffset * Math.sign(dx);
-    c1y = sy + sag * 0.4;
-    c2x = tx - cpOffset * Math.sign(dx);
-    c2y = ty + sag * 0.4;
-  } else {
-    // Diagonal: balanced curve with sag
-    c1x = sx + cpOffset * 0.7 * Math.sign(dx);
-    c1y = sy + cpOffset * 0.3 * Math.sign(dy) + sag * 0.5;
-    c2x = tx - cpOffset * 0.7 * Math.sign(dx);
-    c2y = ty - cpOffset * 0.3 * Math.sign(dy) + sag * 0.5;
-  }
-
-  const opacity = 0.35 + strength * 0.35; // 0.35-0.70
-  const width = 1 + strength * 1.5; // 1.5-2.5
-
-  return {
-    d: `M ${sx} ${sy} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${tx} ${ty}`,
-    opacity,
-    width,
-  };
-}
-
-// Compute RED_STRINGS from chain edges using pushpin anchors
-function computeCausalStrings(
-  notes: StickyNote[],
-  edges: ChainEdge[]
-): CausalStringPath[] {
-  const noteMap = new Map(notes.map((n) => [n.id, n]));
-  const paths: CausalStringPath[] = [];
-
-  for (const edge of edges) {
-    const source = noteMap.get(edge.source);
-    const target = noteMap.get(edge.target);
-    if (!source || !target) continue;
-
-    const [sx, sy] = getPushpinAnchor(source);
-    const [tx, ty] = getPushpinAnchor(target);
-
-    paths.push({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      ...buildEdgePath(sx, sy, tx, ty, edge.strength),
-    });
-  }
-
-  return paths;
-}
-
-
-
-function Pushpin() {
-  return (
-    <svg
-      className="absolute pointer-events-none"
-      style={{
-        top: "-10px",
-        left: "50%",
-        transform: "translateX(-50%)",
-        width: "22px",
-        height: "22px",
-        filter: "drop-shadow(1px 2px 3px rgba(60, 40, 20, 0.35))",
-        zIndex: 20,
-      }}
-      viewBox="0 0 24 24"
-    >
-      <defs>
-        <linearGradient id="pinRed" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style={{ stopColor: "#e05555" }} />
-          <stop offset="45%" style={{ stopColor: "#c03535" }} />
-          <stop offset="100%" style={{ stopColor: "#8a2020" }} />
-        </linearGradient>
-        <radialGradient id="pinHead3D" cx="35%" cy="30%" r="65%">
-          <stop offset="0%" style={{ stopColor: "#f07070" }} />
-          <stop offset="50%" style={{ stopColor: "#b83030" }} />
-          <stop offset="100%" style={{ stopColor: "#701818" }} />
-        </radialGradient>
-        <linearGradient id="pinMetal" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" style={{ stopColor: "#d4c4a4" }} />
-          <stop offset="40%" style={{ stopColor: "#f0e0c0" }} />
-          <stop offset="60%" style={{ stopColor: "#c8b898" }} />
-          <stop offset="100%" style={{ stopColor: "#a89878" }} />
-        </linearGradient>
-      </defs>
-      <circle cx="12" cy="8" r="7" fill="url(#pinHead3D)" />
-      <ellipse cx="9.5" cy="5.5" rx="2.5" ry="1.8" fill="rgba(255,255,255,0.45)" />
-      <circle cx="14" cy="10.5" r="1.2" fill="rgba(0,0,0,0.15)" />
-      <rect x="11.2" y="14" width="1.6" height="7" rx="0.8" fill="url(#pinMetal)" />
-    </svg>
-  );
-}
-
-function StickyCard({
-  note,
-  isSelected,
-  isDragging,
-  depthLabel,
-  onClick,
-  onMouseDown,
-}: {
-  note: StickyNote;
-  isSelected: boolean;
-  isDragging: boolean;
-  depthLabel: string;
-  onClick: () => void;
-  onMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
-}) {
-  return (
-    <div
-      className={`sticky-card ${note.color} ${isSelected ? "ring-2 ring-[#a0503c]/40" : ""}`}
-      role="button"
-      tabIndex={0}
-      aria-pressed={isSelected}
-      data-testid={`sticky-card-${note.id}`}
-      style={{
-        position: "absolute",
-        top: note.top,
-        left: note.left,
-        width: `${note.width}px`,
-        padding: "22px 14px 14px",
-        rotate: `${note.rotate}deg`,
-        cursor: isDragging ? "grabbing" : "grab",
-        transition: isDragging ? "none" : "box-shadow 0.18s ease, transform 0.18s ease",
-        zIndex: isDragging ? 40 : isSelected ? 28 : 18,
-        transform: isDragging ? "scale(1.02)" : undefined,
-        willChange: isDragging ? "top, left, transform" : undefined,
-      }}
-      onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onClick();
-        }
-      }}
-      onMouseDown={onMouseDown}
-    >
-      <Pushpin />
-      <div className="tape-strip tape-left" />
-      <div className="tape-strip tape-right" />
-      <div
-        className="paper-texture"
-        style={{
-          position: "absolute",
-          inset: 0,
-          borderRadius: "2px",
-          pointerEvents: "none",
-          overflow: "hidden",
-        }}
-      />
-      <div style={{ transform: `rotate(${-note.rotate}deg)`, position: "relative", zIndex: 1 }}>
-        <div className="card-title">{note.title}</div>
-        <div className="card-subtitle">{depthLabel} {note.depth}</div>
-        <div className="card-detail">
-          {note.detail}
-        </div>
-        <span className={`card-tag ${note.tagClass}`}>{note.tag}</span>
-      </div>
-    </div>
-  );
-}
 
 export default function Home() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -826,11 +444,11 @@ export default function Home() {
   const [pipelineEval, setPipelineEval] = useState<AnalyzeResponseV2["evaluation"]>(null);
   const [uncertaintyReport, setUncertaintyReport] = useState<AnalyzeResponseV2["uncertainty_report"]>(null);
   const [evidenceSourceFilter, setEvidenceSourceFilter] = useState<string>("all");
-  const [evidenceStanceFilter, setEvidenceStanceFilter] = useState<"all" | "supporting" | "refuting">("all");
-  const [evidenceConfidenceFilter, setEvidenceConfidenceFilter] = useState<"all" | "strong" | "medium" | "weak">("all");
-  const [evidenceQualityFilter, setEvidenceQualityFilter] = useState<
-    "all" | "trusted_fulltext" | "fulltext" | "store_cache" | "fallback" | "base"
-  >("all");
+  const [evidenceStanceFilter, setEvidenceStanceFilter] = useState<EvidenceStanceFilter>("all");
+  const [evidenceConfidenceFilter, setEvidenceConfidenceFilter] =
+    useState<EvidenceConfidenceFilter>("all");
+  const [evidenceQualityFilter, setEvidenceQualityFilter] =
+    useState<EvidenceQualityFilter>("all");
   const [showAllEvidence, setShowAllEvidence] = useState(false);
   const [analysisMode, setAnalysisMode] = useState<AnalysisUiState>({
     isDemo: true,
@@ -2875,153 +2493,30 @@ export default function Home() {
           </div>
         )}
 
-        <div className="compact-item" style={{ background: "rgba(255,255,255,0.72)" }}>
-          <div className="compact-label">{t("home.evidence.related")}</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginBottom: "10px" }}>
-            <select
-              value={evidenceSourceFilter}
-              onChange={(event) => setEvidenceSourceFilter(event.target.value)}
-              style={{ fontSize: "0.56rem", padding: "4px 6px", borderRadius: "4px", border: "1px solid rgba(160,140,110,0.18)", background: "rgba(255,255,255,0.92)", color: "#5c4a32" }}
-            >
-              {sourceFilterOptions.map((source) => (
-                <option key={source} value={source}>
-                  {source === "all" ? (locale === "en" ? "All sources" : "鍏ㄩ儴鏉ユ簮") : source}
-                </option>
-              ))}
-            </select>
-            <select
-              value={evidenceStanceFilter}
-              onChange={(event) => setEvidenceStanceFilter(event.target.value as "all" | "supporting" | "refuting")}
-              style={{ fontSize: "0.56rem", padding: "4px 6px", borderRadius: "4px", border: "1px solid rgba(160,140,110,0.18)", background: "rgba(255,255,255,0.92)", color: "#5c4a32" }}
-            >
-              <option value="all">{locale === "en" ? "All stance" : "鍏ㄩ儴绔嬪満"}</option>
-              <option value="supporting">{locale === "en" ? "Supporting" : "鏀拺"}</option>
-              <option value="refuting">{locale === "en" ? "Refuting" : "鍙嶉┏"}</option>
-            </select>
-            <select
-              value={evidenceConfidenceFilter}
-              onChange={(event) => setEvidenceConfidenceFilter(event.target.value as "all" | "strong" | "medium" | "weak")}
-              style={{ gridColumn: "1 / -1", fontSize: "0.56rem", padding: "4px 6px", borderRadius: "4px", border: "1px solid rgba(160,140,110,0.18)", background: "rgba(255,255,255,0.92)", color: "#5c4a32" }}
-            >
-              <option value="all">{locale === "en" ? "All confidence" : "\u5168\u90e8\u53ef\u4fe1\u5ea6"}</option>
-              <option value="strong">{t("home.evidence.strong")}</option>
-              <option value="medium">{t("home.evidence.medium")}</option>
-              <option value="weak">{t("home.evidence.weak")}</option>
-            </select>
-            <select
-              value={evidenceQualityFilter}
-              onChange={(event) =>
-                setEvidenceQualityFilter(
-                  event.target.value as
-                    | "all"
-                    | "trusted_fulltext"
-                    | "fulltext"
-                    | "store_cache"
-                    | "fallback"
-                    | "base"
-                )
-              }
-              style={{ gridColumn: "1 / -1", fontSize: "0.56rem", padding: "4px 6px", borderRadius: "4px", border: "1px solid rgba(160,140,110,0.18)", background: "rgba(255,255,255,0.92)", color: "#5c4a32" }}
-            >
-              <option value="all">{locale === "en" ? "All evidence types" : "鍏ㄩ儴璇佹嵁绫诲瀷"}</option>
-              <option value="trusted_fulltext">{locale === "en" ? "Trusted full text" : "鍙俊姝ｆ枃"}</option>
-              <option value="fulltext">{locale === "en" ? "Full text" : "姝ｆ枃"}</option>
-              <option value="store_cache">{locale === "en" ? "Store cache" : "璇佹嵁缂撳瓨"}</option>
-              <option value="fallback">{locale === "en" ? "Fallback summary" : "闄嶇骇鎽樿"}</option>
-              <option value="base">{locale === "en" ? "Base / fresh sources" : "鍩虹 / 瀹炴椂鏉ユ簮"}</option>
-            </select>
-          </div>
-          {hiddenEvidenceCount > 0 && evidenceQualityFilter === "all" && (
-            <div style={{ marginBottom: "10px", padding: "8px", background: "rgba(255,248,240,0.72)", border: "1px dashed rgba(160,140,110,0.2)", borderRadius: "6px" }}>
-              <div style={{ fontSize: "0.58rem", color: "#6b5a42", lineHeight: 1.45, marginBottom: "6px" }}>
-                {locale === "en"
-                  ? `${hiddenEvidenceCount} lower-priority evidence item(s) are hidden by default so stronger evidence appears first.`
-                  : `\u9ed8\u8ba4\u5df2\u6536\u8d77 ${hiddenEvidenceCount} \u6761\u4f4e\u4f18\u5148\u7ea7\u8bc1\u636e\uff0c\u8ba9\u66f4\u5f3a\u7684\u8bc1\u636e\u5148\u5c55\u793a\u3002`}
-              </div>
-              <div style={{ fontSize: "0.54rem", color: "#8b7355", lineHeight: 1.45, marginBottom: "6px" }}>
-                {[
-                  hiddenEvidenceBreakdown.fallback > 0
-                    ? evidenceCategorySummaryLabel("fallback", hiddenEvidenceBreakdown.fallback, locale)
-                    : null,
-                  hiddenEvidenceBreakdown.base > 0
-                    ? evidenceCategorySummaryLabel("base", hiddenEvidenceBreakdown.base, locale)
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(locale === "en" ? " · " : "\uff1b")}
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAllEvidence((current) => !current)}
-                style={{
-                  fontSize: "0.56rem",
-                  color: "#5c4a32",
-                  background: "rgba(255,255,255,0.92)",
-                  border: "1px solid rgba(160,140,110,0.18)",
-                  borderRadius: "999px",
-                  padding: "3px 8px",
-                  cursor: "pointer",
-                }}
-              >
-                {showAllEvidence
-                  ? (locale === "en" ? "Show prioritized only" : "鍙湅楂樹紭鍏堢骇璇佹嵁")
-                  : (locale === "en" ? "Show all evidence" : "鏄剧ず鍏ㄩ儴璇佹嵁")}
-              </button>
-            </div>
-          )}
-          {prioritizedEvidence.length > 0 ? (
-            prioritizedEvidence.map((item) => (
-              <button
-                type="button"
-                key={item.id}
-                onClick={() => focusEvidence(item)}
-                style={{
-                  width: "100%",
-                  marginBottom: "8px",
-                  padding: "6px",
-                  border: selectedEvidenceId === item.id
-                    ? "1px solid rgba(59,110,165,0.28)"
-                    : "1px solid transparent",
-                  borderRadius: "6px",
-                  background: selectedEvidenceId === item.id ? "rgba(59,110,165,0.08)" : "transparent",
-                  cursor: "pointer",
-                  textAlign: "left",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", fontSize: "0.56rem", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                  <span style={{ color: item.stance === "refuting" || !item.is_supporting ? "#a0503c" : item.stance === "context" ? "#8b7355" : "#5a7a52" }}>
-                    {formatEvidenceStanceLabel(item, locale)}
-                  </span>
-                  <span style={{ color: "#8b7355" }}>{getReliabilityLabel(item.reliability)}</span>
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "4px", marginBottom: "4px" }}>
-                  <span style={{ fontSize: "0.5rem", color: "#8b7355", background: "rgba(255,255,255,0.72)", border: "1px solid rgba(160,140,110,0.18)", borderRadius: "999px", padding: "1px 6px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                    {formatEvidenceTierLabel(item, locale)}
-                  </span>
-                  {item.freshness && item.freshness !== "unknown" && (
-                    <span style={{ fontSize: "0.5rem", color: "#8b7355", background: "rgba(255,255,255,0.72)", border: "1px solid rgba(160,140,110,0.18)", borderRadius: "999px", padding: "1px 6px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                      {formatFreshnessLabel(item.freshness, locale)}
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: "0.65rem", color: "#5c4a32", lineHeight: 1.45 }}>
-                  {localizeEvidenceContent(item.content, locale)}
-                </div>
-                {selectedNodeCitationByEvidenceId.get(item.id)?.quoted_text && (
-                  <div style={{ fontSize: "0.58rem", color: "#6b5a42", lineHeight: 1.45, marginTop: "4px", fontStyle: "italic" }}>
-                    “{selectedNodeCitationByEvidenceId.get(item.id)?.quoted_text}”
-                  </div>
-                )}
-                <div style={{ fontSize: "0.56rem", color: "#8b7355", marginTop: "2px" }}>
-                  {locale === "en" ? "Source" : "鏉ユ簮"}: {item.source}
-                  {item.timestamp ? ` 路 ${item.timestamp}` : ""}
-                </div>
-              </button>
-            ))
-          ) : (
-            <div style={{ fontSize: "0.65rem", color: "#8b7355", lineHeight: 1.5 }}>{t("home.evidence.empty")}</div>
-          )}
-        </div>
+        <EvidenceFilterPanel
+          title={t("home.evidence.related")}
+          emptyLabel={t("home.evidence.empty")}
+          sourceFilterOptions={sourceFilterOptions}
+          evidenceSourceFilter={evidenceSourceFilter}
+          setEvidenceSourceFilter={setEvidenceSourceFilter}
+          evidenceStanceFilter={evidenceStanceFilter}
+          setEvidenceStanceFilter={setEvidenceStanceFilter}
+          evidenceConfidenceFilter={evidenceConfidenceFilter}
+          setEvidenceConfidenceFilter={setEvidenceConfidenceFilter}
+          evidenceQualityFilter={evidenceQualityFilter}
+          setEvidenceQualityFilter={setEvidenceQualityFilter}
+          showAllEvidence={showAllEvidence}
+          setShowAllEvidence={setShowAllEvidence}
+          hiddenEvidenceCount={hiddenEvidenceCount}
+          hiddenEvidenceBreakdown={hiddenEvidenceBreakdown}
+          prioritizedEvidence={prioritizedEvidence}
+          selectedEvidenceId={selectedEvidenceId}
+          selectedNodeCitationByEvidenceId={selectedNodeCitationByEvidenceId}
+          locale={locale}
+          getReliabilityLabel={getReliabilityLabel}
+          localizeEvidenceContent={localizeEvidenceContent}
+          onFocusEvidence={focusEvidence}
+        />
 
         <h2 className="panel-title" style={{ marginTop: "16px" }}>
           {t("home.legend.title")}
