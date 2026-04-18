@@ -18,8 +18,8 @@ from retrocause.evidence_store import EvidenceStore
 from retrocause.api.analysis_brief import build_analysis_brief_payload
 from retrocause.api.briefs import (
     build_markdown_research_brief,
-    humanize_identifier as _humanize_identifier,
 )
+from retrocause.api.production_brief import build_production_brief_payload
 from retrocause.api.provider_preflight import (
     classify_preflight_failure_code,
     is_live_failure,
@@ -578,7 +578,9 @@ def _empty_live_failure_response(
         override=scenario_override,
     )
     response.scenario = scenario
-    response.production_brief = _build_production_brief(response, scenario)
+    response.production_brief = ProductionBriefV2(
+        **build_production_brief_payload(response, scenario)
+    )
     response.production_harness = _build_production_harness(response)
     response.markdown_brief = build_markdown_research_brief(response)
     response.product_harness = _build_product_harness(response)
@@ -755,151 +757,6 @@ def _retrieval_trace_item_v2(item: object) -> RetrievalTraceItemV2:
         retry_after_seconds=_coerce_optional_int(
             _trace_value(item, "retry_after_seconds", None)
         ),
-    )
-
-
-def _brief_item_from_edge(edge: GraphEdgeV2) -> ProductionBriefItemV2:
-    evidence_ids = list(dict.fromkeys(edge.supporting_evidence_ids))
-    summary = (
-        f"{_humanize_identifier(edge.source)} -> {_humanize_identifier(edge.target)} "
-        f"with {edge.strength:.0%} edge strength and {len(evidence_ids)} supporting "
-        "evidence item(s)."
-    )
-    return ProductionBriefItemV2(
-        title=f"{_humanize_identifier(edge.source)} -> {_humanize_identifier(edge.target)}",
-        summary=summary,
-        evidence_ids=evidence_ids,
-        confidence=max(0.0, min(1.0, edge.strength)),
-    )
-
-
-def _top_edge_items(response: AnalyzeResponseV2) -> List[ProductionBriefItemV2]:
-    if not response.chains:
-        return []
-    top_chain = max(response.chains, key=lambda chain: chain.probability)
-    items = [
-        _brief_item_from_edge(edge)
-        for edge in top_chain.edges
-        if edge.supporting_evidence_ids
-    ]
-    return sorted(items, key=lambda item: item.confidence, reverse=True)
-
-
-def _verification_items(
-    response: AnalyzeResponseV2,
-    scenario: ScenarioV2,
-) -> List[ProductionBriefItemV2]:
-    items: list[ProductionBriefItemV2] = []
-    if response.challenge_checks:
-        checked = len(response.challenge_checks)
-        refuting = sum(check.refuting_count for check in response.challenge_checks)
-        challenge_summary = (
-            f"{refuting} challenge evidence item(s) were attached in this run."
-            if refuting
-            else "no explicit challenge evidence was attached in this run."
-        )
-        items.append(
-            ProductionBriefItemV2(
-                title="Challenge coverage",
-                summary=(
-                    f"Review {checked} checked edge(s); {challenge_summary}"
-                ),
-                confidence=1.0 if checked else 0.0,
-            )
-        )
-    else:
-        items.append(
-            ProductionBriefItemV2(
-                title="Challenge coverage",
-                summary="Run or inspect targeted challenge retrieval before treating this as settled.",
-                confidence=0.25,
-            )
-        )
-
-    if scenario.key == "market":
-        items.append(
-            ProductionBriefItemV2(
-                title="Market freshness",
-                summary="Check whether the freshest retrieved sources cover the relevant market window.",
-                confidence=0.5,
-            )
-        )
-    elif scenario.key == "policy_geopolitics":
-        items.append(
-            ProductionBriefItemV2(
-                title="Source reliability",
-                summary="Compare official, wire, and regional-source evidence before relying on the brief.",
-                confidence=0.5,
-            )
-        )
-    elif scenario.key == "postmortem":
-        items.append(
-            ProductionBriefItemV2(
-                title="Internal evidence",
-                summary="Attach logs, tickets, metrics, or customer evidence before assigning action owners.",
-                confidence=0.5,
-            )
-        )
-    else:
-        items.append(
-            ProductionBriefItemV2(
-                title="Evidence depth",
-                summary="Inspect evidence coverage and missing evidence before relying on the conclusion.",
-                confidence=0.5,
-            )
-        )
-    return items
-
-
-def _production_executive_summary(
-    response: AnalyzeResponseV2,
-    scenario: ScenarioV2,
-    items: List[ProductionBriefItemV2],
-) -> str:
-    if items:
-        top_item = items[0]
-        return (
-            f"{scenario.label}: the strongest evidence-anchored driver is "
-            f"{top_item.title} ({top_item.confidence:.0%} confidence signal)."
-        )
-    if response.analysis_brief and response.analysis_brief.answer:
-        return f"{scenario.label}: {response.analysis_brief.answer}"
-    return f"{scenario.label}: no evidence-anchored production driver is available yet."
-
-
-def _build_production_brief(
-    response: AnalyzeResponseV2,
-    scenario: ScenarioV2,
-) -> ProductionBriefV2:
-    items = _top_edge_items(response)
-    section_titles = {
-        "market": ["Market Drivers", "What Would Change The View"],
-        "policy_geopolitics": ["Negotiation Constraints", "Source And Policy Risks"],
-        "postmortem": ["Operational Causes", "Evidence Needed Before Action"],
-        "general": ["Top Causes", "What To Check Next"],
-    }
-    primary_title, secondary_title = section_titles.get(scenario.key, section_titles["general"])
-    verification_items = _verification_items(response, scenario)
-    limits: list[str] = []
-    if not items:
-        limits.append("No evidence-anchored causal drivers were available in this run.")
-    elif response.analysis_brief:
-        limits.extend(response.analysis_brief.missing_evidence[:3])
-
-    return ProductionBriefV2(
-        title=scenario.label,
-        scenario_key=scenario.key,
-        executive_summary=_production_executive_summary(response, scenario, items),
-        sections=[
-            ProductionBriefSectionV2(kind="drivers", title=primary_title, items=items[:5]),
-            ProductionBriefSectionV2(
-                kind="verification",
-                title=secondary_title,
-                items=verification_items,
-            ),
-        ],
-        limits=limits,
-        next_verification_steps=[item.summary for item in verification_items],
     )
 
 
@@ -1482,7 +1339,9 @@ def _result_to_v2(
         override=scenario_override,
     )
     response.scenario = scenario
-    response.production_brief = _build_production_brief(response, scenario)
+    response.production_brief = ProductionBriefV2(
+        **build_production_brief_payload(response, scenario)
+    )
     response.production_harness = _build_production_harness(response)
     response.markdown_brief = build_markdown_research_brief(response)
     response.product_harness = _build_product_harness(response)

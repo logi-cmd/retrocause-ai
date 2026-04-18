@@ -1288,6 +1288,23 @@ def test_api_analysis_brief_builder_is_extracted():
     assert "def edge_challenge_phrase" in analysis_brief_source
 
 
+def test_api_production_brief_builder_is_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    production_brief_source = (
+        REPO_ROOT / "retrocause" / "api" / "production_brief.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from retrocause.api.production_brief import" in api_source
+    assert "build_production_brief_payload" in api_source
+    assert "def _build_production_brief" not in api_source
+    assert "def _brief_item_from_edge" not in api_source
+    assert "def _top_edge_items" not in api_source
+    assert "def _verification_items" not in api_source
+    assert "def _production_executive_summary" not in api_source
+    assert "def build_production_brief_payload" in production_brief_source
+    assert "def production_brief_item_from_edge_payload" in production_brief_source
+
+
 def test_legacy_canvas_graph_uses_shared_red_string_path_builder():
     legacy_graph_source = (
         REPO_ROOT / "frontend" / "src" / "components" / "canvas" / "CausalGraphView.tsx"

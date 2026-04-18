@@ -3141,3 +3141,44 @@ Risk notes:
   - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
   - `docs/PROJECT_STATE.md` was updated as a state file.
 - Risk disposition: both warnings are expected for this maintainability slice because the helper extraction intentionally pairs backend code, regression coverage, and synchronized docs/evidence. No blocking guardrails errors were reported.
+
+## 2026-04-18 production brief helper extraction
+
+Scope:
+- Continued backend maintainability cleanup by extracting production brief payload assembly from `retrocause/api/main.py` into `retrocause/api/production_brief.py`.
+- Kept API Pydantic schemas and response model construction in `retrocause/api/main.py`; the helper returns a plain payload dictionary that `main.py` wraps in `ProductionBriefV2`.
+- Synchronized `docs/PROJECT_STATE.md` and `docs/codebase-audit.md` so the backend extraction map stays current.
+
+TDD / verification so far:
+- RED: `python -m pytest tests\test_comprehensive.py::test_api_production_brief_builder_is_extracted -q --basetemp=.pytest-tmp` failed because `retrocause/api/production_brief.py` did not exist.
+- GREEN: `python -m pytest tests\test_comprehensive.py::test_api_production_brief_builder_is_extracted tests\test_comprehensive.py::test_market_production_brief_has_expected_sections tests\test_comprehensive.py::test_policy_production_brief_has_expected_sections tests\test_comprehensive.py::test_postmortem_production_brief_has_expected_sections tests\test_comprehensive.py::test_markdown_brief_includes_production_verification_steps -q --basetemp=.pytest-tmp` passed.
+
+Risk notes:
+- Security/auth/secrets: no auth, permissions, API-key storage, secrets, local runtime data, or sensitive-data paths changed.
+- Dependencies: no package or lockfile changes.
+- Performance: helper extraction is in-process list/dict/string assembly only; no expected latency, IO, network, or concurrency impact.
+- Tradeoff: `main.py` still owns `ProductionBriefV2` construction and the production/product harness checks. This avoids mixing harness and schema migration into the same slice.
+- Continuity: follows the small backend helper pattern used by `runtime.py`, `briefs.py`, `analysis_brief.py`, `scenarios.py`, `provider_preflight.py`, `run_store.py`, and `run_metadata.py`.
+- Residual risk: `main.py` remains large; future cleanup should target product/production harness checks, schemas, or route orchestration in separate tested slices.
+
+### Full verification update
+
+- `python -m ruff check retrocause\api\main.py retrocause\api\production_brief.py`: passed.
+- `git diff --check`: passed with line-ending warnings only for tracked text files that Git will normalize on next touch.
+- Focused regression: `python -m pytest tests\test_comprehensive.py::test_api_production_brief_builder_is_extracted tests\test_comprehensive.py::test_market_production_brief_has_expected_sections tests\test_comprehensive.py::test_policy_production_brief_has_expected_sections tests\test_comprehensive.py::test_postmortem_production_brief_has_expected_sections tests\test_comprehensive.py::test_markdown_brief_includes_production_verification_steps -q --basetemp=.pytest-tmp`: passed.
+- First `npm test`: failed on `tests/test_comprehensive.py::test_api_markdown_brief_builder_is_extracted` because the refactor folded the `retrocause.api.briefs` import from the tested multi-line style into a single-line import.
+- Fix: restored the multi-line `from retrocause.api.briefs import (` shape in `retrocause/api/main.py`; no behavior change.
+- Import regression: `python -m pytest tests\test_comprehensive.py::test_api_markdown_brief_builder_is_extracted tests\test_comprehensive.py::test_api_production_brief_builder_is_extracted tests\test_comprehensive.py::test_markdown_brief_includes_production_verification_steps -q --basetemp=.pytest-tmp`: passed.
+- Final `npm test`: passed after production brief helper extraction.
+  - Frontend lint/build passed.
+  - `ruff check retrocause/`: passed.
+  - Full pytest passed: 274 tests.
+  - Browser E2E passed: 608 pass / 0 fail / 0 skip.
+
+### Guardrails final result
+
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`: passed with score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings:
+  - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
+  - `docs/PROJECT_STATE.md` was updated as a state file.
+- Risk disposition: both warnings are expected for this maintainability slice because backend helper extraction is intentionally paired with regression coverage and synchronized docs/evidence. No blocking guardrails errors were reported.
