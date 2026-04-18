@@ -3,14 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, timezone
-from pathlib import Path
 import threading
 import json
 import logging
-import os
 import queue
-from uuid import uuid4
 
 from retrocause.app.demo_data import (
     PROVIDERS,
@@ -30,6 +26,11 @@ from retrocause.api.provider_preflight import (
     resolve_provider_model,
 )
 from retrocause.api.runtime import TimeoutError, run_with_timeout
+from retrocause.api.run_store import (
+    create_run_id,
+    load_saved_run_records,
+    persist_saved_run_payload,
+)
 from retrocause.api.scenarios import detect_production_scenario_payload
 from retrocause.models import AnalysisResult
 
@@ -490,38 +491,6 @@ def _harness_check(check_id: str, label: str, status: str, detail: str = "") -> 
     return HarnessCheckV2(id=check_id, label=label, status=status, detail=detail)
 
 
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-
-def _create_run_id() -> str:
-    return f"run_{uuid4().hex[:12]}"
-
-
-def _run_store_path() -> Path:
-    configured_path = os.environ.get("RETROCAUSE_RUN_STORE_PATH")
-    if configured_path:
-        return Path(configured_path)
-    return Path.cwd() / ".retrocause" / "saved_runs.json"
-
-
-def _load_saved_run_records() -> list[dict]:
-    path = _run_store_path()
-    if not path.exists():
-        return []
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return []
-    return data if isinstance(data, list) else []
-
-
-def _save_saved_run_records(records: list[dict]) -> None:
-    path = _run_store_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
 def _run_step(step_id: str, label: str, status: str, detail: str = "") -> RunStepV2:
     return RunStepV2(id=step_id, label=label, status=status, detail=detail)
 
@@ -602,27 +571,17 @@ def _build_usage_ledger(
     return ledger
 
 
-def _persist_saved_run(response: AnalyzeResponseV2) -> bool:
-    if not response.run_id:
-        return False
-    records = _load_saved_run_records()
-    records = [record for record in records if record.get("run_id") != response.run_id]
+def _write_saved_run_response(response: AnalyzeResponseV2) -> bool:
+    run_id = response.run_id or ""
     scenario_key = response.scenario.key if response.scenario else "general"
-    created_at = _utc_now_iso()
-    records.insert(
-        0,
-        {
-            "run_id": response.run_id,
-            "query": response.query,
-            "run_status": response.run_status,
-            "analysis_mode": response.analysis_mode,
-            "created_at": created_at,
-            "scenario_key": scenario_key,
-            "response": response.model_dump(mode="json"),
-        },
+    return persist_saved_run_payload(
+        run_id=run_id,
+        query=response.query,
+        run_status=response.run_status,
+        analysis_mode=response.analysis_mode,
+        scenario_key=scenario_key,
+        response_payload=response.model_dump(mode="json"),
     )
-    _save_saved_run_records(records[:50])
-    return True
 
 
 def _finalize_run_response(
@@ -633,11 +592,11 @@ def _finalize_run_response(
     response.run_id = run_id
     response.run_status = "failed" if response.error and not response.chains else "completed"
     response.usage_ledger = _build_usage_ledger(response, request)
-    saved = _persist_saved_run(response)
+    saved = _write_saved_run_response(response)
     response.run_steps = _build_run_steps(response, saved=saved)
     if saved:
         # Persist once more so the saved payload includes the completed saved step.
-        _persist_saved_run(response)
+        _write_saved_run_response(response)
     return response
 
 
@@ -1721,7 +1680,7 @@ async def list_saved_runs():
             created_at=str(record.get("created_at", "")),
             scenario_key=str(record.get("scenario_key", "general")),
         )
-        for record in _load_saved_run_records()
+        for record in load_saved_run_records()
         if record.get("run_id")
     ]
     return SavedRunListResponse(runs=summaries)
@@ -1729,7 +1688,7 @@ async def list_saved_runs():
 
 @app.get("/api/runs/{run_id}")
 async def get_saved_run(run_id: str):
-    for record in _load_saved_run_records():
+    for record in load_saved_run_records():
         if record.get("run_id") == run_id:
             return record
     raise HTTPException(status_code=404, detail="Saved run not found")
@@ -1984,7 +1943,7 @@ async def analyze_query(request: AnalyzeRequest):
 @app.post("/api/analyze/v2", response_model=AnalyzeResponseV2)
 async def analyze_query_v2(request: AnalyzeRequest):
     try:
-        run_id = _create_run_id()
+        run_id = create_run_id()
         is_demo = True
         demo_topic: Optional[str] = None
         result: AnalysisResult | None = None
@@ -2059,7 +2018,7 @@ async def analyze_query_v2(request: AnalyzeRequest):
 
 @app.post("/api/analyze/v2/stream")
 async def analyze_query_v2_stream(request: AnalyzeRequest):
-    run_id = _create_run_id()
+    run_id = create_run_id()
 
     def generate():
         eq: queue.Queue[dict | None] = queue.Queue()

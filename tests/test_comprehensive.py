@@ -1236,6 +1236,26 @@ def test_api_provider_preflight_classification_is_extracted():
     assert "def is_live_failure" in provider_preflight_source
 
 
+def test_api_saved_run_persistence_is_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    run_store_source = (REPO_ROOT / "retrocause" / "api" / "run_store.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "from retrocause.api.run_store import" in api_source
+    assert "create_run_id" in api_source
+    assert "load_saved_run_records" in api_source
+    assert "persist_saved_run_payload" in api_source
+    assert "def _create_run_id" not in api_source
+    assert "def _run_store_path" not in api_source
+    assert "def _load_saved_run_records" not in api_source
+    assert "def _save_saved_run_records" not in api_source
+    assert "def _persist_saved_run" not in api_source
+    assert "def create_run_id" in run_store_source
+    assert "def load_saved_run_records" in run_store_source
+    assert "def persist_saved_run_payload" in run_store_source
+
+
 def test_legacy_canvas_graph_uses_shared_red_string_path_builder():
     legacy_graph_source = (
         REPO_ROOT / "frontend" / "src" / "components" / "canvas" / "CausalGraphView.tsx"

@@ -3024,3 +3024,39 @@ Risk notes:
   - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
   - `docs/PROJECT_STATE.md` was updated as a state file.
 - Risk disposition: both warnings are expected for this maintainability slice because backend extraction is intentionally paired with regression coverage and synchronized docs/evidence. No blocking guardrails errors were reported.
+
+## 2026-04-18 saved-run store extraction
+
+Scope:
+- Continued backend maintainability cleanup by extracting run id generation and saved-run JSON persistence from `retrocause/api/main.py` into `retrocause/api/run_store.py`.
+- Kept route handlers, response assembly, run-step generation, and usage-ledger generation in `retrocause/api/main.py`; no API endpoint, response schema, or storage path behavior was intentionally changed.
+- Synchronized `docs/PROJECT_STATE.md` and `docs/codebase-audit.md` so the backend extraction map stays current.
+
+TDD / verification so far:
+- RED: `python -m pytest tests\test_comprehensive.py::test_api_saved_run_persistence_is_extracted -q --basetemp=.pytest-tmp` failed because `retrocause/api/run_store.py` did not exist.
+- GREEN: `python -m pytest tests\test_comprehensive.py::test_api_saved_run_persistence_is_extracted tests\test_comprehensive.py::test_run_orchestration_metadata_and_saved_run_round_trip -q --basetemp=.pytest-tmp` passed.
+
+Risk notes:
+- Security/auth/secrets: no auth, API key, permission, or sensitive-data handling changed. Saved runs remain local JSON records under the existing `RETROCAUSE_RUN_STORE_PATH` override or `.retrocause/saved_runs.json` default.
+- Dependencies: no package or lockfile changes.
+- Performance: saved-run IO is unchanged in shape and still bounded to the latest 50 records; helper extraction should not affect latency beyond normal local JSON write cost.
+- Tradeoff: `main.py` still owns when a response is saved, while `run_store.py` owns how records are loaded, deduped, truncated, and written. This keeps endpoint behavior readable without prematurely moving the whole run orchestration path.
+- Continuity: follows the existing small-helper pattern used by `runtime.py`, `briefs.py`, `scenarios.py`, and `provider_preflight.py`; no deliberate continuity break.
+- Residual risk: future run orchestration cleanup should target run-step and usage-ledger assembly separately, preserving current saved-run response round-trip tests.
+
+### Full verification update
+
+- `npm test`: passed after saved-run store extraction.
+  - Frontend lint/build passed.
+  - `ruff check retrocause/`: passed.
+  - Full pytest passed: 271 tests.
+  - Browser E2E passed: 608 pass / 0 fail / 0 skip.
+
+### Guardrails final result
+
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`: passed with score 85/100 (`pass-with-concerns`).
+- Non-blocking warnings:
+  - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
+  - `docs/PROJECT_STATE.md` was updated as a state file.
+  - `retrocause/api/run_store.py` was flagged as state-related because it centralizes saved-run JSON persistence.
+- Risk disposition: these warnings are expected for this maintainability slice because it intentionally moves existing local saved-run state IO into a named helper while preserving the same local path, env override, latest-50 cap, and saved-run round trip behavior. No blocking guardrails errors were reported.
