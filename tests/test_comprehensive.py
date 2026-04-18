@@ -21,6 +21,7 @@ from retrocause.api.main import (
 )
 from retrocause.api.harness import build_product_harness_payload
 from retrocause.api.provider_routes import preflight_provider
+from retrocause.api.provider_preflight import resolve_provider_model
 from retrocause.api.schemas import ProviderPreflightRequest
 from retrocause.app.demo_data import (
     PROVIDERS,
@@ -199,10 +200,14 @@ def test_frontend_page_has_no_known_mojibake_strings():
 
 def test_api_live_failure_messages_have_no_known_mojibake_strings():
     api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
 
     assert "閳?" not in api_source
     assert "鈥?" not in api_source
     assert " - empty result" in api_source
+    assert " 路 " not in page_source
 
 
 def test_openrouter_default_uses_stable_deepseek_alias_before_0324_snapshot():
@@ -216,6 +221,48 @@ def test_openrouter_default_uses_stable_deepseek_alias_before_0324_snapshot():
     assert "legacy" in PROVIDERS["openrouter"]["models"]["deepseek/deepseek-chat-v3-0324"][
         "label"
     ].lower()
+
+
+def test_legacy_openrouter_deepseek_snapshot_resolves_to_stable_alias():
+    _, model_name = resolve_provider_model(
+        PROVIDERS,
+        "openrouter",
+        "deepseek/deepseek-chat-v3-0324",
+    )
+
+    assert model_name == "deepseek/deepseek-chat"
+
+
+def test_analyze_v2_uses_stable_deepseek_alias_for_legacy_snapshot(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    captured: dict[str, str | None] = {}
+
+    def fake_run_real_analysis(query, api_key, model, base_url):
+        captured["query"] = query
+        captured["api_key"] = api_key
+        captured["model"] = model
+        captured["base_url"] = base_url
+        return _sample_result_with_one_supported_chain(query)
+
+    monkeypatch.setattr("retrocause.app.demo_data.run_real_analysis", fake_run_real_analysis)
+
+    response = TestClient(app).post(
+        "/api/analyze/v2",
+        json={
+            "query": "芯原股份今天盘中为什么下跌？",
+            "model": "openrouter",
+            "explicit_model": "deepseek/deepseek-chat-v3-0324",
+            "api_key": "sk-test",
+            "scenario_override": "market",
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["model"] == "deepseek/deepseek-chat"
+    payload = response.json()
+    assert payload["analysis_mode"] == "live"
+    assert payload["chains"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

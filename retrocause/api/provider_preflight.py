@@ -27,6 +27,12 @@ PREFLIGHT_ACTIONS = {
     ),
 }
 
+MODEL_ALIASES = {
+    "openrouter": {
+        "deepseek/deepseek-chat-v3-0324": "deepseek/deepseek-chat",
+    },
+}
+
 
 def is_live_failure(error_msg: str | None) -> bool:
     if not error_msg:
@@ -42,7 +48,8 @@ def resolve_provider_model(
 ) -> tuple[dict | None, str]:
     provider_cfg = providers.get(provider_key)
     if explicit_model:
-        return provider_cfg, explicit_model
+        normalized_model = MODEL_ALIASES.get(provider_key, {}).get(explicit_model, explicit_model)
+        return provider_cfg, normalized_model
     if provider_cfg and provider_cfg.get("models"):
         return provider_cfg, list(provider_cfg["models"].keys())[0]
     return provider_cfg, provider_key

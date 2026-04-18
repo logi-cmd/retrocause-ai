@@ -3577,3 +3577,29 @@ Risk notes:
 - `npm test` completed with exit code 0. It included frontend lint/build, `python -m ruff check retrocause/`, full pytest (`288 passed`), and browser E2E (`612 PASS, 0 FAIL, 0 SKIP`).Final guardrails after commit:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
 - Non-blocking warnings: the slice spans 5 top-level areas because it intentionally includes provider catalog behavior, a regression test, README/project-state docs, and guardrails evidence; `docs/PROJECT_STATE.md` changed because the user-visible default model behavior changed and project documentation must stay synchronized.
+## OpenRouter DeepSeek Legacy Snapshot End-to-End Fix
+
+Scope:
+- User reported the DeepSeek path still failed after the previous default-order change and asked for end-to-end verification.
+- Root-cause check found that old UI/browser/curl paths can still submit `deepseek/deepseek-chat-v3-0324` as an explicit model, so changing only the catalog order does not protect existing selections.
+- Added provider-model alias normalization so OpenRouter requests for `deepseek/deepseek-chat-v3-0324` resolve to the stable `deepseek/deepseek-chat` model before preflight or live analysis.
+- Fixed remaining visible homepage mojibake separators where ` 路 ` was being used as a separator in preflight, challenge checks, graph counts, and uncertainty summaries.
+- Added browser E2E coverage that fails if the evidence board renders the ` 路 ` separator.
+- Updated README and PROJECT_STATE to document the stable DeepSeek alias behavior.
+
+Verification:
+- Environment check: `OPENROUTER_API_KEY` is unset locally; `TAVILY_API_KEY` is set; `BRAVE_SEARCH_API_KEY` is unset. No user API key was echoed, written to a command, stored, or committed.
+- RED: `python -m pytest tests\test_comprehensive.py -q -k "legacy_openrouter_deepseek_snapshot or analyze_v2_uses_stable_deepseek_alias or live_failure_messages" --basetemp=.pytest-tmp` failed because legacy 0324 was still passed through to live analysis and ` 路 ` separators remained visible.
+- GREEN/focused: `python -m pytest tests\test_comprehensive.py -q -k "openrouter_default or legacy_openrouter_deepseek_snapshot or analyze_v2_uses_stable_deepseek_alias or live_failure_messages" --basetemp=.pytest-tmp` passed (`4 passed`).
+- Full local E2E gate: `npm test` completed with exit code 0. It included frontend lint/build, `python -m ruff check retrocause/`, full pytest (`290 passed`), and browser E2E (`613 PASS, 0 FAIL, 0 SKIP`).
+
+Risk notes:
+- Security/auth/secrets: no API key values were printed or persisted. A true OpenRouter live run still requires an operator-provided environment key because the previously pasted key should be treated as exposed and rotated.
+- Dependencies: no new packages, lockfile changes, or dependency upgrades.
+- Performance/latency: model alias normalization is an O(1) dictionary lookup and adds no network call or retry loop.
+- Understanding tradeoff: this normalizes the known fragile legacy DeepSeek snapshot to the stable DeepSeek alias instead of adding a broad fallback ladder or routing users to GPT.
+- Continuity: reuses the existing provider resolver shared by preflight and analysis settings, plus the existing Playwright E2E harness.
+- Residual risk: local verification proves the app no longer sends 0324 through the API path and no longer renders the observed separator mojibake, but a real-key OpenRouter live Chinese finance run remains unverified on this machine because `OPENROUTER_API_KEY` is unset.
+Final guardrails after commit:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings: the slice spans 7 top-level areas because it intentionally includes backend model resolution, UI mojibake cleanup, API/static/browser regressions, README/project-state docs, and guardrails evidence; `docs/PROJECT_STATE.md` changed because user-visible DeepSeek behavior changed and docs synchronization is required.

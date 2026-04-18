@@ -1915,7 +1915,7 @@ export default function Home() {
                   ? locale === "en" ? "Preflight passed" : "\u9884\u68c0\u901a\u8fc7"
                   : locale === "en" ? "Preflight blocked" : "\u9884\u68c0\u672a\u901a\u8fc7"}
               </strong>
-              {` 路 ${providerPreflight.model_name}`}
+              {` · ${providerPreflight.model_name}`}
               <div style={{ marginTop: "4px", color: "#6b5a42" }}>
                 {providerPreflight.user_action || providerPreflight.diagnosis}
               </div>
@@ -2041,7 +2041,7 @@ export default function Home() {
             </div>
             {productHarness.checks.slice(0, 3).map((check) => (
               <div key={check.id} style={{ marginTop: "6px", fontSize: "0.56rem", color: check.status === "pass" ? "#526f44" : check.status === "warn" ? "#8a6a40" : "#a0503c", lineHeight: 1.35 }}>
-                {check.status.toUpperCase()} 路 {check.label}
+                {check.status.toUpperCase()} · {check.label}
               </div>
             ))}
             {productHarness.next_actions[0] && (
@@ -2219,7 +2219,7 @@ export default function Home() {
         <div className="compact-item">
           <div className="compact-label">{t("home.summary.structure")}</div>
           <div>
-            {mockPrimaryChain.metadata.totalNodes} {t("graph.nodes")} 路 {mockPrimaryChain.metadata.totalEdges} {t("graph.edges")}
+            {mockPrimaryChain.metadata.totalNodes} {t("graph.nodes")} · {mockPrimaryChain.metadata.totalEdges} {t("graph.edges")}
           </div>
           <div style={{ marginTop: "4px", fontSize: "0.6rem", color: "#7a6b55" }}>
             {t("graph.depth")} {mockPrimaryChain.metadata.maxDepth}
@@ -2229,7 +2229,7 @@ export default function Home() {
         <div className="compact-item">
           <div className="compact-label">{t("home.summary.nodeMix")}</div>
           <div>
-            {nodeTypeCounts.factor} {t("graph.type.factor")} 路 {nodeTypeCounts.intermediate} {t("graph.type.intermediate")} 路 {nodeTypeCounts.outcome} {t("graph.type.outcome")}
+            {nodeTypeCounts.factor} {t("graph.type.factor")} · {nodeTypeCounts.intermediate} {t("graph.type.intermediate")} · {nodeTypeCounts.outcome} {t("graph.type.outcome")}
           </div>
         </div>
 
@@ -2450,7 +2450,7 @@ export default function Home() {
           <div className="compact-item" style={{ background: "rgba(255,255,255,0.72)" }}>
             <div className="compact-label">{locale === "en" ? "Uncertainty report" : "\u4e0d\u786e\u5b9a\u6027\u62a5\u544a"}</div>
             <div style={{ fontSize: "0.65rem", color: "#5c4a32", lineHeight: 1.5 }}>
-              {Math.round(uncertaintyReport.overall_uncertainty * 100)}% 路 {uncertaintyReport.summary}
+              {Math.round(uncertaintyReport.overall_uncertainty * 100)}% · {uncertaintyReport.summary}
             </div>
             {uncertaintyReport.dominant_uncertainty_type && (
               <div style={{ fontSize: "0.56rem", color: "#8b7355", marginTop: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>

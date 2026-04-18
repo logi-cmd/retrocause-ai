@@ -508,6 +508,7 @@ else:
         right_text = page.locator(".right-panel").text_content() or ""
         combined = (page_text + " " + right_text).lower()
         check("UI demo label visible", "demo" in combined, "no 'demo' in page text")
+        check("UI has no mojibake route separators", " 路 " not in (page_text + " " + right_text))
 
         # 11c: Query flow — submit SVB query
         print("\n  --- 11c: Query Flow ---")
