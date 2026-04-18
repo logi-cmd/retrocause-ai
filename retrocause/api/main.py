@@ -22,6 +22,7 @@ from retrocause.api.harness import (
     build_product_harness_payload,
     build_production_harness_payload,
 )
+from retrocause.api.live_failure_response import build_empty_live_failure_response
 from retrocause.api.production_brief import build_production_brief_payload
 from retrocause.api.provider_preflight import (
     is_live_failure,
@@ -173,50 +174,6 @@ def _finalize_run_response(
     if saved:
         # Persist once more so the saved payload includes the completed saved step.
         _write_saved_run_response(response)
-    return response
-
-
-def _empty_live_failure_response(
-    query: str,
-    error_msg: str,
-    scenario_override: Optional[str] = None,
-) -> AnalyzeResponseV2:
-    from retrocause.parser import parse_input
-
-    parsed_query = parse_input(query)
-    response = AnalyzeResponseV2(
-        query=query,
-        is_demo=False,
-        demo_topic=None,
-        analysis_mode="partial_live",
-        freshness_status="unknown",
-        time_range=parsed_query.time_range,
-        partial_live_reasons=[error_msg],
-        recommended_chain_id=None,
-        chains=[],
-        evidences=[],
-        upstream_map=UpstreamMapV2(entries=[]),
-        evaluation=None,
-        retrieval_trace=[],
-        uncertainty_report=None,
-        error=error_msg,
-    )
-    scenario = _detect_production_scenario(
-        query,
-        domain="general",
-        override=scenario_override,
-    )
-    response.scenario = scenario
-    response.production_brief = ProductionBriefV2(
-        **build_production_brief_payload(response, scenario)
-    )
-    response.production_harness = ProductionHarnessReportV2(
-        **build_production_harness_payload(response)
-    )
-    response.markdown_brief = build_markdown_research_brief(response)
-    response.product_harness = ProductHarnessReportV2(
-        **build_product_harness_payload(response)
-    )
     return response
 
 
@@ -798,7 +755,7 @@ async def analyze_query_v2(request: AnalyzeRequest):
 
         if result is None and request.api_key and is_live_failure(error_msg):
             return _finalize_run_response(
-                _empty_live_failure_response(
+                build_empty_live_failure_response(
                     request.query,
                     error_msg or "Live analysis failed.",
                     scenario_override=request.scenario_override,
@@ -923,7 +880,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                     resp = _finalize_run_response(resp, request, run_id)
                     eq.put({"type": "done", "is_demo": False, "data": resp.model_dump(mode="json")})
                 elif request.api_key and is_live_failure(error_msg):
-                    resp = _empty_live_failure_response(
+                    resp = build_empty_live_failure_response(
                         request.query,
                         error_msg or "Live analysis failed.",
                         scenario_override=request.scenario_override,

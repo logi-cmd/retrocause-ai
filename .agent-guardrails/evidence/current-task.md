@@ -3361,3 +3361,30 @@ Full verification:
 Guardrails:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
 - Non-blocking warnings: the slice spans 4 top-level areas (`.agent-guardrails`, `docs`, `retrocause`, `tests`), and `docs/PROJECT_STATE.md` was updated. Both are expected for a maintenance slice that intentionally includes code, structural tests, docs synchronization, and evidence updates.
+
+## 2026-04-19 live failure response extraction
+
+Scope:
+- Extracted the partial-live empty failure response builder from `retrocause/api/main.py` into `retrocause/api/live_failure_response.py`.
+- Kept user-visible behavior unchanged for live model failures: failed live runs still return `analysis_mode="partial_live"`, no demo fallback, scenario/product harness metadata, and Markdown brief output.
+- Updated `docs/PROJECT_STATE.md` and `docs/codebase-audit.md` so the V2 conversion cleanup map reflects this smaller completed slice while still listing streaming and main result-to-V2 conversion as remaining candidates.
+
+TDD and verification so far:
+- RED: `python -m pytest tests\test_comprehensive.py::test_api_live_failure_response_builder_is_extracted -q --basetemp=.pytest-tmp` failed with `FileNotFoundError` for missing `retrocause/api/live_failure_response.py`.
+- Initial GREEN attempt caught a real migration miss: focused tests failed because the new module omitted `ScenarioV2.user_value`.
+- GREEN: `python -m pytest tests\test_comprehensive.py::test_api_live_failure_response_builder_is_extracted tests\test_comprehensive.py::test_analyze_query_v2_returns_partial_live_instead_of_demo_on_live_failure tests\test_comprehensive.py::test_multi_user_persona_outputs_are_actionable -q --basetemp=.pytest-tmp` passed after adding `user_value`.
+- Lint: `python -m ruff check retrocause\api\main.py retrocause\api\live_failure_response.py tests\test_comprehensive.py` passed.
+
+Risk notes:
+- Auth/secrets/permissions/sensitive data: no API key, auth, permission, or storage behavior changed; this only repackages already-captured live failure metadata.
+- Dependencies: no new packages, no lockfile changes.
+- Performance: neutral; the builder performs the same scenario, brief, and harness assembly as before.
+- Maintainability tradeoff: this avoids duplicating the live-analysis or streaming request flow while moving a small V2 response assembly path out of `main.py`.
+- Residual risk: the main `_result_to_v2` conversion and streaming route remain in `main.py`; streaming should only be split after identifying a shared execution helper.
+
+Full verification:
+- `npm test` passed for the live-failure response extraction. It completed frontend lint, Next.js production build, `ruff check retrocause/`, full pytest (`280 passed`), and browser E2E (`608 PASS`, `0 FAIL`, `0 SKIP`).
+
+Guardrails:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings: the slice spans 4 top-level areas (`.agent-guardrails`, `docs`, `retrocause`, `tests`), and `docs/PROJECT_STATE.md` was updated. Both are expected for this maintenance slice because it includes code extraction, structural tests, docs synchronization, and evidence updates.

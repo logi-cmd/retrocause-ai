@@ -1300,6 +1300,20 @@ def test_api_run_metadata_assembly_is_extracted():
     assert "def quota_owner_for_source_payload" in run_metadata_source
 
 
+def test_api_live_failure_response_builder_is_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    live_failure_source = (
+        REPO_ROOT / "retrocause" / "api" / "live_failure_response.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from retrocause.api.live_failure_response import" in api_source
+    assert "build_empty_live_failure_response" in api_source
+    assert "def _empty_live_failure_response" not in api_source
+    assert "def build_empty_live_failure_response" in live_failure_source
+    assert "build_markdown_research_brief" in live_failure_source
+    assert "build_product_harness_payload" in live_failure_source
+
+
 def test_api_analysis_brief_builder_is_extracted():
     api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
     analysis_brief_source = (
