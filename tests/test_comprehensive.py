@@ -1195,9 +1195,13 @@ def test_api_markdown_brief_builder_is_extracted():
     brief_source = (REPO_ROOT / "retrocause" / "api" / "briefs.py").read_text(
         encoding="utf-8"
     )
+    result_conversion_source = (
+        REPO_ROOT / "retrocause" / "api" / "result_conversion.py"
+    ).read_text(encoding="utf-8")
 
-    assert "from retrocause.api.briefs import (" in api_source
-    assert "build_markdown_research_brief" in api_source
+    assert "from retrocause.api.briefs import" not in api_source
+    assert "build_markdown_research_brief" not in api_source
+    assert "build_markdown_research_brief" in result_conversion_source
     assert "_build_markdown_research_brief" not in api_source
     assert "def build_markdown_research_brief" in brief_source
     assert "def markdown_bullet" in brief_source
@@ -1208,9 +1212,13 @@ def test_api_production_scenario_detection_is_extracted():
     scenario_source = (REPO_ROOT / "retrocause" / "api" / "scenarios.py").read_text(
         encoding="utf-8"
     )
+    result_conversion_source = (
+        REPO_ROOT / "retrocause" / "api" / "result_conversion.py"
+    ).read_text(encoding="utf-8")
 
-    assert "from retrocause.api.scenarios import" in api_source
-    assert "detect_production_scenario_payload" in api_source
+    assert "from retrocause.api.scenarios import" not in api_source
+    assert "detect_production_scenario_payload" not in api_source
+    assert "detect_production_scenario_payload" in result_conversion_source
     assert "PRODUCTION_SCENARIOS" not in api_source
     assert "SCENARIO_SIGNALS" not in api_source
     assert "def detect_production_scenario_payload" in scenario_source
@@ -1346,9 +1354,13 @@ def test_api_retrieval_trace_conversion_is_extracted():
     retrieval_trace_source = (
         REPO_ROOT / "retrocause" / "api" / "retrieval_trace.py"
     ).read_text(encoding="utf-8")
+    result_conversion_source = (
+        REPO_ROOT / "retrocause" / "api" / "result_conversion.py"
+    ).read_text(encoding="utf-8")
 
-    assert "from retrocause.api.retrieval_trace import" in api_source
-    assert "build_retrieval_trace_item_v2" in api_source
+    assert "from retrocause.api.retrieval_trace import" not in api_source
+    assert "build_retrieval_trace_item_v2" not in api_source
+    assert "build_retrieval_trace_item_v2" in result_conversion_source
     assert "def _retrieval_trace_item_v2" not in api_source
     assert "def _retrieval_status_from_trace" not in api_source
     assert "def build_retrieval_trace_item_v2" in retrieval_trace_source
@@ -1369,14 +1381,34 @@ def test_api_live_analysis_settings_are_extracted():
     assert "resolve_provider_model" in analysis_execution_source
 
 
+def test_api_result_v2_conversion_is_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    result_conversion_source = (
+        REPO_ROOT / "retrocause" / "api" / "result_conversion.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from retrocause.api.result_conversion import" in api_source
+    assert "result_to_v2 as _result_to_v2" in api_source
+    assert "detect_production_scenario as _detect_production_scenario" in api_source
+    assert "def _result_to_v2" not in api_source
+    assert "def _collect_evidence_bindings" not in api_source
+    assert "def _refutation_status" not in api_source
+    assert "def result_to_v2" in result_conversion_source
+    assert "def collect_evidence_bindings" in result_conversion_source
+
+
 def test_api_analysis_brief_builder_is_extracted():
     api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
     analysis_brief_source = (
         REPO_ROOT / "retrocause" / "api" / "analysis_brief.py"
     ).read_text(encoding="utf-8")
+    result_conversion_source = (
+        REPO_ROOT / "retrocause" / "api" / "result_conversion.py"
+    ).read_text(encoding="utf-8")
 
-    assert "from retrocause.api.analysis_brief import" in api_source
-    assert "build_analysis_brief_payload" in api_source
+    assert "from retrocause.api.analysis_brief import" not in api_source
+    assert "build_analysis_brief_payload" not in api_source
+    assert "build_analysis_brief_payload" in result_conversion_source
     assert "def _build_analysis_brief" not in api_source
     assert "def _edge_challenge_phrase" not in api_source
     assert "def build_analysis_brief_payload" in analysis_brief_source
@@ -1388,9 +1420,13 @@ def test_api_production_brief_builder_is_extracted():
     production_brief_source = (
         REPO_ROOT / "retrocause" / "api" / "production_brief.py"
     ).read_text(encoding="utf-8")
+    result_conversion_source = (
+        REPO_ROOT / "retrocause" / "api" / "result_conversion.py"
+    ).read_text(encoding="utf-8")
 
-    assert "from retrocause.api.production_brief import" in api_source
-    assert "build_production_brief_payload" in api_source
+    assert "from retrocause.api.production_brief import" not in api_source
+    assert "build_production_brief_payload" not in api_source
+    assert "build_production_brief_payload" in result_conversion_source
     assert "def _build_production_brief" not in api_source
     assert "def _brief_item_from_edge" not in api_source
     assert "def _top_edge_items" not in api_source
@@ -1405,10 +1441,15 @@ def test_api_product_harness_builders_are_extracted():
     harness_source = (REPO_ROOT / "retrocause" / "api" / "harness.py").read_text(
         encoding="utf-8"
     )
+    result_conversion_source = (
+        REPO_ROOT / "retrocause" / "api" / "result_conversion.py"
+    ).read_text(encoding="utf-8")
 
-    assert "from retrocause.api.harness import" in api_source
-    assert "build_production_harness_payload" in api_source
-    assert "build_product_harness_payload" in api_source
+    assert "from retrocause.api.harness import" not in api_source
+    assert "build_production_harness_payload" not in api_source
+    assert "build_product_harness_payload" not in api_source
+    assert "build_production_harness_payload" in result_conversion_source
+    assert "build_product_harness_payload" in result_conversion_source
     assert "def _build_production_harness" not in api_source
     assert "def _build_product_harness" not in api_source
     assert "def _production_check" not in api_source

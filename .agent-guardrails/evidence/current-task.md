@@ -3472,3 +3472,33 @@ Full verification:
 Guardrails:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
 - Non-blocking warnings: the slice spans 4 top-level areas (`.agent-guardrails`, `docs`, `retrocause`, `tests`), and `docs/PROJECT_STATE.md` was updated. Both are expected for this maintenance slice because it includes a backend extraction, structural tests, docs synchronization, and guardrails evidence.
+
+## V2 Result Conversion Extraction
+
+Scope:
+- Extracted V2 result conversion and its helper functions into `retrocause/api/result_conversion.py`.
+- Kept `retrocause/api/main.py` as route orchestration plus legacy V1 assembly, with compatibility re-exports for existing tests/callers that import `_result_to_v2`, `_detect_production_scenario`, or V2 schema classes from `main.py`.
+- Updated structural tests and maintenance docs. `retrocause/api/main.py` is now about 407 lines; `retrocause/api/result_conversion.py` owns the 441-line V2 conversion surface.
+
+Verification:
+- RED: `python -m pytest tests\test_comprehensive.py::test_api_result_v2_conversion_is_extracted -q --basetemp=.pytest-tmp` failed because `retrocause/api/result_conversion.py` did not exist yet.
+- Initial focused regression found an import compatibility issue: tests still imported V2 schema classes from `retrocause.api.main`. Root cause was removing unused schema imports from `main.py` without preserving that compatibility surface. Fixed by making the re-export explicit with `__all__`.
+- GREEN/focused regression: `python -m pytest tests\test_comprehensive.py::test_api_result_v2_conversion_is_extracted tests\test_comprehensive.py::test_result_to_v2_minimal tests\test_comprehensive.py::test_result_to_v2_builds_copyable_markdown_research_brief tests\test_api_retrieval_trace.py -q --basetemp=.pytest-tmp` passed.
+- Lint: `python -m ruff check retrocause\api\main.py retrocause\api\result_conversion.py tests\test_comprehensive.py` passed.
+
+Risk notes:
+- Security/auth/secrets: no API-key handling behavior changed; this is response conversion only and does not touch secrets or provider calls.
+- Dependencies: no package or lockfile changes.
+- Performance/latency: conversion work is the same in-process mapping as before; no new IO, network calls, or loops beyond the existing conversion loops.
+- Understanding tradeoff: preserving `main.py` re-exports keeps compatibility while moving ownership of the large V2 conversion block to a named module.
+- Continuity: reused existing helper modules for briefs, harnesses, scenarios, and retrieval trace; no deliberate behavior break.
+- Debug note: the first full `npm test` after moving V2 conversion failed in pytest because six structural tests still expected brief/scenario/retrieval/harness imports to be owned directly by `main.py`. Root cause was stale structural ownership assertions after V2 conversion became the owner of those builders. Updated those tests to check `retrocause/api/result_conversion.py` instead.
+- Focused fix verification: `python -m pytest tests\test_comprehensive.py::test_api_markdown_brief_builder_is_extracted tests\test_comprehensive.py::test_api_production_scenario_detection_is_extracted tests\test_comprehensive.py::test_api_retrieval_trace_conversion_is_extracted tests\test_comprehensive.py::test_api_analysis_brief_builder_is_extracted tests\test_comprehensive.py::test_api_production_brief_builder_is_extracted tests\test_comprehensive.py::test_api_product_harness_builders_are_extracted tests\test_comprehensive.py::test_api_result_v2_conversion_is_extracted -q --basetemp=.pytest-tmp` passed.
+
+Full verification:
+- `npm test` completed with exit code 0 after updating structural ownership tests.
+- Included frontend lint/build, `python -m ruff check retrocause/`, full pytest (`284 passed`), and browser E2E (`608 PASS, 0 FAIL, 0 SKIP`).
+
+Guardrails:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings: the slice spans 4 top-level areas (`.agent-guardrails`, `docs`, `retrocause`, `tests`), and `docs/PROJECT_STATE.md` was updated. Both are expected for this maintenance slice because it includes a backend extraction, structural tests, docs synchronization, and guardrails evidence.
