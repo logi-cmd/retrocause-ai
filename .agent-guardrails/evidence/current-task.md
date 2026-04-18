@@ -3334,3 +3334,30 @@ Full verification:
 Guardrails:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
 - Non-blocking warnings: the slice spans 4 top-level areas (`.agent-guardrails`, `docs`, `retrocause`, `tests`), and `docs/PROJECT_STATE.md` was updated. Both are expected for this maintenance slice because the code refactor required test coverage, docs synchronization, and evidence updates.
+
+## 2026-04-19 provider route extraction
+
+Scope:
+- Extracted provider catalog and provider preflight route handlers from `retrocause/api/main.py` into `retrocause/api/provider_routes.py`.
+- Kept public endpoints unchanged: `GET /api/providers` and `POST /api/providers/preflight`.
+- Kept provider failure classification/model-resolution helpers in `retrocause/api/provider_preflight.py`; `main.py` still imports only the provider helpers required by analysis finalization/live-failure handling.
+- Updated `docs/PROJECT_STATE.md` and `docs/codebase-audit.md` so provider preflight route orchestration is no longer listed as an outstanding split candidate.
+
+TDD and verification so far:
+- RED: `python -m pytest tests\test_comprehensive.py::test_provider_routes_are_extracted -q --basetemp=.pytest-tmp` failed with `FileNotFoundError` for missing `retrocause/api/provider_routes.py`.
+- GREEN: provider route structure, provider preflight helper boundary, missing-key preflight behavior, and model-health-check behavior passed in focused pytest.
+- Lint: `python -m ruff check retrocause\api\main.py retrocause\api\provider_routes.py tests\test_comprehensive.py` passed.
+
+Risk notes:
+- Auth/secrets/permissions/sensitive data: no API key storage behavior changed; preflight still receives a key per request and only reports health/status metadata.
+- Dependencies: no new packages, no lockfile changes.
+- Performance: neutral for provider catalog and preflight routing; the same lightweight model preflight path and timeout helper are reused.
+- Maintainability tradeoff: provider routes now mirror `evidence_routes.py` and `run_routes.py`; `main.py` remains responsible for analysis route orchestration and still reuses provider model resolution where analysis responses need ledger metadata.
+- Residual risk: streaming and V2 conversion remain in `main.py`; streaming should be split carefully because it shares the live-analysis request flow.
+
+Full verification:
+- `npm test` passed for the provider route extraction. It completed frontend lint, Next.js production build, `ruff check retrocause/`, full pytest (`279 passed`), and browser E2E (`608 PASS`, `0 FAIL`, `0 SKIP`).
+
+Guardrails:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings: the slice spans 4 top-level areas (`.agent-guardrails`, `docs`, `retrocause`, `tests`), and `docs/PROJECT_STATE.md` was updated. Both are expected for a maintenance slice that intentionally includes code, structural tests, docs synchronization, and evidence updates.

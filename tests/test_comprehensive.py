@@ -14,14 +14,14 @@ from retrocause.api.main import (
     GraphEdgeV2,
     HypothesisChainV2,
     PipelineEvaluationV2,
-    ProviderPreflightRequest,
     analyze_query_v2,
-    preflight_provider,
     _detect_production_scenario,
     _result_to_v2,
     app,
 )
 from retrocause.api.harness import build_product_harness_payload
+from retrocause.api.provider_routes import preflight_provider
+from retrocause.api.schemas import ProviderPreflightRequest
 from retrocause.app.demo_data import (
     PROVIDERS,
     detect_demo_topic,
@@ -1220,20 +1220,42 @@ def test_api_production_scenario_detection_is_extracted():
 
 def test_api_provider_preflight_classification_is_extracted():
     api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    provider_route_source = (
+        REPO_ROOT / "retrocause" / "api" / "provider_routes.py"
+    ).read_text(encoding="utf-8")
     provider_preflight_source = (
         REPO_ROOT / "retrocause" / "api" / "provider_preflight.py"
     ).read_text(encoding="utf-8")
 
     assert "from retrocause.api.provider_preflight import" in api_source
-    assert "classify_preflight_failure_code" in api_source
-    assert "preflight_user_action" in api_source
     assert "is_live_failure" in api_source
+    assert "resolve_provider_model" in api_source
+    assert "classify_preflight_failure_code" not in api_source
+    assert "preflight_user_action" not in api_source
+    assert "classify_preflight_failure_code" in provider_route_source
+    assert "preflight_user_action" in provider_route_source
     assert "def _preflight_failure_code" not in api_source
     assert "def _preflight_user_action" not in api_source
     assert "def _is_live_failure" not in api_source
     assert "def classify_preflight_failure_code" in provider_preflight_source
     assert "def preflight_user_action" in provider_preflight_source
     assert "def is_live_failure" in provider_preflight_source
+
+
+def test_provider_routes_are_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    provider_route_source = (
+        REPO_ROOT / "retrocause" / "api" / "provider_routes.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from retrocause.api.provider_routes import" in api_source
+    assert "app.include_router(provider_router)" in api_source
+    assert "def list_providers" not in api_source
+    assert "def preflight_provider" not in api_source
+    assert '"/api/providers"' not in api_source
+    assert "router = APIRouter()" in provider_route_source
+    assert '@router.get("/api/providers")' in provider_route_source
+    assert '@router.post("/api/providers/preflight"' in provider_route_source
 
 
 def test_api_saved_run_persistence_is_extracted():
