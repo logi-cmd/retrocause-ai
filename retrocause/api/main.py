@@ -13,6 +13,7 @@ from retrocause.app.demo_data import (
     topic_aware_demo_result,
 )
 from retrocause.api.analysis_brief import build_analysis_brief_payload
+from retrocause.api.analysis_execution import resolve_live_analysis_settings
 from retrocause.api.briefs import (
     build_markdown_research_brief,
 )
@@ -564,17 +565,19 @@ async def analyze_query(request: AnalyzeRequest):
         if request.api_key:
             from retrocause.app.demo_data import run_real_analysis
 
-            provider_cfg = PROVIDERS.get(request.model)
-            base_url = provider_cfg["base_url"] if provider_cfg else None
-            if request.explicit_model:
-                model_name = request.explicit_model
-            else:
-                model_name = (
-                    list(provider_cfg["models"].keys())[0] if provider_cfg else request.model
-                )
+            settings = resolve_live_analysis_settings(
+                PROVIDERS,
+                request.model,
+                request.explicit_model,
+            )
             try:
                 result = run_with_timeout(
-                    run_real_analysis, 400, request.query, request.api_key, model_name, base_url
+                    run_real_analysis,
+                    400,
+                    request.query,
+                    request.api_key,
+                    settings.model_name,
+                    settings.base_url,
                 )
             except Exception:
                 import traceback
@@ -658,18 +661,21 @@ async def analyze_query_v2(request: AnalyzeRequest):
         if request.api_key:
             from retrocause.app.demo_data import run_real_analysis
 
-            provider_cfg = PROVIDERS.get(request.model)
-            base_url = provider_cfg["base_url"] if provider_cfg else None
-            if request.explicit_model:
-                model_name = request.explicit_model
-            else:
-                model_name = (
-                    list(provider_cfg["models"].keys())[0] if provider_cfg else request.model
-                )
+            settings = resolve_live_analysis_settings(
+                PROVIDERS,
+                request.model,
+                request.explicit_model,
+            )
+            model_name = settings.model_name
             error_msg: str | None = None
             try:
                 result = run_with_timeout(
-                    run_real_analysis, 400, request.query, request.api_key, model_name, base_url
+                    run_real_analysis,
+                    400,
+                    request.query,
+                    request.api_key,
+                    settings.model_name,
+                    settings.base_url,
                 )
             except TimeoutError:
                 error_msg = "Analysis timed out. Try a simpler query or try again later."
@@ -758,16 +764,15 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
 
                 from retrocause.app.demo_data import run_real_analysis_with_progress
 
-                provider_cfg = PROVIDERS.get(request.model)
-                base_url = provider_cfg["base_url"] if provider_cfg else None
-                model_name = (
-                    request.explicit_model
-                    if request.explicit_model
-                    else (list(provider_cfg["models"].keys())[0] if provider_cfg else request.model)
+                settings = resolve_live_analysis_settings(
+                    PROVIDERS,
+                    request.model,
+                    request.explicit_model,
                 )
+                model_name = settings.model_name
 
                 logger.info(
-                    f"[SSE-DEBUG] resolved model_name={model_name!r}, base_url={base_url!r}"
+                    f"[SSE-DEBUG] resolved model_name={model_name!r}, base_url={settings.base_url!r}"
                 )
 
                 result = None
@@ -779,7 +784,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                         request.query,
                         request.api_key,
                         model_name,
-                        base_url,
+                        settings.base_url,
                         on_progress,
                     )
                     _elapsed = _time.time() - _t0

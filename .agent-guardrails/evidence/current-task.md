@@ -3414,3 +3414,32 @@ Full verification:
 Guardrails:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
 - Non-blocking warnings: the slice spans 4 top-level areas (`.agent-guardrails`, `docs`, `retrocause`, `tests`), and `docs/PROJECT_STATE.md` was updated. Both are expected for this maintenance slice because it includes code extraction, structural tests, docs synchronization, and guardrails evidence.
+
+## Live Analysis Settings Extraction
+
+Scope:
+- Extracted shared live-analysis provider/model/base-url settings into `retrocause/api/analysis_execution.py`.
+- Updated `/api/analyze`, `/api/analyze/v2`, and `/api/analyze/v2/stream` to reuse `resolve_live_analysis_settings` instead of repeating provider/model lookup code.
+- Updated `tests/test_comprehensive.py`, `docs/PROJECT_STATE.md`, and `docs/codebase-audit.md` so the maintainability map stays current.
+
+Verification:
+- RED: `python -m pytest tests\test_comprehensive.py::test_api_live_analysis_settings_are_extracted -q --basetemp=.pytest-tmp` failed because `retrocause/api/analysis_execution.py` did not exist yet.
+- GREEN: `python -m pytest tests\test_comprehensive.py::test_api_live_analysis_settings_are_extracted -q --basetemp=.pytest-tmp` passed after extraction.
+- Focused regression: `python -m pytest tests\test_comprehensive.py::test_api_live_analysis_settings_are_extracted tests\test_comprehensive.py::test_analyze_query_v2_returns_partial_live_instead_of_demo_on_live_failure tests\test_comprehensive.py::test_run_orchestration_metadata_and_saved_run_round_trip -q --basetemp=.pytest-tmp` passed.
+- Lint: `python -m ruff check retrocause\api\main.py retrocause\api\analysis_execution.py tests\test_comprehensive.py` passed.
+- One mistyped focused command referenced a non-existent test name and collected no tests; it was immediately replaced by the correct focused regression command above.
+
+Risk notes:
+- Security/auth/secrets: no API-key handling behavior changed; API keys still pass through the existing request path only, and no secrets or runtime data were added.
+- Dependencies: no package or lockfile changes.
+- Performance/latency: no new network calls or loops; this removes repeated local lookup code only.
+- Understanding tradeoff: `analysis_execution.py` is intentionally small and delegates canonical provider/model choice to `resolve_provider_model`, avoiding a second source of model-selection truth.
+- Continuity: reused the existing `retrocause/api/provider_preflight.py` model-resolution helper and the established small-module extraction pattern; no deliberate behavior break.
+
+Full verification:
+- `npm test` completed with exit code 0 after the live-analysis settings extraction.
+- Included frontend lint/build, `python -m ruff check retrocause/`, full pytest (`282 passed`), and browser E2E (`608 PASS, 0 FAIL, 0 SKIP`).
+
+Guardrails:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings: the slice spans 4 top-level areas (`.agent-guardrails`, `docs`, `retrocause`, `tests`), and `docs/PROJECT_STATE.md` was updated. Both are expected for this maintenance slice because it includes a backend extraction, structural tests, docs synchronization, and guardrails evidence.

@@ -1328,6 +1328,20 @@ def test_api_retrieval_trace_conversion_is_extracted():
     assert "describe_source_name" in retrieval_trace_source
 
 
+def test_api_live_analysis_settings_are_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    analysis_execution_source = (
+        REPO_ROOT / "retrocause" / "api" / "analysis_execution.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from retrocause.api.analysis_execution import" in api_source
+    assert "resolve_live_analysis_settings" in api_source
+    assert "PROVIDERS.get(request.model)" not in api_source
+    assert 'list(provider_cfg["models"].keys())[0]' not in api_source
+    assert "def resolve_live_analysis_settings" in analysis_execution_source
+    assert "resolve_provider_model" in analysis_execution_source
+
+
 def test_api_analysis_brief_builder_is_extracted():
     api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
     analysis_brief_source = (
