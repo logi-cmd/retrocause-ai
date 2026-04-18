@@ -17,11 +17,11 @@ from retrocause.api.main import (
     ProviderPreflightRequest,
     analyze_query_v2,
     preflight_provider,
-    _build_product_harness,
     _detect_production_scenario,
     _result_to_v2,
     app,
 )
+from retrocause.api.harness import build_product_harness_payload
 from retrocause.app.demo_data import (
     PROVIDERS,
     detect_demo_topic,
@@ -1305,6 +1305,23 @@ def test_api_production_brief_builder_is_extracted():
     assert "def production_brief_item_from_edge_payload" in production_brief_source
 
 
+def test_api_product_harness_builders_are_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    harness_source = (REPO_ROOT / "retrocause" / "api" / "harness.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "from retrocause.api.harness import" in api_source
+    assert "build_production_harness_payload" in api_source
+    assert "build_product_harness_payload" in api_source
+    assert "def _build_production_harness" not in api_source
+    assert "def _build_product_harness" not in api_source
+    assert "def _production_check" not in api_source
+    assert "def _check_freshness_gate" not in api_source
+    assert "def build_production_harness_payload" in harness_source
+    assert "def build_product_harness_payload" in harness_source
+
+
 def test_legacy_canvas_graph_uses_shared_red_string_path_builder():
     legacy_graph_source = (
         REPO_ROOT / "frontend" / "src" / "components" / "canvas" / "CausalGraphView.tsx"
@@ -2011,12 +2028,15 @@ def test_product_harness_marks_model_blocked_empty_result_as_actionable():
         error="LLM calls failed for deepseek/deepseek-chat-v3-0324 - empty result",
     )
 
-    report = _build_product_harness(response)
+    report = build_product_harness_payload(response)
 
-    assert report.status == "blocked_by_model"
-    assert report.score < 0.5
-    assert any(check.id == "actionable_failure" and check.status == "pass" for check in report.checks)
-    assert any("preflight" in action.lower() for action in report.next_actions)
+    assert report["status"] == "blocked_by_model"
+    assert report["score"] < 0.5
+    assert any(
+        check["id"] == "actionable_failure" and check["status"] == "pass"
+        for check in report["checks"]
+    )
+    assert any("preflight" in action.lower() for action in report["next_actions"])
 
 
 def test_product_harness_rewards_useful_evidence_backed_result():

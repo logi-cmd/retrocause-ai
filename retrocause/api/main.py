@@ -19,6 +19,10 @@ from retrocause.api.analysis_brief import build_analysis_brief_payload
 from retrocause.api.briefs import (
     build_markdown_research_brief,
 )
+from retrocause.api.harness import (
+    build_product_harness_payload,
+    build_production_harness_payload,
+)
 from retrocause.api.production_brief import build_production_brief_payload
 from retrocause.api.provider_preflight import (
     classify_preflight_failure_code,
@@ -581,9 +585,13 @@ def _empty_live_failure_response(
     response.production_brief = ProductionBriefV2(
         **build_production_brief_payload(response, scenario)
     )
-    response.production_harness = _build_production_harness(response)
+    response.production_harness = ProductionHarnessReportV2(
+        **build_production_harness_payload(response)
+    )
     response.markdown_brief = build_markdown_research_brief(response)
-    response.product_harness = _build_product_harness(response)
+    response.product_harness = ProductHarnessReportV2(
+        **build_product_harness_payload(response)
+    )
     return response
 
 
@@ -757,337 +765,6 @@ def _retrieval_trace_item_v2(item: object) -> RetrievalTraceItemV2:
         retry_after_seconds=_coerce_optional_int(
             _trace_value(item, "retry_after_seconds", None)
         ),
-    )
-
-
-def _production_check(
-    name: str,
-    passed: bool,
-    severity: str,
-    message: str,
-) -> ProductionHarnessCheckV2:
-    return ProductionHarnessCheckV2(
-        name=name,
-        passed=passed,
-        severity=severity,
-        message=message,
-    )
-
-
-def _check_freshness_gate(response: AnalyzeResponseV2) -> ProductionHarnessCheckV2:
-    scenario_key = response.scenario.key if response.scenario else "general"
-    needs_freshness = (
-        scenario_key in {"market", "policy_geopolitics"}
-        and response.time_range in {"today", "yesterday", "this_week", "this month"}
-    )
-    if not needs_freshness:
-        return _production_check(
-            "freshness_gate",
-            True,
-            "info",
-            "This scenario/query does not require a strict latest-information gate.",
-        )
-    fresh_enough = response.freshness_status in {"fresh", "recent"}
-    return _production_check(
-        "freshness_gate",
-        fresh_enough,
-        "warning",
-        "Latest-information query has fresh/recent evidence."
-        if fresh_enough
-        else "Latest-information query needs fresh evidence before the brief is ready.",
-    )
-
-
-def _check_evidence_anchor_gate(response: AnalyzeResponseV2) -> ProductionHarnessCheckV2:
-    anchored_items = [
-        item
-        for section in (response.production_brief.sections if response.production_brief else [])
-        for item in section.items
-        if section.kind not in {"limits", "verification"} and item.evidence_ids
-    ]
-    return _production_check(
-        "evidence_anchor",
-        bool(anchored_items),
-        "blocker",
-        "Production claims include evidence IDs."
-        if anchored_items
-        else "No evidence-anchored production claim is available.",
-    )
-
-
-def _check_source_risk_gate(response: AnalyzeResponseV2) -> ProductionHarnessCheckV2:
-    scenario_key = response.scenario.key if response.scenario else "general"
-    if scenario_key not in {"market", "policy_geopolitics"}:
-        return _production_check(
-            "source_risk",
-            True,
-            "info",
-            "No policy/market source-risk gate is required for this scenario.",
-        )
-    if not response.retrieval_trace:
-        return _production_check(
-            "source_risk",
-            False,
-            "warning",
-            "No source trace is attached, so source quality cannot be inspected.",
-        )
-    stable_rows = [
-        item
-        for item in response.retrieval_trace
-        if item.stability in {"high", "medium"} and not item.error and item.result_count > 0
-    ]
-    passed = bool(stable_rows)
-    return _production_check(
-        "source_risk",
-        passed,
-        "warning",
-        "At least one stable source returned evidence."
-        if passed
-        else "Only weak or empty source traces are attached.",
-    )
-
-
-def _check_challenge_gate(response: AnalyzeResponseV2) -> ProductionHarnessCheckV2:
-    passed = bool(response.challenge_checks)
-    return _production_check(
-        "challenge_coverage",
-        passed,
-        "warning",
-        f"{len(response.challenge_checks)} challenge check(s) are attached."
-        if passed
-        else "No targeted challenge checks are attached.",
-    )
-
-
-def _check_internal_evidence_gate(response: AnalyzeResponseV2) -> ProductionHarnessCheckV2:
-    scenario_key = response.scenario.key if response.scenario else "general"
-    if scenario_key != "postmortem":
-        return _production_check(
-            "internal_evidence",
-            True,
-            "info",
-            "Internal operational evidence is not required for this scenario.",
-        )
-    internal_markers = ("log", "ticket", "metric", "customer", "incident", "internal")
-    has_internal = any(
-        any(marker in f"{item.source} {item.extraction_method} {item.content}".lower() for marker in internal_markers)
-        for item in response.evidences
-    )
-    return _production_check(
-        "internal_evidence",
-        has_internal,
-        "warning",
-        "Internal postmortem evidence is attached."
-        if has_internal
-        else "Postmortem brief needs logs, tickets, metrics, or customer/internal evidence.",
-    )
-
-
-def _build_production_harness(response: AnalyzeResponseV2) -> ProductionHarnessReportV2:
-    checks = [
-        _check_freshness_gate(response),
-        _check_evidence_anchor_gate(response),
-        _check_source_risk_gate(response),
-        _check_challenge_gate(response),
-        _check_internal_evidence_gate(response),
-    ]
-    if any(check.severity == "blocker" and not check.passed for check in checks):
-        status = "blocked"
-    elif any(check.name == "internal_evidence" and not check.passed for check in checks):
-        status = "not_actionable"
-    elif any(check.severity == "warning" and not check.passed for check in checks):
-        status = "needs_more_evidence"
-    else:
-        status = "ready_for_brief"
-
-    score = sum(1 for check in checks if check.passed) / max(1, len(checks))
-    next_actions = [check.message for check in checks if not check.passed]
-    if not next_actions:
-        next_actions.append("Review cited evidence and challenge coverage before relying on the brief.")
-
-    return ProductionHarnessReportV2(
-        status=status,
-        score=max(0.0, min(1.0, score)),
-        scenario_key=response.scenario.key if response.scenario else "general",
-        checks=checks,
-        next_actions=next_actions[:4],
-    )
-
-
-def _build_product_harness(response: AnalyzeResponseV2) -> ProductHarnessReportV2:
-    """Score whether a result gives the user reviewable causal value."""
-
-    checks: list[HarnessCheckV2] = []
-
-    has_actionable_failure = bool(
-        response.error or response.partial_live_reasons or response.analysis_mode == "demo"
-    )
-    if response.chains:
-        checks.append(
-            _harness_check(
-                "causal_chain",
-                "Causal chain present",
-                "pass",
-                f"{len(response.chains)} chain(s), {sum(len(c.edges) for c in response.chains)} edge(s).",
-            )
-        )
-    else:
-        checks.append(
-            _harness_check(
-                "causal_chain",
-                "Causal chain present",
-                "fail",
-                "No causal chain is available for review.",
-            )
-        )
-
-    if response.analysis_brief and (
-        response.analysis_brief.answer or response.analysis_brief.top_reasons
-    ):
-        checks.append(
-            _harness_check(
-                "analysis_summary",
-                "Analysis summary present",
-                "pass",
-                "The response includes a synthesized answer and reason list.",
-            )
-        )
-    else:
-        checks.append(
-            _harness_check(
-                "analysis_summary",
-                "Analysis summary present",
-                "fail",
-                "No synthesized answer is attached.",
-            )
-        )
-
-    if response.retrieval_trace:
-        source_hits = sum(max(0, item.result_count) for item in response.retrieval_trace)
-        status = "pass" if source_hits > 0 else "warn"
-        checks.append(
-            _harness_check(
-                "source_trace",
-                "Source trace visible",
-                status,
-                f"{len(response.retrieval_trace)} source query row(s), {source_hits} result hit(s).",
-            )
-        )
-    else:
-        checks.append(
-            _harness_check(
-                "source_trace",
-                "Source trace visible",
-                "fail",
-                "No source-level retrieval trace is visible.",
-            )
-        )
-
-    if response.evidences:
-        stances = {item.stance or ("supporting" if item.is_supporting else "refuting") for item in response.evidences}
-        checks.append(
-            _harness_check(
-                "evidence_stance",
-                "Evidence stance visible",
-                "pass",
-                f"{len(response.evidences)} evidence item(s), stance(s): {', '.join(sorted(stances))}.",
-            )
-        )
-    else:
-        checks.append(
-            _harness_check(
-                "evidence_stance",
-                "Evidence stance visible",
-                "fail",
-                "No evidence items are attached.",
-            )
-        )
-
-    if response.challenge_checks:
-        checked = len(response.challenge_checks)
-        refuting = sum(item.refuting_count for item in response.challenge_checks)
-        checks.append(
-            _harness_check(
-                "challenge_coverage",
-                "Challenge coverage checked",
-                "pass",
-                f"{checked} edge(s) checked, {refuting} challenge item(s).",
-            )
-        )
-    else:
-        checks.append(
-            _harness_check(
-                "challenge_coverage",
-                "Challenge coverage checked",
-                "warn" if response.chains else "fail",
-                "No targeted challenge retrieval is attached.",
-            )
-        )
-
-    if has_actionable_failure:
-        checks.append(
-            _harness_check(
-                "actionable_failure",
-                "Failure state actionable",
-                "pass",
-                response.error or "; ".join(response.partial_live_reasons) or response.analysis_mode,
-            )
-        )
-    elif response.analysis_mode == "live":
-        checks.append(
-            _harness_check(
-                "actionable_failure",
-                "Failure state actionable",
-                "pass",
-                "No failure state is present.",
-            )
-        )
-    else:
-        checks.append(
-            _harness_check(
-                "actionable_failure",
-                "Failure state actionable",
-                "warn",
-                "The run is degraded but has no explicit reason.",
-            )
-        )
-
-    score_map = {"pass": 1.0, "warn": 0.5, "fail": 0.0}
-    score = sum(score_map.get(check.status, 0.0) for check in checks) / max(1, len(checks))
-    score = max(0.0, min(1.0, score))
-
-    next_actions: list[str] = []
-    if not response.chains and response.error:
-        status = "blocked_by_model"
-        summary = "The run did not produce a causal answer; the useful output is the failure diagnosis."
-        next_actions.append("Run provider preflight before starting another full analysis.")
-    elif score >= 0.75 and response.chains:
-        status = "ready_for_review"
-        summary = "The result has enough structure for a user to review reasons, sources, and gaps."
-    elif response.chains:
-        status = "needs_more_evidence"
-        summary = "The result has a causal shape, but evidence or challenge coverage is still thin."
-    else:
-        status = "not_reviewable"
-        summary = "The result is not yet reviewable as a causal explanation."
-
-    if not response.retrieval_trace:
-        next_actions.append("Expose source trace rows so the user can see where evidence came from.")
-    if not response.challenge_checks:
-        next_actions.append("Run targeted challenge retrieval for the strongest causal edges.")
-    if not response.analysis_brief:
-        next_actions.append("Generate an analysis brief with top reasons and missing evidence.")
-    if not response.evidences:
-        next_actions.append("Collect or attach evidence before presenting causal conclusions.")
-    if not next_actions:
-        next_actions.append("Review the top reasons and inspect the cited evidence before trusting the conclusion.")
-
-    return ProductHarnessReportV2(
-        score=score,
-        status=status,
-        user_value_summary=summary,
-        checks=checks,
-        next_actions=next_actions[:4],
     )
 
 
@@ -1342,9 +1019,13 @@ def _result_to_v2(
     response.production_brief = ProductionBriefV2(
         **build_production_brief_payload(response, scenario)
     )
-    response.production_harness = _build_production_harness(response)
+    response.production_harness = ProductionHarnessReportV2(
+        **build_production_harness_payload(response)
+    )
     response.markdown_brief = build_markdown_research_brief(response)
-    response.product_harness = _build_product_harness(response)
+    response.product_harness = ProductHarnessReportV2(
+        **build_product_harness_payload(response)
+    )
     return response
 
 

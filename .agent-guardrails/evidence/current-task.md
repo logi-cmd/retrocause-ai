@@ -3182,3 +3182,37 @@ Risk notes:
   - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
   - `docs/PROJECT_STATE.md` was updated as a state file.
 - Risk disposition: both warnings are expected for this maintainability slice because backend helper extraction is intentionally paired with regression coverage and synchronized docs/evidence. No blocking guardrails errors were reported.
+
+## 2026-04-18 product/production harness helper extraction
+
+Scope:
+- Continued backend maintainability cleanup by extracting product and production harness payload assembly from `retrocause/api/main.py` into `retrocause/api/harness.py`.
+- Kept API Pydantic schema classes and response model construction in `retrocause/api/main.py`; the new helper returns plain payload dictionaries that `main.py` wraps in `ProductionHarnessReportV2` and `ProductHarnessReportV2`.
+- Updated `tests/test_comprehensive.py`, `docs/PROJECT_STATE.md`, and `docs/codebase-audit.md` so regression coverage and the maintenance map match the new boundary.
+
+TDD / verification:
+- RED: `python -m pytest tests\test_comprehensive.py::test_api_product_harness_builders_are_extracted -q --basetemp=.pytest-tmp` failed because `retrocause/api/harness.py` did not exist.
+- GREEN focused regression: `python -m pytest tests\test_comprehensive.py::test_api_product_harness_builders_are_extracted tests\test_comprehensive.py::test_product_harness_marks_model_blocked_empty_result_as_actionable tests\test_comprehensive.py::test_product_harness_rewards_useful_evidence_backed_result tests\test_comprehensive.py::test_recent_market_result_needs_fresh_evidence_before_ready tests\test_comprehensive.py::test_postmortem_without_internal_evidence_is_not_actionable -q --basetemp=.pytest-tmp` passed.
+- `python -m ruff check retrocause\api\main.py retrocause\api\harness.py`: passed.
+- `git diff --check`: passed with line-ending warnings only for tracked text files that Git will normalize on next touch.
+- Required `npm test`: passed.
+  - Frontend lint/build passed.
+  - `ruff check retrocause/`: passed.
+  - Full pytest passed: 275 tests.
+  - Browser E2E passed: 604 pass / 0 fail / 1 skip.
+
+Risk notes:
+- Security/auth/secrets: no auth, permissions, API-key storage, secrets, local runtime data, or sensitive-data paths changed.
+- Dependencies: no package or lockfile changes.
+- Performance: helper extraction is in-process list/dict/string assembly only; no expected latency, IO, network, or concurrency impact.
+- Tradeoff: `main.py` still owns Pydantic schemas and provider-preflight route checks. This avoids mixing a schema migration or route orchestration split into the same slice.
+- Continuity: follows the small backend helper pattern used by `runtime.py`, `briefs.py`, `analysis_brief.py`, `production_brief.py`, `scenarios.py`, `provider_preflight.py`, `run_store.py`, and `run_metadata.py`.
+- Residual risk: `main.py` remains large; future cleanup should target V2 schemas and route orchestration in separate tested slices.
+
+### Guardrails final result
+
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`: passed with score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings:
+  - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
+  - `docs/PROJECT_STATE.md` was updated as a state file.
+- Risk disposition: both warnings are expected for this maintainability slice because the backend helper extraction intentionally pairs code, regression coverage, synchronized project docs, and guardrails evidence. No blocking guardrails errors were reported.
