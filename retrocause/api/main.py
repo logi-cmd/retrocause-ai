@@ -12,7 +12,6 @@ from retrocause.app.demo_data import (
     detect_demo_topic,
     topic_aware_demo_result,
 )
-from retrocause.evidence_access import describe_source_name
 from retrocause.api.analysis_brief import build_analysis_brief_payload
 from retrocause.api.briefs import (
     build_markdown_research_brief,
@@ -29,6 +28,10 @@ from retrocause.api.provider_preflight import (
     resolve_provider_model,
 )
 from retrocause.api.provider_routes import router as provider_router
+from retrocause.api.retrieval_trace import (
+    build_retrieval_trace_item_v2,
+    retrieval_status_from_trace,
+)
 from retrocause.api.runtime import TimeoutError, run_with_timeout
 from retrocause.api.run_metadata import (
     build_run_step_payloads,
@@ -60,7 +63,6 @@ from retrocause.api.schemas import (
     ProductHarnessReportV2,
     ProductionBriefV2,
     ProductionHarnessReportV2,
-    RetrievalTraceItemV2,
     RunStepV2,
     ScenarioV2,
     UncertaintyAssessmentV2,
@@ -280,73 +282,6 @@ def _challenge_check_v2(item: dict) -> ChallengeCheckV2:
         refuting_count=int(item.get("refuting_count", 0)),
         context_count=int(item.get("context_count", 0)),
         status=str(item.get("status", "not_checked")),
-    )
-
-
-def _trace_value(item: object, key: str, default: object = None) -> object:
-    if isinstance(item, dict):
-        return item.get(key, default)
-    if key == "source":
-        return getattr(item, "source", getattr(item, "name", default))
-    return getattr(item, key, default)
-
-
-def _coerce_optional_int(value: object) -> Optional[int]:
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _coerce_result_count(value: object) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return 0
-
-
-def _retrieval_status_from_trace(item: object) -> str:
-    explicit = str(_trace_value(item, "status", "") or "").strip()
-    if explicit:
-        return explicit
-    if bool(_trace_value(item, "cache_hit", False)):
-        return "cached"
-    if _trace_value(item, "error"):
-        return "source_error"
-    return "ok"
-
-
-def _retrieval_trace_item_v2(item: object) -> RetrievalTraceItemV2:
-    source = str(_trace_value(item, "source", "") or "")
-    source_metadata = describe_source_name(source)
-    return RetrievalTraceItemV2(
-        source=source,
-        source_label=str(
-            _trace_value(item, "source_label", "")
-            or source_metadata.get("source_label", "")
-        ),
-        source_kind=str(
-            _trace_value(item, "source_kind", "")
-            or source_metadata.get("source_kind", "unknown")
-        ),
-        stability=str(
-            _trace_value(item, "stability", "")
-            or source_metadata.get("stability", "unknown")
-        ),
-        cache_policy=str(
-            _trace_value(item, "cache_policy", "")
-            or source_metadata.get("cache_policy", "no_cache_policy")
-        ),
-        query=str(_trace_value(item, "query", "") or ""),
-        result_count=_coerce_result_count(_trace_value(item, "result_count", 0)),
-        cache_hit=bool(_trace_value(item, "cache_hit", False)),
-        error=_trace_value(item, "error"),
-        status=_retrieval_status_from_trace(item),
-        retry_after_seconds=_coerce_optional_int(
-            _trace_value(item, "retry_after_seconds", None)
-        ),
     )
 
 
@@ -575,7 +510,7 @@ def _result_to_v2(
         upstream_map=_build_upstream_map(list(all_nodes_v2.values())),
         evaluation=evaluation_v2,
         retrieval_trace=[
-            _retrieval_trace_item_v2(item)
+            build_retrieval_trace_item_v2(item)
             for item in getattr(result, "retrieval_trace", [])
         ],
         challenge_checks=challenge_checks,
@@ -585,7 +520,7 @@ def _result_to_v2(
                 chains=chains_v2,
                 checks=challenge_checks,
                 retrieval_statuses=[
-                    _retrieval_status_from_trace(item)
+                    retrieval_status_from_trace(item)
                     for item in getattr(result, "retrieval_trace", [])
                 ],
             )

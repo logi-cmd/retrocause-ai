@@ -3388,3 +3388,29 @@ Full verification:
 Guardrails:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
 - Non-blocking warnings: the slice spans 4 top-level areas (`.agent-guardrails`, `docs`, `retrocause`, `tests`), and `docs/PROJECT_STATE.md` was updated. Both are expected for this maintenance slice because it includes code extraction, structural tests, docs synchronization, and evidence updates.
+
+## 2026-04-19 retrieval trace conversion extraction
+
+Scope:
+- Extracted retrieval trace V2 conversion helpers from `retrocause/api/main.py` into `retrocause/api/retrieval_trace.py`.
+- Kept user-visible source trace behavior unchanged: degraded status fallback, cache hit handling, retry-after coercion, source metadata labels, and result-count coercion are the same path used by `_result_to_v2`.
+- Updated `docs/PROJECT_STATE.md` and `docs/codebase-audit.md` so the backend cleanup map records retrieval-trace conversion as split out while still listing streaming and the remaining main result-to-V2 conversion as open.
+
+TDD and verification so far:
+- RED: `python -m pytest tests\test_comprehensive.py::test_api_retrieval_trace_conversion_is_extracted -q --basetemp=.pytest-tmp` failed with `FileNotFoundError` for missing `retrocause/api/retrieval_trace.py`.
+- GREEN: `python -m pytest tests\test_comprehensive.py::test_api_retrieval_trace_conversion_is_extracted tests\test_comprehensive.py::test_retrieval_trace_exposes_degraded_source_metadata tests\test_comprehensive.py::test_degraded_source_drill_surfaces_all_limited_states_for_review tests\test_comprehensive.py::test_result_to_v2_builds_copyable_markdown_research_brief -q --basetemp=.pytest-tmp` passed.
+- Lint: `python -m ruff check retrocause\api\main.py retrocause\api\retrieval_trace.py tests\test_comprehensive.py` passed.
+
+Risk notes:
+- Auth/secrets/permissions/sensitive data: no auth, key, permission, or storage behavior changed; this only converts existing source trace metadata for response display.
+- Dependencies: no new packages, no lockfile changes.
+- Performance: neutral; the same per-trace-item coercion and source metadata lookup run in a smaller module.
+- Maintainability tradeoff: source-trace conversion can now be tested/read independently while `_result_to_v2` still owns response assembly.
+- Residual risk: streaming and larger chain/node/evidence V2 conversion remain in `main.py`; streaming should wait for a shared execution helper to avoid duplicated live-analysis logic.
+
+Full verification:
+- `npm test` passed for the retrieval-trace conversion extraction. It completed frontend lint, Next.js production build, `ruff check retrocause/`, full pytest (`281 passed`), and browser E2E (`608 PASS`, `0 FAIL`, `0 SKIP`).
+
+Guardrails:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` completed with exit code 0 and trust score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings: the slice spans 4 top-level areas (`.agent-guardrails`, `docs`, `retrocause`, `tests`), and `docs/PROJECT_STATE.md` was updated. Both are expected for this maintenance slice because it includes code extraction, structural tests, docs synchronization, and guardrails evidence.

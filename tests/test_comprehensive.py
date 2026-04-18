@@ -1314,6 +1314,20 @@ def test_api_live_failure_response_builder_is_extracted():
     assert "build_product_harness_payload" in live_failure_source
 
 
+def test_api_retrieval_trace_conversion_is_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    retrieval_trace_source = (
+        REPO_ROOT / "retrocause" / "api" / "retrieval_trace.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from retrocause.api.retrieval_trace import" in api_source
+    assert "build_retrieval_trace_item_v2" in api_source
+    assert "def _retrieval_trace_item_v2" not in api_source
+    assert "def _retrieval_status_from_trace" not in api_source
+    assert "def build_retrieval_trace_item_v2" in retrieval_trace_source
+    assert "describe_source_name" in retrieval_trace_source
+
+
 def test_api_analysis_brief_builder_is_extracted():
     api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
     analysis_brief_source = (
