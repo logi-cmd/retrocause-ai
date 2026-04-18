@@ -3,6 +3,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { CausalNode, CausalEdge } from '@/data/mockData';
 import { useI18n, type TranslationKey } from '@/lib/i18n';
+import { buildEdgePath } from '@/lib/sticky-graph-layout';
 
 interface CausalGraphViewProps {
   nodes: CausalNode[];
@@ -161,22 +162,8 @@ const StickyCard = ({
 
 const CARD_WIDTH = 160;
 
-/**
- * Compute a red-string-style bezier path between two pin locations.
- * The control point sags below the lower endpoint, proportional to
- * the distance between the two points (gravity effect, max 35 px).
- */
-function computeRedStringPath(
-  x1: number, y1: number,
-  x2: number, y2: number
-): string {
-  const dist = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-  const sag = Math.min(dist * 0.12, 35);
-  const midX = (x1 + x2) / 2;
-  const midY = Math.max(y1, y2) + sag;
-  return `M ${x1} ${y1} Q ${midX} ${midY} ${x2} ${y2}`;
-}
-
+// Legacy canvas view. The homepage evidence board is the canonical graph/card path;
+// this view stays for secondary mock-data development surfaces and reuses shared path math.
 export default function CausalGraphView({ nodes, edges, selectedNodeId, onNodeSelect }: CausalGraphViewProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -271,7 +258,7 @@ export default function CausalGraphView({ nodes, edges, selectedNodeId, onNodeSe
 
       return {
         ...edge,
-        path: computeRedStringPath(x1, y1, x2, y2),
+        path: buildEdgePath(x1, y1, x2, y2, 1).d,
       };
     }).filter(Boolean);
   }, [edges, positions]);

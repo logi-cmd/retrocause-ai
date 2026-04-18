@@ -1190,6 +1190,30 @@ def test_api_timeout_runtime_helper_is_extracted():
     assert "class TimeoutError" in runtime_source
 
 
+def test_api_markdown_brief_builder_is_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    brief_source = (REPO_ROOT / "retrocause" / "api" / "briefs.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "from retrocause.api.briefs import (" in api_source
+    assert "build_markdown_research_brief" in api_source
+    assert "_build_markdown_research_brief" not in api_source
+    assert "def build_markdown_research_brief" in brief_source
+    assert "def markdown_bullet" in brief_source
+
+
+def test_legacy_canvas_graph_uses_shared_red_string_path_builder():
+    legacy_graph_source = (
+        REPO_ROOT / "frontend" / "src" / "components" / "canvas" / "CausalGraphView.tsx"
+    ).read_text(encoding="utf-8")
+
+    assert "@/lib/sticky-graph-layout" in legacy_graph_source
+    assert "buildEdgePath" in legacy_graph_source
+    assert "function computeRedStringPath" not in legacy_graph_source
+    assert "Legacy canvas view" in legacy_graph_source
+
+
 def test_frontend_localizes_source_trace_status():
     source_trace_source = (
         REPO_ROOT / "frontend" / "src" / "lib" / "source-trace.ts"

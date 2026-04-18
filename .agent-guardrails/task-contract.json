@@ -1,11 +1,12 @@
 {
   "schemaVersion": 3,
-  "task": "Stabilize RetroCause OSS maintenance follow-up by fixing narrow viewport panel controls, graph path finite layout, demo/no-key source trace clarity, and extracting the API timeout runtime helper; keep docs/evidence synchronized and verify with npm test and guardrails.",
+  "task": "Continue RetroCause maintainability cleanup by first extracting a small backend helper from retrocause/api/main.py, then clarifying the canonical frontend graph/card path versus legacy canvas components; keep docs/evidence synchronized and verify with npm test and guardrails.",
   "preset": "generic",
   "createdAt": "2026-04-17T16:32:32.253Z",
   "allowedPaths": [
     "frontend/src/app/page.tsx",
     "frontend/src/lib/",
+    "frontend/src/components/",
     "tests/test_comprehensive.py",
     "frontend/README.md",
     "docs/codebase-audit.md",

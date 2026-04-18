@@ -2820,3 +2820,56 @@ Final guardrails after commit 64647c7:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` -> passed, trust score 90/100, safe-to-deploy classification, no blocking errors.
 - Nonblocking warnings: the commit spans six top-level areas (`.agent-guardrails`, `docs`, `frontend`, `retrocause`, `scripts`, `tests`) and intentionally updates `docs/PROJECT_STATE.md`.
 - Rationale: this was the approved final maintenance sweep tying together UI regressions, one backend helper split, tests, and documentation/evidence synchronization. Future work should return to smaller module-scoped commits.
+
+## 2026-04-18 backend brief extraction and frontend graph path canonicalization
+
+Scope:
+- Continued maintainability cleanup in the requested order: backend first, then frontend graph/card convergence.
+- Extracted Markdown research brief text generation and related text-formatting helpers from `retrocause/api/main.py` into `retrocause/api/briefs.py`.
+- Kept API response shape and route behavior unchanged; `main.py` now imports `build_markdown_research_brief` and still owns route orchestration.
+- Declared the homepage evidence board plus `frontend/src/lib/sticky-card.tsx` and `frontend/src/lib/sticky-graph-layout.ts` as the canonical graph/card path in docs.
+- Updated legacy `frontend/src/components/canvas/CausalGraphView.tsx` to reuse `buildEdgePath` from the canonical sticky graph helper instead of carrying a separate red-string path implementation.
+- Updated `docs/PROJECT_STATE.md`, `docs/codebase-audit.md`, and the task contract for the new maintenance scope.
+
+TDD notes:
+- Added `test_api_markdown_brief_builder_is_extracted` before `retrocause/api/briefs.py` existed; it failed with `FileNotFoundError`, then passed after extraction.
+- Added `test_legacy_canvas_graph_uses_shared_red_string_path_builder` before the legacy graph imported `buildEdgePath`; it failed on the missing shared import, then passed after the canvas update.
+
+Commands run:
+- `python -m pytest tests\test_comprehensive.py::test_api_markdown_brief_builder_is_extracted tests\test_comprehensive.py::test_legacy_canvas_graph_uses_shared_red_string_path_builder -q --basetemp=.pytest-tmp` -> failed as expected in RED state.
+- `python -m pytest tests\test_comprehensive.py::test_api_markdown_brief_builder_is_extracted tests\test_comprehensive.py::test_legacy_canvas_graph_uses_shared_red_string_path_builder -q --basetemp=.pytest-tmp` -> passed after implementation.
+- `npm --prefix frontend run lint` -> passed.
+- `python -m ruff check retrocause\api\main.py retrocause\api\briefs.py` -> first failed on unused imports after extraction, then passed after removing them.
+- `python -m pytest tests\test_comprehensive.py::test_api_markdown_brief_builder_is_extracted tests\test_comprehensive.py::test_legacy_canvas_graph_uses_shared_red_string_path_builder tests\test_comprehensive.py::test_product_harness_rewards_useful_evidence_backed_result -q --basetemp=.pytest-tmp` -> passed.
+- `npm test` -> passed: frontend lint/build, `ruff check retrocause/`, full pytest (`267 passed`), and browser E2E (`608 PASS / 0 FAIL / 0 SKIP`).
+
+Security / sensitive data:
+- No auth, permissions, API-key storage, secret handling, or sensitive-data flow changed.
+- No `.retrocause/` runtime data or local cache artifacts were intentionally added.
+
+Dependency impact:
+- No new packages, package upgrades, or lockfile changes.
+
+Performance / load impact:
+- Markdown brief extraction is a module-boundary change with equivalent string assembly.
+- Legacy canvas graph now calls the shared O(1) path builder already used by the homepage evidence board.
+- No new network calls, persistence work, or runtime data scans were added.
+
+Understanding / tradeoffs:
+- Backend cleanup deliberately moved only Markdown research brief text generation. Analysis brief, production brief, schemas, and harness checks remain in `main.py` so future splits stay reviewable.
+- Frontend cleanup does not delete legacy canvas components yet; it first removes duplicated red-string path math and documents the canonical path. Legacy sticky-card rendering remains a follow-up target.
+
+Continuity and reuse:
+- Reused `retrocause/api/briefs.py` as the future home for brief-generation code.
+- Reused `frontend/src/lib/sticky-graph-layout.ts` for both homepage and legacy canvas path generation.
+- No deliberate continuity break; public API, UI route, and README first-run path remain unchanged.
+
+Residual risks / next work:
+- `retrocause/api/main.py` is still large; next backend slices should move schemas, analysis brief builders, production brief builders, and harness checks.
+- Legacy canvas still has separate sticky-card rendering/color/rotation logic; next frontend slice should migrate or retire that path.
+- README clean-clone first-run validation and live Chinese finance verification with real keys remain pending.
+
+Final guardrails after commit a2a1769:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` -> passed, trust score 90/100, safe-to-deploy classification, no blocking errors.
+- Nonblocking warnings: commit spans five top-level areas (`.agent-guardrails`, `docs`, `frontend`, `retrocause`, `tests`) and intentionally updates `docs/PROJECT_STATE.md`.
+- Rationale: the user requested both backend cleanup and frontend graph/card cleanup in sequence, with docs synchronized. Future follow-up should return to one module boundary per commit.

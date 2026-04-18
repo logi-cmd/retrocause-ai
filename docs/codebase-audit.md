@@ -70,7 +70,7 @@ Decision after this audit: the browser evidence board started by `python start.p
 
 ### 1. `frontend/src/app/page.tsx` is the biggest risk
 
-Current size after the source-trace, evidence-formatting, production-brief, saved-runs, uploaded-evidence, source-trace-panel, readable-brief-panel, source-progress-panel, challenge-coverage-panel, evidence-filter-panel, sticky-card, and sticky-graph-layout refactor slices: about 124 KB and 3,195 lines. API response/UI state types now live in `frontend/src/lib/api-types.ts`, source-trace status/source-kind/source-stability label helpers now live in `frontend/src/lib/source-trace.ts`, the rendered source trace list and empty demo/no-key trace note now live in `frontend/src/lib/source-trace-panel.tsx`, readable brief/manual-copy/source-health rendering now lives in `frontend/src/lib/readable-brief-panel.tsx`, partial-live reason and in-flight retrieval progress rendering now lives in `frontend/src/lib/source-progress-panel.tsx`, challenge/refutation coverage rendering now lives in `frontend/src/lib/challenge-coverage-panel.tsx`, related-evidence filter/list rendering now lives in `frontend/src/lib/evidence-filter-panel.tsx`, sticky note card rendering now lives in `frontend/src/lib/sticky-card.tsx`, sticky graph layout and red-string path math now live in `frontend/src/lib/sticky-graph-layout.ts`, evidence quality/freshness/badge/refutation formatting helpers now live in `frontend/src/lib/evidence-formatting.ts`, the production brief card now lives in `frontend/src/lib/production-brief-panel.tsx`, the saved-runs panel now lives in `frontend/src/lib/saved-runs-panel.tsx`, and the uploaded-evidence panel now lives in `frontend/src/lib/uploaded-evidence-panel.tsx`.
+Current size after the source-trace, evidence-formatting, production-brief, saved-runs, uploaded-evidence, source-trace-panel, readable-brief-panel, source-progress-panel, challenge-coverage-panel, evidence-filter-panel, sticky-card, and sticky-graph-layout refactor slices: about 124 KB and 3,195 lines. API response/UI state types now live in `frontend/src/lib/api-types.ts`, source-trace status/source-kind/source-stability label helpers now live in `frontend/src/lib/source-trace.ts`, the rendered source trace list and empty demo/no-key trace note now live in `frontend/src/lib/source-trace-panel.tsx`, readable brief/manual-copy/source-health rendering now lives in `frontend/src/lib/readable-brief-panel.tsx`, partial-live reason and in-flight retrieval progress rendering now lives in `frontend/src/lib/source-progress-panel.tsx`, challenge/refutation coverage rendering now lives in `frontend/src/lib/challenge-coverage-panel.tsx`, related-evidence filter/list rendering now lives in `frontend/src/lib/evidence-filter-panel.tsx`, sticky note card rendering now lives in `frontend/src/lib/sticky-card.tsx`, sticky graph layout and red-string path math now live in `frontend/src/lib/sticky-graph-layout.ts`, evidence quality/freshness/badge/refutation formatting helpers now live in `frontend/src/lib/evidence-formatting.ts`, the production brief card now lives in `frontend/src/lib/production-brief-panel.tsx`, the saved-runs panel now lives in `frontend/src/lib/saved-runs-panel.tsx`, and the uploaded-evidence panel now lives in `frontend/src/lib/uploaded-evidence-panel.tsx`. The homepage evidence board is now the canonical graph/card path.
 
 It still contains localization helpers, panel layout, query flow, and global CSS in one file.
 
@@ -83,29 +83,31 @@ Risk:
 Recommended cleanup sequence:
 
 1. Continue extracting pure formatting helpers from `page.tsx` into `frontend/src/lib/`. The source-trace static tests now follow `frontend/src/lib/source-trace.ts`, so future helper extraction should update tests to track the canonical helper module instead of forcing literals to remain in the homepage.
-2. Resolve duplicated graph/card implementation by deciding whether the homepage or `frontend/src/components/canvas/CausalGraphView.tsx` is canonical.
+2. Continue resolving duplicated graph/card implementation by moving legacy canvas card rendering toward shared homepage modules or explicitly retiring unused legacy views.
 3. Keep `page.tsx` as state orchestration only.
 
 ### 2. Duplicate frontend graph/card concepts
 
+Decision after the current cleanup: the homepage evidence board is canonical. `frontend/src/components/canvas/*` is a legacy secondary surface unless a future task revives it deliberately.
+
 Evidence:
 
-- `frontend/src/app/page.tsx` defines its own sticky note model, graph layout, red-string paths, and `StickyCard`.
-- `frontend/src/components/canvas/CausalGraphView.tsx` defines a separate sticky-card graph with its own color, rotation, position, and red-string path logic.
+- `frontend/src/app/page.tsx` uses the canonical `frontend/src/lib/sticky-card.tsx` and `frontend/src/lib/sticky-graph-layout.ts` modules.
+- `frontend/src/components/canvas/CausalGraphView.tsx` now reuses the shared red-string path builder, but still has separate legacy sticky-card rendering, color, rotation, and position logic.
 - `frontend/src/components/canvas/ChainView.tsx`, `DebateTreeView.tsx`, and `DataTableView.tsx` still exist as componentized views.
 
 Risk:
 
 - The same UI concept can diverge in behavior, visual language, and bug fixes.
-- A fix in `CausalGraphView.tsx` may not fix the current homepage if the homepage uses its own graph path.
+- A fix in legacy `CausalGraphView.tsx` may not fix the current homepage unless it touches the shared `frontend/src/lib/*` graph/card modules.
 
-Recommendation: decide whether `page.tsx` is the canonical evidence board, then either migrate its sections into components or remove/archive unused component paths after verifying they are not imported.
+Recommendation: keep `page.tsx` plus `frontend/src/lib/sticky-card.tsx` / `sticky-graph-layout.ts` as the canonical evidence board path. Next, either migrate the legacy canvas card rendering to shared modules or retire unused canvas components. Do not grow two graph implementations.
 
 ### 3. Backend API assembly is too concentrated
 
-Current size: `retrocause/api/main.py` is still about 88 KB and 2,400+ lines after extracting timeout/runtime execution to `retrocause/api/runtime.py`.
+Current size: `retrocause/api/main.py` is still about 84 KB and 2,300+ lines after extracting timeout/runtime execution to `retrocause/api/runtime.py` and Markdown research brief generation to `retrocause/api/briefs.py`.
 
-It contains request/response models, scenario detection, V2 conversion, analysis brief builder, Markdown builder, production brief builder, product harness, saved-run persistence, uploaded evidence, provider preflight, and streaming. Timeout/runtime execution now lives in `retrocause/api/runtime.py`.
+It contains request/response models, scenario detection, V2 conversion, analysis brief builder, production brief builder, product harness, saved-run persistence, uploaded evidence, provider preflight, and streaming. Timeout/runtime execution now lives in `retrocause/api/runtime.py`, and Markdown research brief text generation now lives in `retrocause/api/briefs.py`.
 
 Risk:
 
@@ -115,8 +117,8 @@ Risk:
 Recommended cleanup sequence:
 
 1. Move V2 schema models into `retrocause/api/schemas.py`.
-2. Move Markdown/research brief generation into `retrocause/briefs.py`.
-3. Move production brief/harness code into `retrocause/production_brief.py`.
+2. Continue moving analysis and production brief builders into `retrocause/api/briefs.py`.
+3. Move product/production harness checks into `retrocause/api/harness.py`.
 4. Keep `retrocause/api/main.py` mostly as routing and request orchestration.
 
 ### 4. Retrieval quality helpers appear in multiple modules
