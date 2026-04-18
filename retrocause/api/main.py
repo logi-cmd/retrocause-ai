@@ -13,11 +13,11 @@ from retrocause.app.demo_data import (
     topic_aware_demo_result,
 )
 from retrocause.evidence_access import describe_source_name
-from retrocause.evidence_store import EvidenceStore
 from retrocause.api.analysis_brief import build_analysis_brief_payload
 from retrocause.api.briefs import (
     build_markdown_research_brief,
 )
+from retrocause.api.evidence_routes import router as evidence_router
 from retrocause.api.harness import (
     build_product_harness_payload,
     build_production_harness_payload,
@@ -70,8 +70,6 @@ from retrocause.api.schemas import (
     ScenarioV2,
     UncertaintyAssessmentV2,
     UncertaintyReportV2,
-    UploadedEvidenceRequest,
-    UploadedEvidenceResponse,
     UsageLedgerItemV2,
     UpstreamMapEntryV2,
     UpstreamMapV2,
@@ -90,6 +88,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(evidence_router)
 
 
 def _detect_production_scenario(
@@ -703,27 +703,6 @@ async def get_saved_run(run_id: str):
         if record.get("run_id") == run_id:
             return record
     raise HTTPException(status_code=404, detail="Saved run not found")
-
-
-@app.post("/api/evidence/upload", response_model=UploadedEvidenceResponse)
-async def upload_evidence(request: UploadedEvidenceRequest):
-    content = request.content.strip()
-    if not content:
-        raise HTTPException(status_code=400, detail="Uploaded evidence content is empty")
-    evidence = EvidenceStore().add_uploaded_evidence(
-        query=request.query,
-        domain=request.domain,
-        title=request.title,
-        content=content,
-        source_name=request.source_name,
-        time_scope=request.time_scope,
-    )
-    return UploadedEvidenceResponse(
-        evidence_id=evidence.id,
-        stored=True,
-        source_tier=evidence.source_tier,
-        extraction_method=evidence.extraction_method,
-    )
 
 
 @app.post("/api/providers/preflight", response_model=ProviderPreflightResponse)

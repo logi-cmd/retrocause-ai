@@ -3265,3 +3265,41 @@ Risk notes:
   - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
   - `docs/PROJECT_STATE.md` was updated as a state file.
 - Risk disposition: both warnings are expected for this maintainability slice because schema extraction intentionally pairs code, regression coverage, synchronized project docs, and guardrails evidence. No blocking guardrails errors were reported.
+
+## 2026-04-19 uploaded evidence route extraction
+
+Scope:
+- Continued backend route-orchestration cleanup by extracting `/api/evidence/upload` from `retrocause/api/main.py` into `retrocause/api/evidence_routes.py`.
+- Kept the request/response schema in `retrocause/api/schemas.py` and kept `main.py` responsible for including the new router.
+- Updated `tests/test_comprehensive.py`, `docs/PROJECT_STATE.md`, and `docs/codebase-audit.md` so the maintenance map reflects the new route boundary.
+
+TDD / verification so far:
+- RED: `python -m pytest tests\test_comprehensive.py::test_uploaded_evidence_route_is_extracted -q --basetemp=.pytest-tmp` failed because `retrocause/api/evidence_routes.py` did not exist.
+- GREEN focused regression: `python -m pytest tests\test_comprehensive.py::test_uploaded_evidence_route_is_extracted tests\test_comprehensive.py::test_uploaded_evidence_minimal_store_round_trip -q --basetemp=.pytest-tmp` passed.
+- `python -m ruff check retrocause\api\main.py retrocause\api\evidence_routes.py tests\test_comprehensive.py`: passed.
+- `git diff --check`: passed with line-ending warnings only for tracked text files that Git will normalize on next touch.
+
+Risk notes:
+- Security/auth/secrets: no auth, permissions, API-key storage, secrets, local runtime data, or sensitive-data paths changed.
+- Sensitive data: uploaded evidence remains local alpha storage through `EvidenceStore` and the existing `RETROCAUSE_EVIDENCE_STORE_PATH` override; no hosted upload path was added.
+- Dependencies: no package or lockfile changes.
+- Performance: route relocation changes imports/router registration only; no expected latency, IO, network, or concurrency impact beyond the existing local evidence-store write.
+- Tradeoff: `main.py` now includes a small evidence router but saved-run, provider preflight, streaming, and V2 conversion orchestration remain there for later slices.
+- Continuity: mirrors FastAPI APIRouter patterns and reuses `retrocause/api/schemas.py` plus `EvidenceStore` without changing endpoint behavior.
+- Residual risk: more route handlers remain in `main.py`; future cleanup should next target saved-run routes because their boundary is similarly small.
+
+### Full verification update
+
+- Required `npm test`: passed after uploaded evidence route extraction.
+  - Frontend lint/build passed.
+  - `ruff check retrocause/`: passed.
+  - Full pytest passed: 277 tests.
+  - Browser E2E passed: 608 pass / 0 fail / 0 skip.
+
+### Guardrails final result
+
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`: passed with score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings:
+  - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
+  - `docs/PROJECT_STATE.md` was updated as a state file.
+- Risk disposition: both warnings are expected for this maintainability slice because route extraction intentionally pairs code, regression coverage, synchronized project docs, and guardrails evidence. No blocking guardrails errors were reported.

@@ -1339,6 +1339,21 @@ def test_api_schema_models_are_extracted():
     assert "class ProductionHarnessReportV2(BaseModel)" in schemas_source
 
 
+def test_uploaded_evidence_route_is_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    evidence_route_source = (
+        REPO_ROOT / "retrocause" / "api" / "evidence_routes.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from retrocause.api.evidence_routes import" in api_source
+    assert "app.include_router(evidence_router)" in api_source
+    assert "def upload_evidence" not in api_source
+    assert '"/api/evidence/upload"' not in api_source
+    assert "router = APIRouter()" in evidence_route_source
+    assert '@router.post("/api/evidence/upload"' in evidence_route_source
+    assert "def upload_evidence" in evidence_route_source
+
+
 def test_legacy_canvas_graph_uses_shared_red_string_path_builder():
     legacy_graph_source = (
         REPO_ROOT / "frontend" / "src" / "components" / "canvas" / "CausalGraphView.tsx"
