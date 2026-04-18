@@ -15,6 +15,7 @@ from retrocause.app.demo_data import (
 )
 from retrocause.evidence_access import describe_source_name
 from retrocause.evidence_store import EvidenceStore
+from retrocause.api.analysis_brief import build_analysis_brief_payload
 from retrocause.api.briefs import (
     build_markdown_research_brief,
     humanize_identifier as _humanize_identifier,
@@ -690,22 +691,6 @@ def _challenge_check_v2(item: dict) -> ChallengeCheckV2:
     )
 
 
-def _edge_challenge_phrase(edge: GraphEdgeV2) -> str:
-    refuting_count = len(edge.refuting_evidence_ids)
-    if refuting_count:
-        return f"Challenge evidence on this edge: {refuting_count}"
-    if edge.refutation_status in {
-        "checked_no_refuting_claims",
-        "no_refutation_in_retrieved_evidence",
-    }:
-        return "No challenge evidence attached to this edge after targeted retrieval"
-    if edge.refutation_status == "checked_no_results":
-        return "Challenge retrieval checked this edge but returned no source results"
-    if edge.refutation_status == "not_checked":
-        return "Challenge retrieval has not checked this edge"
-    return "No challenge evidence attached to this edge"
-
-
 def _trace_value(item: object, key: str, default: object = None) -> object:
     if isinstance(item, dict):
         return item.get(key, default)
@@ -770,109 +755,6 @@ def _retrieval_trace_item_v2(item: object) -> RetrievalTraceItemV2:
         retry_after_seconds=_coerce_optional_int(
             _trace_value(item, "retry_after_seconds", None)
         ),
-    )
-
-
-def _build_analysis_brief(
-    result: AnalysisResult,
-    chains: List[HypothesisChainV2],
-    checks: List[ChallengeCheckV2],
-) -> AnalysisBriefV2:
-    if not chains:
-        return AnalysisBriefV2(
-            answer="No usable causal chain was produced for this run.",
-            confidence=0.0,
-            top_reasons=[],
-            challenge_summary="Challenge retrieval could not run without a causal chain.",
-            missing_evidence=["A usable causal graph is needed before evidence can be challenged."],
-            source_coverage="No chain-level evidence coverage.",
-        )
-
-    top_chain = max(chains, key=lambda chain: chain.probability)
-    top_reasons: List[str] = []
-    evidence_by_id = {ev.id: ev for ev in result.evidences}
-    for edge in top_chain.edges[:3]:
-        excerpt = ""
-        if edge.supporting_evidence_ids:
-            evidence = evidence_by_id.get(edge.supporting_evidence_ids[0])
-            if evidence is not None:
-                excerpt = f" Evidence: {evidence.content[:120]}"
-        top_reasons.append(
-            f"{_humanize_identifier(edge.source)} -> {_humanize_identifier(edge.target)} "
-            f"({edge.strength:.0%} edge strength, "
-            f"{len(edge.supporting_evidence_ids)} supporting evidence item(s), "
-            f"{_edge_challenge_phrase(edge)}).{excerpt}"
-        )
-
-    refuting_total = sum(check.refuting_count for check in checks)
-    checked_total = len(checks)
-    if refuting_total:
-        challenge_summary = f"Found {refuting_total} challenge evidence item(s) across {checked_total} checked edge(s)."
-    elif checked_total:
-        challenge_summary = f"Checked {checked_total} key edge(s) and found no explicit refuting claim in retrieved evidence."
-    else:
-        challenge_summary = "Challenge retrieval has not checked this result yet."
-
-    missing: List[str] = []
-    if not checks:
-        missing.append("Targeted challenge retrieval did not run for this result.")
-    if any(edge.refutation_status == "checked_no_results" for edge in top_chain.edges):
-        missing.append("At least one challenge query returned no source results.")
-    if any(not edge.supporting_evidence_ids for edge in top_chain.edges):
-        missing.append("At least one causal edge still lacks direct supporting evidence.")
-    source_values = {str(ev.source_type) for ev in result.evidences}
-    high_quality_count = sum(
-        1
-        for ev in result.evidences
-        if getattr(ev, "extraction_method", "")
-        in {
-            "llm_fulltext_trusted",
-            "llm_fulltext",
-            "llm_trusted",
-            "store_cache",
-            "uploaded_evidence",
-        }
-    )
-    if high_quality_count == 0:
-        missing.append("No trusted full-text or cached high-quality evidence is attached.")
-    if not missing:
-        missing.append("Primary-source confirmation may still be needed for high-stakes use.")
-
-    source_coverage = (
-        f"{len(source_values)} source type(s), {high_quality_count} high-quality evidence item(s), "
-        f"{len(result.evidences)} total evidence item(s)."
-    )
-    trace_statuses = [
-        _retrieval_status_from_trace(item)
-        for item in getattr(result, "retrieval_trace", [])
-    ]
-    degraded_count = sum(
-        status
-        in {
-            "source_limited",
-            "rate_limited",
-            "forbidden",
-            "timeout",
-            "source_error",
-        }
-        for status in trace_statuses
-    )
-    if trace_statuses:
-        source_coverage += (
-            f" Retrieval trace: {len(trace_statuses)} source attempt(s), "
-            f"{degraded_count} degraded or limited."
-        )
-
-    return AnalysisBriefV2(
-        answer=(
-            f"Most likely explanation: {top_chain.label} "
-            f"({top_chain.probability:.0%} confidence signal)."
-        ),
-        confidence=top_chain.probability,
-        top_reasons=top_reasons,
-        challenge_summary=challenge_summary,
-        missing_evidence=missing[:4],
-        source_coverage=source_coverage,
     )
 
 
@@ -1581,7 +1463,17 @@ def _result_to_v2(
             for item in getattr(result, "retrieval_trace", [])
         ],
         challenge_checks=challenge_checks,
-        analysis_brief=_build_analysis_brief(result, chains_v2, challenge_checks),
+        analysis_brief=AnalysisBriefV2(
+            **build_analysis_brief_payload(
+                result=result,
+                chains=chains_v2,
+                checks=challenge_checks,
+                retrieval_statuses=[
+                    _retrieval_status_from_trace(item)
+                    for item in getattr(result, "retrieval_trace", [])
+                ],
+            )
+        ),
         uncertainty_report=uncertainty_v2,
     )
     scenario = _detect_production_scenario(

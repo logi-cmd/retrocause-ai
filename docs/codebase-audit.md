@@ -105,9 +105,9 @@ Recommendation: keep `page.tsx` plus `frontend/src/lib/sticky-card.tsx` / `stick
 
 ### 3. Backend API assembly is too concentrated
 
-Current size: `retrocause/api/main.py` is still large after extracting timeout/runtime execution to `retrocause/api/runtime.py`, Markdown research brief generation to `retrocause/api/briefs.py`, production scenario metadata/keyword scoring to `retrocause/api/scenarios.py`, provider preflight classification/model-resolution helpers to `retrocause/api/provider_preflight.py`, saved-run JSON persistence to `retrocause/api/run_store.py`, and run-step/usage-ledger payload assembly to `retrocause/api/run_metadata.py`.
+Current size: `retrocause/api/main.py` is still large after extracting timeout/runtime execution to `retrocause/api/runtime.py`, Markdown research brief generation to `retrocause/api/briefs.py`, structured analysis brief payload assembly to `retrocause/api/analysis_brief.py`, production scenario metadata/keyword scoring to `retrocause/api/scenarios.py`, provider preflight classification/model-resolution helpers to `retrocause/api/provider_preflight.py`, saved-run JSON persistence to `retrocause/api/run_store.py`, and run-step/usage-ledger payload assembly to `retrocause/api/run_metadata.py`.
 
-It contains request/response models, V2 conversion, analysis brief builder, production brief builder, product harness, uploaded evidence, provider preflight route orchestration, and streaming. Timeout/runtime execution now lives in `retrocause/api/runtime.py`, Markdown research brief text generation now lives in `retrocause/api/briefs.py`, production scenario detection metadata now lives in `retrocause/api/scenarios.py`, provider/preflight string classification now lives in `retrocause/api/provider_preflight.py`, saved-run JSON IO now lives in `retrocause/api/run_store.py`, and run metadata payload assembly now lives in `retrocause/api/run_metadata.py`.
+It contains request/response models, V2 conversion, production brief builder, product harness, uploaded evidence, provider preflight route orchestration, and streaming. Timeout/runtime execution now lives in `retrocause/api/runtime.py`, Markdown research brief text generation now lives in `retrocause/api/briefs.py`, structured analysis brief payload assembly now lives in `retrocause/api/analysis_brief.py`, production scenario detection metadata now lives in `retrocause/api/scenarios.py`, provider/preflight string classification now lives in `retrocause/api/provider_preflight.py`, saved-run JSON IO now lives in `retrocause/api/run_store.py`, and run metadata payload assembly now lives in `retrocause/api/run_metadata.py`.
 
 Risk:
 
@@ -117,7 +117,7 @@ Risk:
 Recommended cleanup sequence:
 
 1. Move V2 schema models into `retrocause/api/schemas.py`.
-2. Continue moving analysis and production brief builders into `retrocause/api/briefs.py`.
+2. Continue moving production brief builders into a focused helper module.
 3. Move product/production harness checks into `retrocause/api/harness.py`.
 4. Keep `retrocause/api/main.py` mostly as routing and request orchestration.
 
@@ -173,7 +173,7 @@ Recommendation: introduce shared test fixtures only after the next refactor targ
 ## Current Non-Code Cleanup Backlog
 
 1. Continue splitting `frontend/src/app/page.tsx` by product section, next targeting remaining homepage panel layout/query-flow split or retiring the legacy canvas state path.
-2. Split `retrocause/api/main.py` by schema, brief builders, harnesses, and route handlers.
+2. Split `retrocause/api/main.py` by schema, production brief builders, harnesses, and route handlers.
 3. Consolidate retrieval quality/fallback semantics around SourceBroker policy.
 4. Add adapter contract tests for source metadata consistency.
 

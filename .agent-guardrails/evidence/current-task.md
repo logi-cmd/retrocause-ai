@@ -3095,3 +3095,49 @@ Risk notes:
   - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
   - `docs/PROJECT_STATE.md` was updated as a state file.
 - Risk disposition: both warnings are expected for this maintainability slice because backend helper extraction is intentionally paired with regression coverage and synchronized docs/evidence. No blocking guardrails errors were reported.
+
+## 2026-04-18 analysis brief helper extraction
+
+Scope:
+- Continued backend maintainability cleanup by extracting structured analysis brief payload assembly from `retrocause/api/main.py` into `retrocause/api/analysis_brief.py`.
+- Kept API Pydantic schemas and response model construction in `retrocause/api/main.py`; the helper returns a plain payload dictionary that `main.py` wraps in `AnalysisBriefV2`.
+- Synchronized `docs/PROJECT_STATE.md` and `docs/codebase-audit.md` so the backend extraction map stays current.
+
+TDD / verification so far:
+- RED: `python -m pytest tests\test_comprehensive.py::test_api_analysis_brief_builder_is_extracted -q --basetemp=.pytest-tmp` failed because `retrocause/api/analysis_brief.py` did not exist.
+- GREEN: `python -m pytest tests\test_comprehensive.py::test_api_analysis_brief_builder_is_extracted tests\test_comprehensive.py::test_result_to_v2_surfaces_challenge_checks_and_analysis_brief tests\test_comprehensive.py::test_degraded_source_drill_surfaces_all_limited_states_for_review -q --basetemp=.pytest-tmp` passed.
+
+Risk notes:
+- Security/auth/secrets: no auth, permissions, API-key storage, secrets, local runtime data, or sensitive-data paths changed.
+- Dependencies: no package or lockfile changes.
+- Performance: helper extraction is in-process list/string assembly only; no expected latency, IO, network, or concurrency impact.
+- Tradeoff: `main.py` still owns `AnalysisBriefV2` construction and V2 conversion. This intentionally avoids mixing a schema migration into the same slice.
+- Continuity: follows the small backend helper pattern used by `runtime.py`, `briefs.py`, `scenarios.py`, `provider_preflight.py`, `run_store.py`, and `run_metadata.py`.
+- Residual risk: `main.py` remains large; future cleanup should target production brief builders, product harness checks, schemas, or route orchestration in separate tested slices.
+
+### Full verification update
+
+- `python -m ruff check retrocause\api\main.py retrocause\api\analysis_brief.py`: passed.
+- `git diff --check`: passed with line-ending warnings only for tracked text files that Git will normalize on next touch.
+- Focused regression: `python -m pytest tests\test_comprehensive.py::test_api_analysis_brief_builder_is_extracted tests\test_comprehensive.py::test_result_to_v2_surfaces_challenge_checks_and_analysis_brief tests\test_comprehensive.py::test_degraded_source_drill_surfaces_all_limited_states_for_review -q --basetemp=.pytest-tmp`: passed.
+- `npm test`: passed after analysis brief helper extraction.
+  - Frontend lint/build passed.
+  - `ruff check retrocause/`: passed.
+  - Full pytest passed: 273 tests.
+  - Browser E2E passed: 608 pass / 0 fail / 0 skip.
+
+### Duplicate-helper review update
+
+- During diff review, the first extraction had copied retrieval-status inference into `analysis_brief.py`.
+- Adjusted the boundary so `main.py` reuses the existing `_retrieval_status_from_trace` helper and passes `retrieval_statuses` into `build_analysis_brief_payload`, avoiding a new near-duplicate helper.
+- Re-ran `python -m ruff check retrocause\api\main.py retrocause\api\analysis_brief.py`: passed.
+- Re-ran focused analysis brief regression: passed.
+- Re-ran final `npm test`: passed with frontend lint/build, `ruff check retrocause/`, full pytest (`273 passed`), and browser E2E (`608 PASS / 0 FAIL / 0 SKIP`).
+
+### Guardrails final result
+
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"`: passed with score 90/100 (`safe-to-deploy`).
+- Non-blocking warnings:
+  - The change spans 4 top-level areas: `.agent-guardrails`, `docs`, `retrocause`, and `tests`.
+  - `docs/PROJECT_STATE.md` was updated as a state file.
+- Risk disposition: both warnings are expected for this maintainability slice because the helper extraction intentionally pairs backend code, regression coverage, and synchronized docs/evidence. No blocking guardrails errors were reported.

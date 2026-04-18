@@ -1274,6 +1274,20 @@ def test_api_run_metadata_assembly_is_extracted():
     assert "def quota_owner_for_source_payload" in run_metadata_source
 
 
+def test_api_analysis_brief_builder_is_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    analysis_brief_source = (
+        REPO_ROOT / "retrocause" / "api" / "analysis_brief.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from retrocause.api.analysis_brief import" in api_source
+    assert "build_analysis_brief_payload" in api_source
+    assert "def _build_analysis_brief" not in api_source
+    assert "def _edge_challenge_phrase" not in api_source
+    assert "def build_analysis_brief_payload" in analysis_brief_source
+    assert "def edge_challenge_phrase" in analysis_brief_source
+
+
 def test_legacy_canvas_graph_uses_shared_red_string_path_builder():
     legacy_graph_source = (
         REPO_ROOT / "frontend" / "src" / "components" / "canvas" / "CausalGraphView.tsx"
