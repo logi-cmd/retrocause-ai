@@ -1177,6 +1177,19 @@ def test_frontend_extracts_sticky_graph_layout_helpers():
     assert "NOTE_VISUAL_HEIGHT_BUFFER" in sticky_layout_source
 
 
+def test_api_timeout_runtime_helper_is_extracted():
+    api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
+    runtime_source = (REPO_ROOT / "retrocause" / "api" / "runtime.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "from retrocause.api.runtime import TimeoutError, run_with_timeout" in api_source
+    assert "def _run_with_timeout" not in api_source
+    assert "class _TimeoutError" not in api_source
+    assert "def run_with_timeout" in runtime_source
+    assert "class TimeoutError" in runtime_source
+
+
 def test_frontend_localizes_source_trace_status():
     source_trace_source = (
         REPO_ROOT / "frontend" / "src" / "lib" / "source-trace.ts"
@@ -1194,6 +1207,20 @@ def test_frontend_localizes_source_trace_status():
     assert "\\u5b98\\u65b9\\u8bb0\\u5f55" in source_trace_source
     assert "\\u7a33\\u5b9a" in source_trace_source
     assert "\\u4e0d\\u7a33\\u5b9a" in source_trace_source
+
+
+def test_frontend_empty_source_trace_is_explicit_for_demo_mode():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    source_trace_panel_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "source-trace-panel.tsx"
+    ).read_text(encoding="utf-8")
+
+    assert "mode={analysisMode.mode}" in page_source
+    assert "No live retrieval trace" in source_trace_panel_source
+    assert "\\u65e0\\u5b9e\\u65f6\\u68c0\\u7d22\\u8f68\\u8ff9" in source_trace_panel_source
+    assert "retrievalTrace.length === 0" in source_trace_panel_source
 
 
 def test_frontend_evidence_formatting_helpers_are_extracted():

@@ -70,7 +70,7 @@ Decision after this audit: the browser evidence board started by `python start.p
 
 ### 1. `frontend/src/app/page.tsx` is the biggest risk
 
-Current size after the source-trace, evidence-formatting, production-brief, saved-runs, uploaded-evidence, source-trace-panel, readable-brief-panel, source-progress-panel, challenge-coverage-panel, evidence-filter-panel, sticky-card, and sticky-graph-layout refactor slices: about 124 KB and 3,195 lines. API response/UI state types now live in `frontend/src/lib/api-types.ts`, source-trace status/source-kind/source-stability label helpers now live in `frontend/src/lib/source-trace.ts`, the rendered source trace list now lives in `frontend/src/lib/source-trace-panel.tsx`, readable brief/manual-copy/source-health rendering now lives in `frontend/src/lib/readable-brief-panel.tsx`, partial-live reason and in-flight retrieval progress rendering now lives in `frontend/src/lib/source-progress-panel.tsx`, challenge/refutation coverage rendering now lives in `frontend/src/lib/challenge-coverage-panel.tsx`, related-evidence filter/list rendering now lives in `frontend/src/lib/evidence-filter-panel.tsx`, sticky note card rendering now lives in `frontend/src/lib/sticky-card.tsx`, sticky graph layout and red-string path math now live in `frontend/src/lib/sticky-graph-layout.ts`, evidence quality/freshness/badge/refutation formatting helpers now live in `frontend/src/lib/evidence-formatting.ts`, the production brief card now lives in `frontend/src/lib/production-brief-panel.tsx`, the saved-runs panel now lives in `frontend/src/lib/saved-runs-panel.tsx`, and the uploaded-evidence panel now lives in `frontend/src/lib/uploaded-evidence-panel.tsx`.
+Current size after the source-trace, evidence-formatting, production-brief, saved-runs, uploaded-evidence, source-trace-panel, readable-brief-panel, source-progress-panel, challenge-coverage-panel, evidence-filter-panel, sticky-card, and sticky-graph-layout refactor slices: about 124 KB and 3,195 lines. API response/UI state types now live in `frontend/src/lib/api-types.ts`, source-trace status/source-kind/source-stability label helpers now live in `frontend/src/lib/source-trace.ts`, the rendered source trace list and empty demo/no-key trace note now live in `frontend/src/lib/source-trace-panel.tsx`, readable brief/manual-copy/source-health rendering now lives in `frontend/src/lib/readable-brief-panel.tsx`, partial-live reason and in-flight retrieval progress rendering now lives in `frontend/src/lib/source-progress-panel.tsx`, challenge/refutation coverage rendering now lives in `frontend/src/lib/challenge-coverage-panel.tsx`, related-evidence filter/list rendering now lives in `frontend/src/lib/evidence-filter-panel.tsx`, sticky note card rendering now lives in `frontend/src/lib/sticky-card.tsx`, sticky graph layout and red-string path math now live in `frontend/src/lib/sticky-graph-layout.ts`, evidence quality/freshness/badge/refutation formatting helpers now live in `frontend/src/lib/evidence-formatting.ts`, the production brief card now lives in `frontend/src/lib/production-brief-panel.tsx`, the saved-runs panel now lives in `frontend/src/lib/saved-runs-panel.tsx`, and the uploaded-evidence panel now lives in `frontend/src/lib/uploaded-evidence-panel.tsx`.
 
 It still contains localization helpers, panel layout, query flow, and global CSS in one file.
 
@@ -78,7 +78,7 @@ Risk:
 
 - New UI changes are likely to create accidental duplicate helpers instead of reusing existing components.
 - Existing component files under `frontend/src/components/` overlap with homepage logic but are not the main rendering path.
-- Small viewport bugs are harder to isolate because layout, graph math, panels, and CSS live together.
+- Small viewport bugs are now covered by browser E2E for representative panel controls, but layout, graph math, panels, and CSS still live close together.
 
 Recommended cleanup sequence:
 
@@ -103,9 +103,9 @@ Recommendation: decide whether `page.tsx` is the canonical evidence board, then 
 
 ### 3. Backend API assembly is too concentrated
 
-Current size: `retrocause/api/main.py` is about 90 KB and 2,500+ lines.
+Current size: `retrocause/api/main.py` is still about 88 KB and 2,400+ lines after extracting timeout/runtime execution to `retrocause/api/runtime.py`.
 
-It contains request/response models, scenario detection, V2 conversion, analysis brief builder, Markdown builder, production brief builder, product harness, saved-run persistence, uploaded evidence, provider preflight, and streaming.
+It contains request/response models, scenario detection, V2 conversion, analysis brief builder, Markdown builder, production brief builder, product harness, saved-run persistence, uploaded evidence, provider preflight, and streaming. Timeout/runtime execution now lives in `retrocause/api/runtime.py`.
 
 Risk:
 

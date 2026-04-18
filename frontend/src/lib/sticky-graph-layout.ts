@@ -28,6 +28,8 @@ export const NOTE_VISUAL_HEIGHT_BUFFER = 14;
 export const PANEL_SAFE_LEFT_OPEN = 296;
 export const PANEL_SAFE_RIGHT_OPEN = 356;
 export const PANEL_SAFE_CLOSED = 24;
+const NARROW_BOARD_WIDTH = 720;
+const NARROW_PANEL_SAFE_OPEN = 48;
 
 export interface StickyNote extends Omit<StickyCardNote, "color"> {
   color: StickyColor;
@@ -71,13 +73,28 @@ export function computeLayout(
 ): StickyNote[] {
   if (nodes.length === 0) return [];
 
-  const leftMargin = leftPanelOpen ? Math.min(340, Math.max(230, boardWidth * 0.22)) : 88;
-  const rightMargin = rightPanelOpen ? Math.min(400, Math.max(260, boardWidth * 0.26)) : 88;
-  const canvasHeight = Math.max(0, boardHeight - headerHeight);
+  const safeBoardWidth = Math.max(1, Number.isFinite(boardWidth) ? boardWidth : 1);
+  const safeBoardHeight = Math.max(1, Number.isFinite(boardHeight) ? boardHeight : 1);
+  const isNarrowBoard = safeBoardWidth <= NARROW_BOARD_WIDTH;
+  const leftMargin = isNarrowBoard
+    ? leftPanelOpen
+      ? NARROW_PANEL_SAFE_OPEN
+      : PANEL_SAFE_CLOSED
+    : leftPanelOpen
+      ? Math.min(340, Math.max(230, safeBoardWidth * 0.22))
+      : 88;
+  const rightMargin = isNarrowBoard
+    ? rightPanelOpen
+      ? NARROW_PANEL_SAFE_OPEN
+      : PANEL_SAFE_CLOSED
+    : rightPanelOpen
+      ? Math.min(400, Math.max(260, safeBoardWidth * 0.26))
+      : 88;
+  const canvasHeight = Math.max(1, safeBoardHeight - headerHeight);
   const topMargin = NOTE_TOP_SAFE_PX;
   const bottomMargin = NOTE_BOTTOM_SAFE_PX + NOTE_VISUAL_HEIGHT_BUFFER;
-  const usableWidth = boardWidth - leftMargin - rightMargin;
-  const usableHeight = canvasHeight - topMargin - bottomMargin;
+  const usableWidth = Math.max(1, safeBoardWidth - leftMargin - rightMargin);
+  const usableHeight = Math.max(1, canvasHeight - topMargin - bottomMargin);
 
   const rotations = [-3, -1.5, 0.5, 2, -2, 1.5, -0.5, 3, -2.5, 1];
   const n = nodes.length;
@@ -131,7 +148,9 @@ export function computeLayout(
   return prelimPositions.map((pos, i) => {
     const color = getStickyColor(i, pos.node.depth);
     const [width, height] = NOTE_DIMS[color];
-    const left = Math.max(leftMargin, Math.min(pos.x, boardWidth - rightMargin - width));
+    const minLeft = Math.min(leftMargin, Math.max(0, safeBoardWidth - width));
+    const maxLeft = Math.max(minLeft, safeBoardWidth - rightMargin - width);
+    const left = Math.max(minLeft, Math.min(pos.x, maxLeft));
     const visualHeight = height + NOTE_VISUAL_HEIGHT_BUFFER;
     const maxTop = canvasHeight - bottomMargin - visualHeight;
     const row = Math.floor(i / cols);
@@ -172,6 +191,10 @@ export function buildEdgePath(
   ty: number,
   strength: number
 ): { d: string; opacity: number; width: number } {
+  if (![sx, sy, tx, ty, strength].every(Number.isFinite)) {
+    return { d: "", opacity: 0, width: 0 };
+  }
+
   const dx = tx - sx;
   const dy = ty - sy;
   const absDx = Math.abs(dx);
@@ -223,12 +246,15 @@ export function computeCausalStrings(
 
     const [sx, sy] = getPushpinAnchor(source);
     const [tx, ty] = getPushpinAnchor(target);
+    const strength = Number.isFinite(edge.strength) ? edge.strength : 0;
+    const path = buildEdgePath(sx, sy, tx, ty, strength);
+    if (!path.d) continue;
 
     paths.push({
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      ...buildEdgePath(sx, sy, tx, ty, edge.strength),
+      ...path,
     });
   }
 

@@ -578,6 +578,38 @@ else:
                     time.sleep(0.3)
                     check("UI right panel shows again", page.locator(".right-panel").is_visible())
 
+                    print("\n  --- 11e: Narrow Viewport Panel Controls ---")
+                    page.set_viewport_size({"width": 390, "height": 844})
+                    time.sleep(0.5)
+                    narrow_left_toggle_ok = True
+                    try:
+                        page.locator(".panel-embedded-toggle").first.click(timeout=2000)
+                    except PlaywrightTimeoutError:
+                        narrow_left_toggle_ok = False
+                    check(
+                        "UI narrow viewport left panel control remains clickable",
+                        narrow_left_toggle_ok and not page.locator(".left-panel").is_visible(),
+                        "left panel hide control was blocked at 390px viewport",
+                    )
+                    narrow_right_toggle_ok = True
+                    try:
+                        page.locator(".panel-embedded-toggle-right").click(timeout=2000)
+                    except PlaywrightTimeoutError:
+                        narrow_right_toggle_ok = False
+                    check(
+                        "UI narrow viewport right panel control remains clickable after left closes",
+                        narrow_right_toggle_ok and not page.locator(".right-panel").is_visible(),
+                        "right panel hide control was blocked after closing left panel",
+                    )
+                    if not page.locator(".left-panel").is_visible():
+                        page.locator(".panel-toggle-left").click()
+                        time.sleep(0.2)
+                    if not page.locator(".right-panel").is_visible():
+                        page.locator(".panel-toggle-right").click()
+                        time.sleep(0.2)
+                    page.set_viewport_size({"width": 1440, "height": 900})
+                    time.sleep(0.3)
+
                 # 11e: Canvas zoom controls
                 print("\n  --- 11e: Canvas Zoom Controls ---")
                 zoom_controls = page.locator(".zoom-controls")
@@ -599,8 +631,25 @@ else:
 
                 # 11f: Bottom drag safety
                 print("\n  --- 11f: Bottom Drag Safety ---")
+                if page.locator(".left-panel").is_visible():
+                    page.locator(".panel-embedded-toggle").first.click()
+                    time.sleep(0.2)
+                if page.locator(".right-panel").is_visible():
+                    page.locator(".panel-embedded-toggle-right").click()
+                    time.sleep(0.2)
                 drag_card = page.locator(".sticky-card").first
                 if drag_card.count() > 0:
+                    viewport_width = page.evaluate("window.innerWidth")
+                    for card_index in range(cards_after.count()):
+                        candidate = cards_after.nth(card_index)
+                        candidate_box = candidate.bounding_box()
+                        if (
+                            candidate_box
+                            and candidate_box["x"] > 320
+                            and candidate_box["x"] + candidate_box["width"] < viewport_width - 380
+                        ):
+                            drag_card = candidate
+                            break
                     box = drag_card.bounding_box()
                     viewport_height = page.evaluate("window.innerHeight")
                     if box:
@@ -617,6 +666,12 @@ else:
                             40 <= viewport_height - dragged_bottom <= 90,
                             f"bottom gap={viewport_height - dragged_bottom:.1f}px",
                         )
+                if not page.locator(".left-panel").is_visible():
+                    page.locator(".panel-toggle-left").click()
+                    time.sleep(0.2)
+                if not page.locator(".right-panel").is_visible():
+                    page.locator(".panel-toggle-right").click()
+                    time.sleep(0.2)
 
                 # 11g: Chain comparison switching regression
                 print("\n  --- 11g: Chain Compare Switching ---")

@@ -2767,3 +2767,56 @@ Guardrails after sticky graph layout extraction:
 - `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` -> passed with concerns, score 85/100, no blocking errors.
 - Warnings remain review-size/continuity warnings from the accumulated branch diff spanning `.agent-guardrails`, docs, frontend, tests, scripts, and README/state docs.
 - Mitigation: evidence documents security/dependency/performance/understanding/continuity risks; split by reviewable theme before merge.
+
+## 2026-04-18 OSS stabilization and maintainability follow-up
+
+Scope:
+- Added a browser E2E regression for narrow 390px panel controls, then constrained mobile panel width/stacking so left and right embedded controls stay clickable.
+- Hardened sticky graph layout and red-string path generation against non-finite board dimensions or edge strengths so SVG paths do not emit `NaN`.
+- Made empty demo/no-key source traces explicit in `SourceTracePanel` instead of hiding the panel when `retrieval_trace=[]`.
+- Extracted the API timeout runner from `retrocause/api/main.py` into `retrocause/api/runtime.py`.
+- Updated `docs/PROJECT_STATE.md` and `docs/codebase-audit.md` so the maintenance map reflects these fixes and the remaining cleanup targets.
+
+Commands run:
+- `pytest tests\test_comprehensive.py::test_frontend_empty_source_trace_is_explicit_for_demo_mode -q` -> initially failed before the empty-trace note existed, then passed after the `SourceTracePanel` update.
+- `pytest tests\test_comprehensive.py::test_api_timeout_runtime_helper_is_extracted -q` -> initially failed before `retrocause/api/runtime.py` existed, then passed after extracting `run_with_timeout`.
+- `python scripts\e2e_test.py` -> initially exposed the narrow-panel click issue and SVG `NaN` console errors, then passed with `608 PASS / 0 FAIL / 0 SKIP` after the panel and graph-layout fixes.
+- `npm test` -> first failed on a frontend lint invalid Unicode escape while editing the localized source-trace copy, then failed once because a stale Next server on port 3005 returned 500s, then passed after fixing the escape and restarting the stale local frontend process. Final pass covered frontend lint, frontend build, `ruff check retrocause/`, full pytest (`265 passed`), and browser E2E (`608 PASS / 0 FAIL / 0 SKIP`).
+
+Security / sensitive data:
+- No auth, permission, API-key storage, or sensitive-data handling changed.
+- No secrets, `.retrocause/` runtime data, or local cache artifacts were intentionally added.
+
+Dependency impact:
+- No new packages, package upgrades, or lockfile changes.
+
+Performance / load impact:
+- Graph/layout hardening is O(1) bounds checking around existing layout math.
+- Empty source-trace copy is a small conditional render only when there are no retrieval attempts.
+- Timeout helper extraction preserves the existing threaded behavior and log shape while reducing the API route module size slightly.
+- E2E adds a narrow-viewport interaction check, increasing test coverage rather than runtime application work.
+
+Understanding / tradeoffs:
+- The mobile fix keeps the existing two-panel model and only changes narrow-width bounds/stacking, avoiding a larger responsive redesign in this maintenance slice.
+- The graph fix prefers clamping and skipping invalid paths over throwing in the browser, because a missing edge is less misleading than repeated invalid SVG output.
+- `retrocause/api/main.py` remains large; this slice deliberately moved only the timeout runtime helper so later schema, brief-builder, and harness extractions can remain reviewable.
+
+Continuity and reuse:
+- Reused the existing `SourceTracePanel` and sticky graph helper boundaries instead of adding parallel UI paths.
+- Kept the API timeout behavior under the same public call sites by importing `TimeoutError` and `run_with_timeout` from `retrocause.api.runtime`.
+
+Residual risks / next work:
+- README clean-clone first-run validation should be rerun in a fresh checkout after this maintenance batch.
+- A true live Chinese finance query with real provider/search keys still needs verification.
+- Duplicate graph/card concepts remain between the homepage evidence board and older component paths.
+- The large API route module still needs small, verified follow-up splits for schemas, brief builders, and harness helpers.
+
+Guardrails after OSS stabilization follow-up:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` -> passed, trust score 95/100, safe-to-deploy classification, no blocking errors.
+- Nonblocking warning: `docs/PROJECT_STATE.md` changed. This is intentional because the task explicitly required keeping project documentation synchronized with the mobile/source-trace/API-runtime maintenance work.
+- Evidence already documents security, dependency, performance, maintainability tradeoffs, continuity/reuse, and residual risks.
+
+Final guardrails after commit 64647c7:
+- `cmd /c npx.cmd -y -p agent-guardrails agent-guardrails check --base-ref HEAD~1 --lang zh-CN --commands-run "npm test"` -> passed, trust score 90/100, safe-to-deploy classification, no blocking errors.
+- Nonblocking warnings: the commit spans six top-level areas (`.agent-guardrails`, `docs`, `frontend`, `retrocause`, `scripts`, `tests`) and intentionally updates `docs/PROJECT_STATE.md`.
+- Rationale: this was the approved final maintenance sweep tying together UI regressions, one backend helper split, tests, and documentation/evidence synchronization. Future work should return to smaller module-scoped commits.

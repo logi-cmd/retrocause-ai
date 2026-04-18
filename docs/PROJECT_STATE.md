@@ -28,6 +28,7 @@ What is done:
 - GitHub prerelease `v0.1.0-alpha.5`
 - SourceBroker reliability pass: source profiles, scenario/language/time-aware cache keys, degraded-source classification, API/brief/UI source-health status, and optional user-key Tavily/Brave adapters
 - lightweight local run workflow: `run_id`, run status/steps, source/provider usage ledger, saved-run endpoints/UI, and minimal pasted uploaded evidence stored as user-owned evidence
+- OSS stabilization follow-up: narrow-viewport panel controls are browser-tested, graph path layout guards against `NaN`, demo/no-key source trace absence is explicit, and the API timeout helper has been split out of the large route module
 
 What is not done:
 
@@ -38,7 +39,7 @@ What is not done:
 
 ## Current Focus
 
-Stabilize the published `v0.1.0-alpha.5` OSS prerelease from real user feedback. The next quality pass should focus on mobile/narrow viewport usability, graph rendering stability, no-key demo/source-trace clarity, README first-run validation, and live Chinese finance query behavior with real provider/search keys.
+Stabilize the published `v0.1.0-alpha.5` OSS prerelease from real user feedback. The current quality pass has addressed the first mobile/source-trace regressions locally. The next work should focus on README first-run validation, live Chinese finance query behavior with real provider/search keys, and continued maintainability cleanup around duplicated graph/card components plus the remaining large API route module.
 
 Current UX focus: keep the OSS version useful and inspectable before adding more Pro behavior. Validate the general Production Brief Harness across real market, policy/geopolitics, postmortem, and Chinese finance questions. Future Pro workflow depth should be designed after OSS stabilization and should be a separate full-stack Rust rewrite rather than an incremental hosted extension of this alpha codebase.
 
@@ -106,24 +107,24 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Added `docs/INDEX.md` and `docs/codebase-audit.md` so maintainers have one documentation map plus a living audit of public surfaces, undocumented capabilities, similar-code hotspots, and cleanup priorities.
 - Began reducing the large Next.js homepage by moving API/UI types, source-trace formatting, evidence formatting, the production brief card, the saved-runs panel, the uploaded-evidence panel, the rendered source-trace list, the readable brief panel, the source progress panel, the challenge coverage panel, the evidence filter panel, sticky card rendering, and sticky graph layout/red-string path math into focused `frontend/src/lib/` modules while keeping behavior covered by static tests and full `npm test`.
 - Normalized several fragile Chinese homepage strings to Unicode escapes while extracting the source-trace panel, preventing Windows console encoding rewrites from turning localized copy into invalid TypeScript.
+- Added browser regression coverage for narrow viewport panel controls, fixed the mobile panel stacking/width issue, and hardened sticky graph layout/path generation against non-finite values that previously produced SVG `NaN` console errors.
+- Made empty demo/no-key source traces explicit in the browser UI instead of hiding the source-trace panel when `retrieval_trace=[]`.
+- Started backend maintainability cleanup by moving the API timeout helper into `retrocause/api/runtime.py`, leaving `retrocause/api/main.py` focused slightly more on routes and response assembly.
 
 ## Known Gaps
 
 - The OSS product can now export a Markdown research brief, show retrieval-health states, reopen local saved runs, has a clean bilingual README, and passes a clean-copy install/test smoke. The brief format still needs real-user polish across more live domains.
 - Degraded-source states now have deterministic API/brief regression coverage plus browser-level source-trace dogfood for representative rate-limited/cached rows; wider visual QA across all bad-path states remains useful.
 - Direct monetization design should be deferred until OSS is solid; future Pro should be revisited as a full-stack Rust architecture rather than incremental hosted work in the current alpha stack.
-- Mobile/narrow viewport panel controls can be unreliable because overlapping right-panel/header elements may intercept clicks intended for left-panel controls.
-- Mobile/narrow viewport graph rendering can emit repeated SVG path `NaN` console errors after query/refresh, although the page remains usable.
-- Demo/no-key finance questions remain source-opaque when `retrieval_trace=[]`; the output is readable, but not evidence-inspectable enough.
 - A true live Chinese finance run with real provider/search keys still needs verification after the anchor-preservation fix.
+- The API route module is still very large even after the timeout helper extraction; schemas, brief builders, and harness helpers remain candidates for later split.
+- Duplicate frontend graph/card concepts remain between the homepage evidence board and older component paths.
 
 ## Next Step
 
 Start a new OSS stabilization task from the post-release QA findings:
 
-1. fix mobile/narrow viewport panel overlap and ambiguous collapse controls
-2. fix graph SVG `NaN` rendering state after query/refresh
-3. improve no-key/demo source-trace clarity so source-opaque results do not look more inspectable than they are
-4. rerun README first-run validation from a clean clone
-5. exercise a live Chinese finance query with real provider/search keys and record source quality
-6. continue the maintainability cleanup from `docs/codebase-audit.md`, next targeting duplicated graph/card implementation or the remaining homepage panel layout/query-flow split before attempting broader backend API decomposition
+1. rerun README first-run validation from a clean clone
+2. exercise a live Chinese finance query with real provider/search keys and record source quality
+3. continue the maintainability cleanup from `docs/codebase-audit.md`, next targeting duplicated graph/card implementation or the remaining homepage panel layout/query-flow split
+4. continue backend cleanup by moving schemas, brief builders, and harness helpers out of `retrocause/api/main.py` in small verified slices

@@ -9,11 +9,49 @@ import {
 
 type SourceTracePanelProps = {
   locale: "zh" | "en";
+  mode: "live" | "partial_live" | "demo";
   retrievalTrace: ApiRetrievalTrace[];
 };
 
-export function SourceTracePanel({ locale, retrievalTrace }: SourceTracePanelProps) {
-  if (retrievalTrace.length === 0) return null;
+export function SourceTracePanel({ locale, mode, retrievalTrace }: SourceTracePanelProps) {
+  if (retrievalTrace.length === 0) {
+    const isDemo = mode === "demo";
+    return (
+      <div
+        className="retrieval-progress"
+        data-testid="source-trace-empty"
+        style={{
+          marginTop: "10px",
+          padding: "7px 8px",
+          borderRadius: "8px",
+          background: "rgba(255,255,255,0.56)",
+          border: "1px solid rgba(160,140,110,0.16)",
+          color: "#7a6548",
+          fontSize: "0.56rem",
+          lineHeight: 1.45,
+        }}
+      >
+        <div
+          style={{
+            color: "#4a7a9e",
+            fontWeight: 800,
+            letterSpacing: "0.05em",
+            textTransform: "uppercase",
+            marginBottom: "4px",
+          }}
+        >
+          {locale === "en" ? "No live retrieval trace" : "\u65e0\u5b9e\u65f6\u68c0\u7d22\u8f68\u8ff9"}
+        </div>
+        {isDemo
+          ? locale === "en"
+            ? "Demo output uses bundled sample evidence. Treat it as UI practice, not a live source audit."
+            : "\u6f14\u793a\u8f93\u51fa\u4f7f\u7528\u5185\u7f6e\u6837\u4f8b\u8bc1\u636e\uff0c\u53ea\u9002\u5408\u7ec3\u4e60\u68c0\u67e5\u754c\u9762\uff0c\u4e0d\u662f\u5b9e\u65f6\u6765\u6e90\u5ba1\u8ba1\u3002"
+          : locale === "en"
+            ? "This run returned no retrieval-attempt rows, so source health cannot be audited from this panel."
+            : "\u672c\u6b21\u8fd0\u884c\u672a\u8fd4\u56de\u68c0\u7d22\u5c1d\u8bd5\u884c\uff0c\u56e0\u6b64\u65e0\u6cd5\u5728\u6b64\u9762\u677f\u5ba1\u8ba1\u6765\u6e90\u5065\u5eb7\u3002"}
+      </div>
+    );
+  }
 
   return (
     <div className="retrieval-progress" style={{ marginTop: "10px" }}>

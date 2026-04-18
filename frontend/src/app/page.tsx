@@ -2427,7 +2427,11 @@ export default function Home() {
             locale={locale}
           />
           {!analysisMode.loading && (
-            <SourceTracePanel locale={locale} retrievalTrace={retrievalTrace} />
+            <SourceTracePanel
+              locale={locale}
+              mode={analysisMode.mode}
+              retrievalTrace={retrievalTrace}
+            />
           )}
         </div>
 
@@ -3080,6 +3084,26 @@ export default function Home() {
           background: rgba(255, 255, 255, 0.86);
           border-color: rgba(49, 95, 131, 0.24);
           color: var(--analyst-blue);
+        }
+
+        @media (max-width: 720px) {
+          .left-panel,
+          .right-panel {
+            width: min(86vw, 320px) !important;
+          }
+
+          .left-panel {
+            z-index: 64 !important;
+          }
+
+          .right-panel {
+            z-index: 56 !important;
+          }
+
+          .panel-embedded-toggle {
+            min-height: 30px;
+            min-width: 58px;
+          }
         }
 
         .zoom-controls {

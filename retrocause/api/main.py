@@ -19,6 +19,7 @@ from retrocause.app.demo_data import (
 )
 from retrocause.evidence_access import describe_source_name
 from retrocause.evidence_store import EvidenceStore
+from retrocause.api.runtime import TimeoutError, run_with_timeout
 from retrocause.models import AnalysisResult
 
 logger = logging.getLogger(__name__)
@@ -119,45 +120,6 @@ class ProductHarnessReportV2(BaseModel):
     user_value_summary: str = ""
     checks: List[HarnessCheckV2] = []
     next_actions: List[str] = []
-
-
-class _TimeoutError(Exception):
-    pass
-
-
-def _run_with_timeout(fn, timeout_seconds: float, *args, **kwargs):
-    import time as _time
-
-    result_box: list = []
-    exc_box: list = []
-
-    _t0 = _time.time()
-
-    def target():
-        try:
-            logger.info(f"[TIMEOUT-DEBUG] target thread starting fn={fn.__name__!r}")
-            result_box.append(fn(*args, **kwargs))
-            logger.info(f"[TIMEOUT-DEBUG] target thread finished in {_time.time() - _t0:.1f}s")
-        except Exception as exc:
-            logger.error(f"[TIMEOUT-DEBUG] target thread caught {type(exc).__name__}: {exc}")
-            exc_box.append(exc)
-
-    t = threading.Thread(target=target, daemon=True)
-    t.start()
-    t.join(timeout=timeout_seconds)
-
-    _elapsed = _time.time() - _t0
-    logger.info(
-        f"[TIMEOUT-DEBUG] thread join returned after {_elapsed:.1f}s, "
-        f"is_alive={t.is_alive()}, result_box={len(result_box)}, exc_box={len(exc_box)}"
-    )
-
-    if t.is_alive():
-        raise _TimeoutError(f"Operation timed out after {timeout_seconds}s")
-
-    if exc_box:
-        raise exc_box[0]
-    return result_box[0] if result_box else None
 
 
 class GraphNode(BaseModel):
@@ -2169,8 +2131,8 @@ async def preflight_provider(request: ProviderPreflightRequest):
             base_url=provider_cfg.get("base_url"),
             timeout=min(cfg.request_timeout_seconds, 45),
         )
-        ok, error_msg = _run_with_timeout(llm.preflight_model_access, 50)
-    except _TimeoutError:
+        ok, error_msg = run_with_timeout(llm.preflight_model_access, 50)
+    except TimeoutError:
         ok = False
         error_msg = "Model preflight timed out."
     except Exception as exc:
@@ -2240,7 +2202,7 @@ async def analyze_query(request: AnalyzeRequest):
                     list(provider_cfg["models"].keys())[0] if provider_cfg else request.model
                 )
             try:
-                result = _run_with_timeout(
+                result = run_with_timeout(
                     run_real_analysis, 400, request.query, request.api_key, model_name, base_url
                 )
             except Exception:
@@ -2335,10 +2297,10 @@ async def analyze_query_v2(request: AnalyzeRequest):
                 )
             error_msg: str | None = None
             try:
-                result = _run_with_timeout(
+                result = run_with_timeout(
                     run_real_analysis, 400, request.query, request.api_key, model_name, base_url
                 )
-            except _TimeoutError:
+            except TimeoutError:
                 error_msg = "Analysis timed out. Try a simpler query or try again later."
                 result = None
             except Exception as exc:
@@ -2440,7 +2402,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                 result = None
                 error_msg = None
                 try:
-                    result = _run_with_timeout(
+                    result = run_with_timeout(
                         run_real_analysis_with_progress,
                         400,
                         request.query,
@@ -2451,10 +2413,10 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                     )
                     _elapsed = _time.time() - _t0
                     logger.info(
-                        f"[SSE-DEBUG] _run_with_timeout returned in {_elapsed:.1f}s — "
+                        f"[SSE-DEBUG] run_with_timeout returned in {_elapsed:.1f}s — "
                         f"result={'None' if result is None else type(result).__name__}"
                     )
-                except _TimeoutError:
+                except TimeoutError:
                     error_msg = "Analysis timed out. Try a simpler query or try again later."
                     logger.warning("SSE stream analysis timed out after 400s")
                 except Exception as exc:
