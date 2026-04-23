@@ -8,7 +8,7 @@ RetroCause is an open-source causal explanation workspace for complex events. It
 
 RetroCause 是一个开源的因果解释工作台，适合研究复杂事件的“原因链”。它不是因果真理机器，也不是生产级科学因果推断系统。它的目标是让 AI 输出更可检查：用户可以看到原因、证据、反证检查、不确定性和检索来源，而不是只看到一段不可追踪的总结。
 
-![RetroCause live evidence board](docs/images/golden-us-iran-live-ui.png)
+![RetroCause evidence board](docs/images/readme-evidence-board-homepage.png)
 
 ## What You Get / 你会看到什么
 
