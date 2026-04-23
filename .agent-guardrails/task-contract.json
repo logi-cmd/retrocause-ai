@@ -1,28 +1,37 @@
 {
   "schemaVersion": 3,
-  "task": "Stabilize the OSS RetroCause release into a stable-deliverable local product by finishing current docs/frontend/backend/live-stability work, syncing docs/evidence, and verifying with npm test plus guardrails.",
+  "task": "Kick off RetroCause Pro as a separate Rust full-stack rewrite with product/design docs, a Rust workspace skeleton, and an initial knowledge-graph web shell.",
   "preset": "generic",
-  "createdAt": "2026-04-23T13:50:15.545Z",
+  "createdAt": "2026-04-23T17:35:50.935Z",
   "allowedPaths": [
-    "README.md",
-    "AGENTS.md",
-    "pyproject.toml",
-    "package.json",
-    "start.py",
+    ".gitignore",
+    ".impeccable.md",
     "docs/",
-    "frontend/",
-    "retrocause/",
-    "scripts/",
-    "tests/",
+    "pro/",
     ".agent-guardrails/evidence/"
   ],
   "requiredCommands": [
-    "npm test"
+    "cargo test --manifest-path pro/Cargo.toml"
   ],
   "evidencePaths": [
     ".agent-guardrails/evidence/current-task.md"
   ],
-  "intendedFiles": [],
+  "intendedFiles": [
+    ".gitignore",
+    ".impeccable.md",
+    "docs/INDEX.md",
+    "docs/pro-prd.md",
+    "docs/pro-rust-architecture.md",
+    "pro/Cargo.toml",
+    "pro/Cargo.lock",
+    "pro/crates/domain/Cargo.toml",
+    "pro/crates/domain/src/lib.rs",
+    "pro/apps/api/Cargo.toml",
+    "pro/apps/api/src/main.rs",
+    "pro/apps/web/Cargo.toml",
+    "pro/apps/web/src/main.rs",
+    ".agent-guardrails/evidence/current-task.md"
+  ],
   "protectedPaths": [],
   "allowedChangeTypes": [],
   "riskLevel": "medium",
@@ -63,7 +72,6 @@
   "rollbackNotes": "",
   "riskJustification": "",
   "autoFilledFields": [
-    "证据路径",
     "安全要求",
     "依赖要求",
     "性能要求",
@@ -72,15 +80,14 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "21dd6483-3f89-457e-b465-022ea50310d1",
-    "createdAt": "2026-04-23T13:50:15.545Z",
+    "sessionId": "2e31b79b-002f-403b-9eed-b1fdac965ba8",
+    "createdAt": "2026-04-23T17:35:50.929Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Stabilize the OSS RetroCause release into a stable-deliverable local product by finishing current docs/frontend/backend/live-stability work, syncing docs/evidence, and verifying with npm test plus guardrails.",
+    "taskRequest": "Kick off RetroCause Pro as a separate Rust full-stack rewrite with product/design docs, a Rust workspace skeleton, and an initial knowledge-graph web shell.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],
     "autoFilledFields": [
-      "证据路径",
       "安全要求",
       "依赖要求",
       "性能要求",
@@ -88,7 +95,7 @@
       "连续性要求"
     ],
     "requiredCommandsSuggested": [
-      "npm test"
+      "cargo test --manifest-path pro/Cargo.toml"
     ],
     "evidencePathSuggested": ".agent-guardrails/evidence/current-task.md",
     "riskDimensions": {
@@ -109,7 +116,7 @@
       ]
     },
     "finishCheckHints": [
-      "Report the commands you actually ran: npm test",
+      "Report the commands you actually ran: cargo test --manifest-path pro/Cargo.toml",
       "Keep the evidence note current: .agent-guardrails/evidence/current-task.md",
       "Keep security, dependency, performance, understanding, and continuity concerns explicit in the evidence note and review summary.",
       "Finish with agent-guardrails check --review before handing off or merging."
@@ -118,7 +125,7 @@
     "archaeologyNotes": [],
     "nextActions": [
       "Implement the smallest change that fits the contract.",
-      "Run required commands: npm test",
+      "Run required commands: cargo test --manifest-path pro/Cargo.toml",
       "Update evidence: .agent-guardrails/evidence/current-task.md",
       "Keep security, dependency, performance, understanding, continuity concerns explicit in the evidence note and review summary.",
       "Run agent-guardrails check --review before completing the task."

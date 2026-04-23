@@ -201,6 +201,74 @@ Before pushing the current OSS branch, a tracked-scripts audit found that severa
 - Behavior: these scripts now require an environment variable instead of silently carrying a baked-in credential. That is intentional and is the safer default for any future local operator.
 - Scope: no application runtime path, public API behavior, or frontend rendering changed in this cleanup.
 
+## 2026-04-24 Pro Rust Kickoff
+
+After pushing the current OSS stabilization branch, Pro work was started on a separate branch: `codex/pro-rust-kg-foundation`. The goal of this kickoff was not to ship hosted Pro inside the OSS stack; it was to establish the product/design context, create a bounded Rust workspace, and prove the first graph-first UI direction.
+
+### Files Updated
+
+- `.impeccable.md`
+- `docs/INDEX.md`
+- `docs/pro-prd.md`
+- `docs/pro-rust-architecture.md`
+- `pro/Cargo.toml`
+- `pro/apps/api/Cargo.toml`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/Cargo.toml`
+- `pro/apps/web/src/main.rs`
+- `pro/crates/domain/Cargo.toml`
+- `pro/crates/domain/src/lib.rs`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added an explicit Pro design-context file in `.impeccable.md` so future design work starts from a real audience, workflow, and tone instead of generic dashboard defaults.
+- Added `docs/pro-prd.md` to define the first Solo Pro workflow, graph-first product shape, and success metrics.
+- Added `docs/pro-rust-architecture.md` to lock the kickoff stack choice and the separation boundary between OSS and the Rust rewrite.
+- Added a new Rust workspace under `pro/` with:
+  - `apps/api`: an Axum API shell with `/`, `/healthz`, and `/api/graph/seed`
+  - `apps/web`: an Axum + Maud server-rendered knowledge-graph workspace shell
+  - `crates/domain`: shared Pro graph/run types and canonical seed data used by both API and web
+- Updated `docs/INDEX.md` so the new Pro PRD and Rust architecture note are discoverable from the main documentation map.
+
+### Commands Run
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - Coverage from this kickoff:
+    - API health payload test
+    - shared domain seed-integrity test
+    - web graph-wire/path rendering test
+    - web shell section-rendering test
+
+- Pro API smoke:
+  - Started with `cargo run --manifest-path pro/apps/api/Cargo.toml`
+  - Result: `GET http://127.0.0.1:8787/healthz` returned HTTP `200`
+
+- Pro web smoke:
+  - Started with `cargo run --manifest-path pro/apps/web/Cargo.toml`
+  - Result: `GET http://127.0.0.1:3007/` returned HTTP `200`
+  - The returned HTML contained `Knowledge graph review desk`
+
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with concerns, `80/100`
+  - Non-blocking warnings:
+    - this kickoff still spans 5 top-level areas (`.agent-guardrails`, `.gitignore`, `.impeccable.md`, `docs`, `pro`)
+    - the kickoff introduces new Rust Cargo manifests under `pro/`
+    - the kickoff includes the first Pro API interface shell in `pro/apps/api/src/main.rs`
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: same pass-with-concerns outcome, `80/100`
+  - No blocking errors remained after narrowing the task contract to the actual Pro kickoff files.
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, or credential storage were added in this kickoff. The Pro workspace uses only static seed data and local ports for now.
+- Dependencies: this adds a new Rust dependency surface under `pro/` only (`axum`, `tokio`, `serde`, `serde_json`, `maud`). No Python or Node dependency graph changed for OSS.
+- Performance: the kickoff web shell is server-rendered HTML instead of a WASM-heavy client graph. That keeps compile and startup cost low while the product shape is still fluid.
+- Understanding: the main deliberate tradeoff is choosing a shared `domain` crate immediately, because both the API and the web shell need the same run/graph model even at kickoff scale. Queueing, persistence, BYOK handling, and exports are intentionally deferred.
+- Continuity: OSS runtime paths remain untouched. The intentional continuity break is architectural: Pro now starts under `pro/` as a separate Rust workspace instead of extending the Python/FastAPI + Next.js app toward hosted responsibilities.
+
 ## Security / Dependency / Performance / Understanding / Continuity Notes
 
 - Security: no secrets were added, copied into docs, or echoed in verification output. The fresh-copy validation used the documented no-secret local setup path.

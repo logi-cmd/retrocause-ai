@@ -21,6 +21,8 @@ This index is the map for the tracked project documentation. It separates curren
 | [`docs/retrieval-and-output-strategy.md`](retrieval-and-output-strategy.md) | SourceBroker retrieval policy, source states, cache behavior, output contract | Current retrieval/output source of truth |
 | [`docs/pro-workflow-spec.md`](pro-workflow-spec.md) | Future Pro workflow shape, explicitly deferred from current OSS alpha | Current boundary doc for future Pro |
 | [`docs/pro-planning-kickoff.md`](pro-planning-kickoff.md) | First Pro planning entrypoint after OSS `v0.1.0`, including scope, workstreams, and required planning artifacts | Current Pro planning kickoff |
+| [`docs/pro-prd.md`](pro-prd.md) | Product requirements draft for Solo Pro, including graph-first UX, scope, and success metrics | Current Pro kickoff PRD |
+| [`docs/pro-rust-architecture.md`](pro-rust-architecture.md) | Rust workspace kickoff architecture for the separate Pro rewrite | Current Pro implementation starting point |
 | [`docs/roadmap-and-limitations.md`](roadmap-and-limitations.md) | OSS strengths, limitations, roadmap, release-readiness heuristics | Strategic but partly historical |
 | [`docs/operational-plan.md`](operational-plan.md) | Query classes, retrieval budgets, caching, source health, rate-limit strategy | Strategic operating plan |
 | [`docs/mature-product-plan.md`](mature-product-plan.md) | Longer-term product quality contract and phased roadmap | Strategic, not an implementation promise |
