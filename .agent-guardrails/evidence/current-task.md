@@ -4644,3 +4644,11 @@ Residual risks:
 - Residual risk:
   - README still documents OSS alpha behavior only; deeper maintainer workflows remain documented elsewhere in the repo rather than the root README.
   - The repository worktree still contains unrelated in-flight changes, so release/publish actions should continue staging only the files needed for each task.
+
+## 2026-04-23 README screenshot reconstruction from reference image
+- Scope: replace `docs/images/readme-evidence-board-homepage.png` with a closer reconstruction of the user-provided reference board screenshot.
+- Method: used a one-off local Playwright capture against the running app, overriding DOM content at screenshot time only; no product code paths were changed for this slice.
+- Verification to run for this slice: `npm test`, then `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test"`.
+- Residual risk:
+  - The repo image is a local reconstruction aligned to the provided reference composition, not the original uploaded file bytes.
+  - No runtime/product behavior changed; only the README screenshot asset and this evidence note should be staged for the commit.
