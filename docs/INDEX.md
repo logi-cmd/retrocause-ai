@@ -1,6 +1,6 @@
 # RetroCause Documentation Index
 
-Last updated: 2026-04-17
+Last updated: 2026-04-24
 
 This index is the map for the tracked project documentation. It separates current operating docs from historical planning notes so new contributors do not have to infer the source of truth from file timestamps.
 
@@ -10,6 +10,7 @@ This index is the map for the tracked project documentation. It separates curren
 | --- | --- | --- |
 | [`README.md`](../README.md) | Product overview, first-time setup, local API usage, OSS/Future Pro boundary | Current entry point |
 | [`docs/PROJECT_STATE.md`](PROJECT_STATE.md) | Current shipped state, active focus, known gaps, next step | Current operating state |
+| [`docs/oss-release-gate.md`](oss-release-gate.md) | Explicit bar for promoting the current local alpha into a non-alpha OSS `v0.1.0` release | Current release-state source of truth |
 | [`AGENTS.md`](../AGENTS.md) | Required agent workflow, guardrails, verification definition | Current contributor/agent rules |
 | [`CONTRIBUTING.md`](../CONTRIBUTING.md) | Local setup, validation commands, project structure, contribution expectations | Current contributor guide |
 
@@ -19,6 +20,7 @@ This index is the map for the tracked project documentation. It separates curren
 | --- | --- | --- |
 | [`docs/retrieval-and-output-strategy.md`](retrieval-and-output-strategy.md) | SourceBroker retrieval policy, source states, cache behavior, output contract | Current retrieval/output source of truth |
 | [`docs/pro-workflow-spec.md`](pro-workflow-spec.md) | Future Pro workflow shape, explicitly deferred from current OSS alpha | Current boundary doc for future Pro |
+| [`docs/pro-planning-kickoff.md`](pro-planning-kickoff.md) | First Pro planning entrypoint after OSS `v0.1.0`, including scope, workstreams, and required planning artifacts | Current Pro planning kickoff |
 | [`docs/roadmap-and-limitations.md`](roadmap-and-limitations.md) | OSS strengths, limitations, roadmap, release-readiness heuristics | Strategic but partly historical |
 | [`docs/operational-plan.md`](operational-plan.md) | Query classes, retrieval budgets, caching, source health, rate-limit strategy | Strategic operating plan |
 | [`docs/mature-product-plan.md`](mature-product-plan.md) | Longer-term product quality contract and phased roadmap | Strategic, not an implementation promise |
@@ -31,6 +33,7 @@ This index is the map for the tracked project documentation. It separates curren
 | [`docs/codebase-audit.md`](codebase-audit.md) | Current audit of undocumented capabilities and duplication/maintenance risks | Created for the 2026-04-17 documentation pass |
 | [`docs/engineering-audit.md`](engineering-audit.md) | Older engineering audit, strengths, weak points, recommended sequence | Partly superseded by current state docs |
 | [`docs/manual-smoke-test.md`](manual-smoke-test.md) | Manual browser/API smoke scenarios and real-analysis validation notes | Useful for release QA |
+| [`scripts/live_stability_probe.py`](../scripts/live_stability_probe.py) | Repeatable real-key provider/search stability probe for OfoxAI by default, OpenRouter by opt-in, and representative live scenarios | Requires the selected provider key; writes a secret-free JSON report |
 | [`docs/PR_CHECKLIST.md`](PR_CHECKLIST.md) | Pull request review checklist | Lightweight checklist |
 
 ## Decision And Reference Records

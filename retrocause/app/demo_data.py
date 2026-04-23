@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from retrocause.models import (
     AnalysisResult,
     CausalEdge,
@@ -14,7 +16,7 @@ from retrocause.models import (
 DEMO_EVIDENCES: list[Evidence] = [
     Evidence(
         id="ev1",
-        content="Alvarez 等人 (1980) 在 K-Pg 界线发现铱异常，支持小行星撞击假说",
+        content="Alvarez et al. (1980) found an iridium anomaly at the K-Pg boundary, supporting the asteroid-impact hypothesis.",
         source_type=EvidenceType.SCIENTIFIC,
         source_url="https://doi.org/10.1126/science.210.4471.1165",
         timestamp="1980-06-06",
@@ -24,7 +26,7 @@ DEMO_EVIDENCES: list[Evidence] = [
     ),
     Evidence(
         id="ev2",
-        content="Chicxulub 陨石坑直径约 180km，年代与 K-Pg 界线吻合",
+        content="The Chicxulub crater is about 180 km wide and dates to the K-Pg boundary interval.",
         source_type=EvidenceType.SCIENTIFIC,
         source_url="https://doi.org/10.1126/science.215.4539.1407",
         timestamp="1991-01-01",
@@ -34,7 +36,7 @@ DEMO_EVIDENCES: list[Evidence] = [
     ),
     Evidence(
         id="ev3",
-        content="Deccan Traps 火山活动在 66Ma 前后持续约 75 万年",
+        content="Deccan Traps volcanism remained active across the interval around 66 Ma for roughly 750,000 years.",
         source_type=EvidenceType.LITERATURE,
         source_url="https://doi.org/10.1126/science.1179113",
         timestamp="2009-12-01",
@@ -44,7 +46,7 @@ DEMO_EVIDENCES: list[Evidence] = [
     ),
     Evidence(
         id="ev4",
-        content="全球 K-Pg 界线地层中冲击石英和玻璃球粒的广泛分布",
+        content="Shock quartz and glass spherules are distributed widely in K-Pg boundary layers around the world.",
         source_type=EvidenceType.DATA,
         timestamp="2010-03-15",
         prior_reliability=0.88,
@@ -53,7 +55,7 @@ DEMO_EVIDENCES: list[Evidence] = [
     ),
     Evidence(
         id="ev5",
-        content="海洋酸化导致钙质微体化石大规模灭绝的地球化学证据",
+        content="Geochemical evidence points to ocean acidification contributing to large-scale loss of calcareous microfossils.",
         source_type=EvidenceType.SCIENTIFIC,
         timestamp="2015-05-20",
         prior_reliability=0.80,
@@ -62,7 +64,7 @@ DEMO_EVIDENCES: list[Evidence] = [
     ),
     Evidence(
         id="ev6",
-        content="化石记录显示非鸟类恐龙在大约 66Ma 前突然消失",
+        content="The fossil record shows non-avian dinosaurs disappearing abruptly around 66 Ma.",
         source_type=EvidenceType.ARCHIVE,
         timestamp="2020-01-10",
         prior_reliability=0.92,
@@ -71,7 +73,7 @@ DEMO_EVIDENCES: list[Evidence] = [
     ),
     Evidence(
         id="ev7",
-        content="气候模型显示撞击冬季可持续数年至数十年",
+        content="Climate models suggest an impact winter could have lasted from several years to multiple decades.",
         source_type=EvidenceType.DATA,
         timestamp="2017-08-01",
         prior_reliability=0.78,
@@ -80,7 +82,7 @@ DEMO_EVIDENCES: list[Evidence] = [
     ),
     Evidence(
         id="ev8",
-        content="部分深海生物和淡水生物存活，支持食物链崩溃假说",
+        content="Some deep-sea and freshwater species survived, supporting a food-chain collapse scenario rather than uniform extinction pressure.",
         source_type=EvidenceType.LITERATURE,
         timestamp="2016-11-05",
         prior_reliability=0.75,
@@ -89,224 +91,224 @@ DEMO_EVIDENCES: list[Evidence] = [
     ),
     Evidence(
         id="svb_ev1",
-        content="美联储快速加息使长期债券市场价格显著回落。",
+        content="Rapid Fed rate hikes sharply reduced the market value of long-duration bonds.",
         source_type=EvidenceType.NEWS,
         posterior_reliability=0.82,
         linked_variables=["rate_hikes", "bond_losses"],
     ),
     Evidence(
         id="svb_ev2",
-        content="SVB 资产端久期过长，对利率变动高度敏感。",
+        content="SVB carried unusually long-duration assets, making it highly sensitive to rate moves.",
         source_type=EvidenceType.DATA,
         posterior_reliability=0.86,
         linked_variables=["rate_hikes", "bond_losses"],
     ),
     Evidence(
         id="svb_ev3",
-        content="未实现亏损削弱市场对其资产负债表的信心。",
+        content="Unrealized losses weakened market confidence in the bank's balance sheet.",
         source_type=EvidenceType.LITERATURE,
         posterior_reliability=0.78,
         linked_variables=["bond_losses", "confidence_shock"],
     ),
     Evidence(
         id="svb_ev4",
-        content="SVB 储户结构集中在创投和科技企业，提现行为高度同步。",
+        content="SVB's deposit base was concentrated in venture and technology clients, increasing synchronized withdrawals.",
         source_type=EvidenceType.ARCHIVE,
         posterior_reliability=0.80,
         linked_variables=["deposit_concentration", "bank_run"],
     ),
     Evidence(
         id="svb_ev5",
-        content="融资环境收紧导致客户现金消耗加快，进一步放大市场担忧。",
+        content="Tighter funding conditions accelerated client cash burn and amplified market concern.",
         source_type=EvidenceType.NEWS,
         posterior_reliability=0.74,
         linked_variables=["confidence_shock"],
     ),
     Evidence(
         id="svb_ev6",
-        content="增发融资消息触发储户和投资者快速失去信心。",
+        content="The capital-raise announcement triggered a rapid loss of depositor and investor confidence.",
         source_type=EvidenceType.TESTIMONY,
         posterior_reliability=0.73,
         linked_variables=["confidence_shock", "bank_run"],
     ),
     Evidence(
         id="svb_ev7",
-        content="短时间内的大规模提款使流动性缺口迅速暴露。",
+        content="Large withdrawals in a short time exposed the liquidity gap almost immediately.",
         source_type=EvidenceType.DATA,
         posterior_reliability=0.88,
         linked_variables=["bank_run", "svb_collapse"],
     ),
     Evidence(
         id="svb_ev8",
-        content="监管接管发生在流动性危机无法自行修复之后。",
+        content="Regulators stepped in only after the liquidity crisis could no longer be repaired internally.",
         source_type=EvidenceType.ARCHIVE,
         posterior_reliability=0.84,
         linked_variables=["svb_collapse"],
     ),
     Evidence(
         id="stock_ev1",
-        content="最新财报显示核心业务收入未达到市场预期。",
+        content="The latest earnings report showed core revenue missing market expectations.",
         source_type=EvidenceType.NEWS,
         posterior_reliability=0.81,
         linked_variables=["earnings_miss"],
     ),
     Evidence(
         id="stock_ev2",
-        content="利润率下滑表明经营压力高于市场此前判断。",
+        content="Shrinking margins signaled heavier operating pressure than the market had assumed.",
         source_type=EvidenceType.DATA,
         posterior_reliability=0.84,
         linked_variables=["earnings_miss"],
     ),
     Evidence(
         id="stock_ev3",
-        content="管理层在业绩说明会上下调了后续季度指引。",
+        content="Management lowered forward guidance during the earnings call.",
         source_type=EvidenceType.ARCHIVE,
         posterior_reliability=0.83,
         linked_variables=["guidance_cut"],
     ),
     Evidence(
         id="stock_ev4",
-        content="板块资金流出导致同类高估值公司普遍承压。",
+        content="Sector outflows pushed comparable high-multiple stocks lower as well.",
         source_type=EvidenceType.DATA,
         posterior_reliability=0.76,
         linked_variables=["sector_rotation"],
     ),
     Evidence(
         id="stock_ev5",
-        content="市场舆论从增长放缓转向对公司长期故事失去信心。",
+        content="Market narrative shifted from slowing growth to losing confidence in the long-term company story.",
         source_type=EvidenceType.SOCIAL,
         posterior_reliability=0.68,
         linked_variables=["confidence_breakdown"],
     ),
     Evidence(
         id="stock_ev6",
-        content="盘前与开盘阶段出现连续抛压，卖单主导成交。",
+        content="Pre-market and opening-session selling pressure dominated trading.",
         source_type=EvidenceType.DATA,
         posterior_reliability=0.86,
         linked_variables=["confidence_breakdown", "stock_selloff"],
     ),
     Evidence(
         id="stock_ev7",
-        content="量化与被动资金共同放大了下跌幅度。",
+        content="Quant and passive flows amplified the magnitude of the decline.",
         source_type=EvidenceType.LITERATURE,
         posterior_reliability=0.71,
         linked_variables=["sector_rotation", "stock_selloff"],
     ),
     Evidence(
         id="stock_ev8",
-        content="盘中跌破关键价位后触发更多止损与情绪性抛售。",
+        content="Breaking key price levels intraday triggered more stops and emotional selling.",
         source_type=EvidenceType.TESTIMONY,
         posterior_reliability=0.74,
         linked_variables=["stock_selloff"],
     ),
     Evidence(
         id="crisis_ev1",
-        content="房地产贷款质量恶化削弱了抵押支持证券的价值。",
+        content="Deteriorating mortgage quality weakened the value of mortgage-backed securities.",
         source_type=EvidenceType.DATA,
         posterior_reliability=0.84,
         linked_variables=["housing_bubble", "toxic_mbs"],
     ),
     Evidence(
         id="crisis_ev2",
-        content="宽松信贷标准扩大了高风险借款人的违约暴露。",
+        content="Loose underwriting standards expanded default exposure among high-risk borrowers.",
         source_type=EvidenceType.ARCHIVE,
         posterior_reliability=0.80,
         linked_variables=["subprime_lending", "default_wave"],
     ),
     Evidence(
         id="crisis_ev3",
-        content="证券化结构把风险分散并隐藏在复杂资产池之中。",
+        content="Securitization spread and obscured risk inside complex asset pools.",
         source_type=EvidenceType.LITERATURE,
         posterior_reliability=0.78,
         linked_variables=["toxic_mbs", "banking_stress"],
     ),
     Evidence(
         id="crisis_ev4",
-        content="高杠杆让金融机构难以承受资产价格快速下跌。",
+        content="High leverage left financial institutions unable to absorb rapid asset-price declines.",
         source_type=EvidenceType.DATA,
         posterior_reliability=0.87,
         linked_variables=["leverage", "banking_stress"],
     ),
     Evidence(
         id="crisis_ev5",
-        content="违约率上升迅速冲击与住房相关的资产价值。",
+        content="Rising defaults quickly hit the value of housing-linked assets.",
         source_type=EvidenceType.NEWS,
         posterior_reliability=0.79,
         linked_variables=["default_wave", "toxic_mbs"],
     ),
     Evidence(
         id="crisis_ev6",
-        content="同业市场冻结放大了流动性压力和系统性恐慌。",
+        content="Interbank market freezes intensified liquidity stress and systemic panic.",
         source_type=EvidenceType.TESTIMONY,
         posterior_reliability=0.75,
         linked_variables=["banking_stress", "credit_freeze"],
     ),
     Evidence(
         id="crisis_ev7",
-        content="信用市场冻结向实体经济传导并导致全面危机。",
+        content="Credit-market freezes spread into the real economy and turned stress into a full crisis.",
         source_type=EvidenceType.NEWS,
         posterior_reliability=0.82,
         linked_variables=["credit_freeze", "financial_crisis_2008"],
     ),
     Evidence(
         id="crisis_ev8",
-        content="住房泡沫破裂是 2008 年金融危机的重要起点之一。",
+        content="The housing-bubble collapse was one of the central starting points of the 2008 financial crisis.",
         source_type=EvidenceType.ARCHIVE,
         posterior_reliability=0.83,
         linked_variables=["housing_bubble", "financial_crisis_2008"],
     ),
     Evidence(
         id="rent_ev1",
-        content="核心城市住房供给增长长期慢于人口与就业增长。",
+        content="Core-city housing supply has grown more slowly than population and job growth for years.",
         source_type=EvidenceType.DATA,
         posterior_reliability=0.86,
         linked_variables=["housing_supply_shortage", "rent_pressure"],
     ),
     Evidence(
         id="rent_ev2",
-        content="分区与审批限制压缩了新住房建设速度。",
+        content="Zoning and permitting limits have constrained the pace of new housing construction.",
         source_type=EvidenceType.ARCHIVE,
         posterior_reliability=0.79,
         linked_variables=["zoning_constraints", "housing_supply_shortage"],
     ),
     Evidence(
         id="rent_ev3",
-        content="高收入就业机会集中抬升了核心区域住房支付能力。",
+        content="High-income job concentration has raised willingness and ability to pay in core neighborhoods.",
         source_type=EvidenceType.DATA,
         posterior_reliability=0.81,
         linked_variables=["income_demand", "rent_pressure"],
     ),
     Evidence(
         id="rent_ev4",
-        content="短租和投资性持有在部分区域挤占了长期租赁供给。",
+        content="Short-term rentals and investor ownership have displaced some long-term rental supply.",
         source_type=EvidenceType.NEWS,
         posterior_reliability=0.71,
         linked_variables=["investor_pressure", "housing_supply_shortage"],
     ),
     Evidence(
         id="rent_ev5",
-        content="利率和建材成本上升抬高了开发与持有成本。",
+        content="Higher rates and material costs have raised development and holding costs.",
         source_type=EvidenceType.LITERATURE,
         posterior_reliability=0.73,
         linked_variables=["construction_costs", "rent_pressure"],
     ),
     Evidence(
         id="rent_ev6",
-        content="供需缺口最终转化为租金持续上涨。",
+        content="The supply-demand gap has ultimately translated into persistent rent pressure.",
         source_type=EvidenceType.DATA,
         posterior_reliability=0.88,
         linked_variables=["rent_pressure", "high_rent"],
     ),
     Evidence(
         id="rent_ev7",
-        content="城市间迁移与岗位集聚进一步推高热门区域租金。",
+        content="Migration between cities and job clustering have pushed hot urban rents even higher.",
         source_type=EvidenceType.NEWS,
         posterior_reliability=0.74,
         linked_variables=["income_demand", "high_rent"],
     ),
     Evidence(
         id="rent_ev8",
-        content="租客在短期内难以通过新增供给迅速获得缓冲。",
+        content="Renters usually cannot get fast relief from new supply in the short run.",
         source_type=EvidenceType.TESTIMONY,
         posterior_reliability=0.69,
         linked_variables=["high_rent"],
@@ -335,35 +337,35 @@ def demo_result() -> AnalysisResult:
     variables = [
         CausalVariable(
             name="asteroid_impact",
-            description="小行星撞击（Chicxulub）",
+            description="Asteroid impact near Chicxulub.",
             evidence_ids=["ev1", "ev2", "ev4"],
             posterior_support=0.95,
             uncertainty_contribution=0.05,
         ),
         CausalVariable(
             name="volcanic_activity",
-            description="Deccan Traps 大规模火山活动",
+            description="Large-scale Deccan Traps volcanism.",
             evidence_ids=["ev3"],
             posterior_support=0.78,
             uncertainty_contribution=0.15,
         ),
         CausalVariable(
             name="climate_change",
-            description="全球气候剧变（撞击冬季 + 火山冬天）",
+            description="Abrupt global climate shock after the impact and volcanism.",
             evidence_ids=["ev3", "ev7"],
             posterior_support=0.88,
             uncertainty_contribution=0.10,
         ),
         CausalVariable(
             name="food_chain_collapse",
-            description="全球食物链崩溃",
+            description="Collapse of major food webs.",
             evidence_ids=["ev7", "ev8"],
             posterior_support=0.82,
             uncertainty_contribution=0.12,
         ),
         CausalVariable(
             name="dinosaur_extinction",
-            description="非鸟类恐龙大规模灭绝",
+            description="Mass extinction of non-avian dinosaurs.",
             evidence_ids=["ev6"],
             posterior_support=0.97,
             uncertainty_contribution=0.03,
@@ -415,8 +417,8 @@ def demo_result() -> AnalysisResult:
 
     h1 = HypothesisChain(
         id="h1",
-        name="小行星撞击主导假说",
-        description="Chicxulub 小行星撞击引发的连锁反应导致恐龙灭绝",
+        name="Asteroid-led extinction hypothesis",
+        description="A Chicxulub impact triggered cascading climate and food-chain stress that drove dinosaur extinction.",
         variables=[variables[0], variables[2], variables[3], variables[4]],
         edges=[edges[0], edges[2], edges[3]],
         path_probability=0.70,
@@ -426,19 +428,19 @@ def demo_result() -> AnalysisResult:
         debate_rounds=[
             {
                 "round": 1,
-                "abductive": "铱异常和冲击石英的全球分布强烈指向撞击事件",
-                "deductive": "若撞击发生，则必产生全球性气候灾难",
-                "inductive": "多次生物大灭绝与撞击事件相关",
-                "devil_advocate": "火山活动可能是共因而非替代解释",
-                "arbitrator": "倾向于撞击主导，火山为辅助因素",
+                "abductive": "Global iridium and impact markers point strongly toward a large collision event.",
+                "deductive": "If a major impact occurred, a severe short-term climate shock should follow.",
+                "inductive": "Multiple extinction patterns are consistent with a rapid collapse after impact.",
+                "devil_advocate": "Volcanism might still explain some of the same signatures.",
+                "arbitrator": "Impact remains the leading cause, with volcanism as a secondary contributor.",
             },
             {
                 "round": 2,
-                "abductive": "时间分辨率提升后，撞击与灭绝时间精确吻合",
-                "deductive": "食物链从底层崩溃可解释选择性灭绝模式",
-                "inductive": "淡水生物高存活率支持短期灾难而非长期气候变暖",
-                "devil_advocate": "仍不能完全排除火山作为主要压力源",
-                "arbitrator": "维持撞击主导判断，置信度上调",
+                "abductive": "Improved dating aligns impact timing closely with the extinction boundary.",
+                "deductive": "Food-web collapse explains selective survival better than a slow uniform decline.",
+                "inductive": "Freshwater survival patterns fit a short intense disruption.",
+                "devil_advocate": "Volcanism still contributes background stress and uncertainty.",
+                "arbitrator": "The impact-led story remains strongest after the second pass.",
             },
         ],
         evidence_coverage=0.85,
@@ -472,8 +474,8 @@ def demo_result() -> AnalysisResult:
 
     h2 = HypothesisChain(
         id="h2",
-        name="火山活动主导假说",
-        description="Deccan Traps 持续火山活动通过温室效应和海洋酸化导致灭绝",
+        name="Volcanism-led extinction hypothesis",
+        description="Persistent Deccan Traps volcanism drove climate and ocean stress that contributed materially to extinction.",
         variables=[variables[1], variables[2], variables[3], variables[4]],
         edges=[edges[1], edges[2], edges[3]],
         path_probability=0.35,
@@ -483,11 +485,11 @@ def demo_result() -> AnalysisResult:
         debate_rounds=[
             {
                 "round": 1,
-                "abductive": "Deccan Traps 时间跨度覆盖灭绝期",
-                "deductive": "长期排放可导致渐进式气候变化",
-                "inductive": "其他大灭绝事件（如 P-Tr）与火山活动相关",
-                "devil_advocate": "时间分辨率不足以建立因果关系",
-                "arbitrator": "火山活动作为辅助因素成立，但主导性证据不足",
+                "abductive": "Volcanism overlaps the extinction interval and could explain sustained stress.",
+                "deductive": "Long emissions would be expected to alter climate and ocean chemistry.",
+                "inductive": "Other extinction episodes also correlate with major volcanism.",
+                "devil_advocate": "Dating precision is weaker than the impact case.",
+                "arbitrator": "Volcanism remains plausible but less well supported as the main cause.",
             },
         ],
         evidence_coverage=0.55,
@@ -509,7 +511,7 @@ def demo_result() -> AnalysisResult:
     )
 
     return AnalysisResult(
-        query="恐龙为什么灭绝？",
+        query="Why did dinosaurs go extinct?",
         domain="paleontology",
         variables=variables,
         edges=edges,
@@ -517,9 +519,9 @@ def demo_result() -> AnalysisResult:
         total_evidence_count=len(DEMO_EVIDENCES),
         total_uncertainty=0.12,
         recommended_next_steps=[
-            "获取更高分辨率的放射性定年数据",
-            "分析更多 K-Pg 界线的生物标志物",
-            "运行多因素耦合的气候-生态模型",
+            "Collect higher-resolution radiometric dating around the boundary.",
+            "Compare additional K-Pg biological markers across regions.",
+            "Run combined climate and ecosystem simulations with multi-cause stressors.",
         ],
         is_demo=True,
         demo_topic="default",
@@ -533,42 +535,42 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
         variables = [
             CausalVariable(
                 name="rate_hikes",
-                description="持续加息导致长期债券价格下跌",
+                description="Sustained rate hikes reduced the value of long-duration bonds.",
                 evidence_ids=["svb_ev1", "svb_ev2"],
                 posterior_support=0.86,
                 uncertainty_contribution=0.10,
             ),
             CausalVariable(
                 name="bond_losses",
-                description="持有至到期资产形成大额浮亏",
+                description="Held-to-maturity assets created large unrealized losses.",
                 evidence_ids=["svb_ev2", "svb_ev3"],
                 posterior_support=0.84,
                 uncertainty_contribution=0.11,
             ),
             CausalVariable(
                 name="deposit_concentration",
-                description="储户高度集中于风险敏感的科技创投群体",
+                description="Deposits were concentrated in a correlated venture-tech client base.",
                 evidence_ids=["svb_ev4"],
                 posterior_support=0.80,
                 uncertainty_contribution=0.13,
             ),
             CausalVariable(
                 name="confidence_shock",
-                description="融资环境恶化与融资消息引发信心冲击",
+                description="Funding stress and the capital raise triggered a confidence break.",
                 evidence_ids=["svb_ev5", "svb_ev6"],
                 posterior_support=0.82,
                 uncertainty_contribution=0.12,
             ),
             CausalVariable(
                 name="bank_run",
-                description="大规模集中提取存款导致流动性危机",
+                description="Concentrated withdrawals created a fast liquidity crisis.",
                 evidence_ids=["svb_ev6", "svb_ev7"],
                 posterior_support=0.91,
                 uncertainty_contribution=0.08,
             ),
             CausalVariable(
                 name="svb_collapse",
-                description="SVB 快速失去流动性并被监管接管",
+                description="SVB lost liquidity rapidly and entered regulatory control.",
                 evidence_ids=["svb_ev7", "svb_ev8"],
                 posterior_support=0.95,
                 uncertainty_contribution=0.05,
@@ -615,8 +617,8 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
 
         hypothesis = HypothesisChain(
             id="demo_svb_primary",
-            name="SVB 流动性挤兑主导假说",
-            description="加息导致资产浮亏，叠加储户集中与信心冲击，最终演化为银行挤兑并触发接管。",
+            name="SVB liquidity spiral hypothesis",
+            description="Rate-driven bond losses combined with concentrated deposits and a confidence shock, ending in a bank run and collapse.",
             variables=variables,
             edges=edges,
             path_probability=0.67,
@@ -636,7 +638,7 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
                     sensitivity_lower=0.16,
                     sensitivity_upper=0.31,
                     counterfactual_score=0.72,
-                )
+                ),
             ],
             counterfactual_score=0.72,
         )
@@ -650,9 +652,9 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
             total_evidence_count=8,
             total_uncertainty=0.14,
             recommended_next_steps=[
-                "接入真实金融新闻与监管披露数据源",
-                "补充利率路径与资产久期敏感性分析",
-                "比较储户结构与挤兑速度对结果的影响",
+                "Connect real bank disclosures and rate-path data sources.",
+                "Quantify duration sensitivity versus withdrawal speed.",
+                "Compare depositor concentration against peer banks.",
             ],
             is_demo=True,
             demo_topic="svb",
@@ -662,35 +664,35 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
         variables = [
             CausalVariable(
                 name="earnings_miss",
-                description="业绩不及预期削弱市场对公司基本面的信心",
+                description="Earnings missed expectations and weakened the company narrative.",
                 evidence_ids=["stock_ev1", "stock_ev2"],
                 posterior_support=0.84,
                 uncertainty_contribution=0.11,
             ),
             CausalVariable(
                 name="guidance_cut",
-                description="公司下调未来指引，放大悲观预期",
+                description="Lower forward guidance deepened bearish expectations.",
                 evidence_ids=["stock_ev3"],
                 posterior_support=0.79,
                 uncertainty_contribution=0.13,
             ),
             CausalVariable(
                 name="sector_rotation",
-                description="行业资金轮动导致高估值标的被抛售",
+                description="Sector rotation created extra selling pressure on expensive peers.",
                 evidence_ids=["stock_ev4"],
                 posterior_support=0.72,
                 uncertainty_contribution=0.14,
             ),
             CausalVariable(
                 name="confidence_breakdown",
-                description="多重利空叠加造成投资者信心快速崩塌",
+                description="Multiple negatives stacked into a rapid confidence breakdown.",
                 evidence_ids=["stock_ev5", "stock_ev6"],
                 posterior_support=0.83,
                 uncertainty_contribution=0.10,
             ),
             CausalVariable(
                 name="stock_selloff",
-                description="抛售压力集中释放，股价快速下跌",
+                description="Selling pressure cascaded into a fast stock selloff.",
                 evidence_ids=["stock_ev6", "stock_ev7", "stock_ev8"],
                 posterior_support=0.92,
                 uncertainty_contribution=0.07,
@@ -730,8 +732,8 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
 
         hypothesis = HypothesisChain(
             id="demo_stock_primary",
-            name="业绩失速与信心崩塌主导假说",
-            description="业绩不及预期与指引下调共同打击投资者信心，再叠加板块轮动，最终触发股价暴跌。",
+            name="Earnings miss and confidence break hypothesis",
+            description="An earnings miss plus weaker guidance damaged confidence, while sector rotation amplified the selloff.",
             variables=variables,
             edges=edges,
             path_probability=0.63,
@@ -751,7 +753,7 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
                     sensitivity_lower=0.24,
                     sensitivity_upper=0.43,
                     counterfactual_score=0.64,
-                )
+                ),
             ],
             counterfactual_score=0.64,
         )
@@ -765,9 +767,9 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
             total_evidence_count=8,
             total_uncertainty=0.16,
             recommended_next_steps=[
-                "接入真实财报与市场行情数据源",
-                "比较业绩因素与市场风格轮动的相对贡献",
-                "加入事件时间线以区分盘前与盘中冲击",
+                "Connect real earnings releases and intraday market data.",
+                "Separate company-specific damage from sector rotation effects.",
+                "Add a timeline distinguishing pre-market and intraday pressure.",
             ],
             is_demo=True,
             demo_topic="stock",
@@ -776,34 +778,50 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
     if topic == "crisis":
         variables = [
             CausalVariable(
-                "housing_bubble", "住房泡沫积累并反转", ["crisis_ev1", "crisis_ev8"], 0.86, 0.11
+                "housing_bubble",
+                "The housing bubble built up and then reversed.",
+                ["crisis_ev1", "crisis_ev8"],
+                0.86,
+                0.11,
             ),
             CausalVariable(
-                "subprime_lending", "次贷扩张放大了脆弱借款人的违约风险", ["crisis_ev2"], 0.82, 0.12
+                "subprime_lending",
+                "Subprime lending expanded default risk among fragile borrowers.",
+                ["crisis_ev2"],
+                0.82,
+                0.12,
             ),
             CausalVariable(
                 "toxic_mbs",
-                "证券化资产中累积了难以识别的住房风险",
+                "Securitized assets accumulated hidden housing risk.",
                 ["crisis_ev1", "crisis_ev3", "crisis_ev5"],
                 0.84,
                 0.10,
             ),
             CausalVariable(
-                "leverage", "高杠杆放大了资产价格下跌的冲击", ["crisis_ev4"], 0.80, 0.13
+                "leverage",
+                "High leverage magnified losses when asset prices fell.",
+                ["crisis_ev4"],
+                0.80,
+                0.13,
             ),
             CausalVariable(
                 "banking_stress",
-                "金融机构承压并失去流动性缓冲",
+                "Financial institutions lost resilience and liquidity buffers.",
                 ["crisis_ev3", "crisis_ev4", "crisis_ev6"],
                 0.87,
                 0.09,
             ),
             CausalVariable(
-                "credit_freeze", "同业和信用市场冻结", ["crisis_ev6", "crisis_ev7"], 0.89, 0.08
+                "credit_freeze",
+                "Credit and interbank markets froze.",
+                ["crisis_ev6", "crisis_ev7"],
+                0.89,
+                0.08,
             ),
             CausalVariable(
                 "financial_crisis_2008",
-                "2008 年金融危机全面爆发",
+                "The 2008 financial crisis spread across the system.",
                 ["crisis_ev7", "crisis_ev8"],
                 0.94,
                 0.06,
@@ -811,24 +829,40 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
         ]
         edges = [
             CausalEdge(
-                "housing_bubble", "toxic_mbs", 0.83, (0.72, 0.91), ["crisis_ev1", "crisis_ev8"]
+                "housing_bubble",
+                "toxic_mbs",
+                0.83,
+                (0.72, 0.91),
+                ["crisis_ev1", "crisis_ev8"],
             ),
             CausalEdge(
-                "subprime_lending", "toxic_mbs", 0.79, (0.66, 0.88), ["crisis_ev2", "crisis_ev5"]
+                "subprime_lending",
+                "toxic_mbs",
+                0.79,
+                (0.66, 0.88),
+                ["crisis_ev2", "crisis_ev5"],
             ),
             CausalEdge(
-                "toxic_mbs", "banking_stress", 0.85, (0.74, 0.92), ["crisis_ev3", "crisis_ev5"]
+                "toxic_mbs",
+                "banking_stress",
+                0.85,
+                (0.74, 0.92),
+                ["crisis_ev3", "crisis_ev5"],
             ),
             CausalEdge("leverage", "banking_stress", 0.81, (0.68, 0.90), ["crisis_ev4"]),
             CausalEdge("banking_stress", "credit_freeze", 0.88, (0.79, 0.94), ["crisis_ev6"]),
             CausalEdge(
-                "credit_freeze", "financial_crisis_2008", 0.92, (0.84, 0.97), ["crisis_ev7"]
+                "credit_freeze",
+                "financial_crisis_2008",
+                0.92,
+                (0.84, 0.97),
+                ["crisis_ev7"],
             ),
         ]
         hypothesis = HypothesisChain(
             id="demo_crisis_primary",
-            name="住房泡沫与杠杆失衡主导假说",
-            description="住房泡沫、次贷扩张和高杠杆共同累积风险，最终通过信用冻结演化为 2008 金融危机。",
+            name="Housing bubble and leverage failure hypothesis",
+            description="A housing reversal, toxic securitization, and leverage combined into banking stress, a credit freeze, and the 2008 crisis.",
             variables=variables,
             edges=edges,
             path_probability=0.66,
@@ -839,8 +873,16 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
             unanchored_edges=[],
             counterfactual_results=[
                 CounterfactualResult(
-                    "demo_crisis_primary", "leverage", 0.66, 0.33, -0.33, True, 0.24, 0.42, 0.69
-                )
+                    "demo_crisis_primary",
+                    "leverage",
+                    0.66,
+                    0.33,
+                    -0.33,
+                    True,
+                    0.24,
+                    0.42,
+                    0.69,
+                ),
             ],
             counterfactual_score=0.69,
         )
@@ -853,9 +895,9 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
             total_evidence_count=8,
             total_uncertainty=0.15,
             recommended_next_steps=[
-                "接入住房价格与违约率的真实时序数据",
-                "比较杠杆与证券化结构的相对贡献",
-                "补充监管与流动性事件时间线",
+                "Connect real house-price, default, and funding-market time series.",
+                "Compare leverage effects against securitization structure effects.",
+                "Add regulatory and liquidity-event timeline detail.",
             ],
             is_demo=True,
             demo_topic="crisis",
@@ -864,43 +906,69 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
     if topic == "rent":
         variables = [
             CausalVariable(
-                "zoning_constraints", "分区与审批限制压缩新房供给速度", ["rent_ev2"], 0.78, 0.13
+                "zoning_constraints",
+                "Zoning and permitting rules constrained new supply.",
+                ["rent_ev2"],
+                0.78,
+                0.13,
             ),
             CausalVariable(
-                "investor_pressure", "投资性持有与短租挤占长期供给", ["rent_ev4"], 0.70, 0.15
+                "investor_pressure",
+                "Investor ownership and short-term rentals displaced long-term supply.",
+                ["rent_ev4"],
+                0.70,
+                0.15,
             ),
             CausalVariable(
                 "housing_supply_shortage",
-                "住房供给长期不足",
+                "Housing supply remained structurally short.",
                 ["rent_ev1", "rent_ev2", "rent_ev4"],
                 0.87,
                 0.09,
             ),
             CausalVariable(
                 "income_demand",
-                "高收入岗位与人口集聚推高支付能力",
+                "Income concentration increased willingness to pay in core areas.",
                 ["rent_ev3", "rent_ev7"],
                 0.81,
                 0.11,
             ),
-            CausalVariable("construction_costs", "开发与持有成本上升", ["rent_ev5"], 0.72, 0.14),
+            CausalVariable(
+                "construction_costs",
+                "Development and holding costs climbed.",
+                ["rent_ev5"],
+                0.72,
+                0.14,
+            ),
             CausalVariable(
                 "rent_pressure",
-                "供需与成本共同形成租金上行压力",
+                "Supply shortages and cost pressures pushed rents upward.",
                 ["rent_ev1", "rent_ev3", "rent_ev5", "rent_ev6"],
                 0.88,
                 0.08,
             ),
             CausalVariable(
-                "high_rent", "租金长期维持高位", ["rent_ev6", "rent_ev7", "rent_ev8"], 0.93, 0.06
+                "high_rent",
+                "Rent stayed elevated for a long period.",
+                ["rent_ev6", "rent_ev7", "rent_ev8"],
+                0.93,
+                0.06,
             ),
         ]
         edges = [
             CausalEdge(
-                "zoning_constraints", "housing_supply_shortage", 0.82, (0.69, 0.90), ["rent_ev2"]
+                "zoning_constraints",
+                "housing_supply_shortage",
+                0.82,
+                (0.69, 0.90),
+                ["rent_ev2"],
             ),
             CausalEdge(
-                "investor_pressure", "housing_supply_shortage", 0.66, (0.52, 0.79), ["rent_ev4"]
+                "investor_pressure",
+                "housing_supply_shortage",
+                0.66,
+                (0.52, 0.79),
+                ["rent_ev4"],
             ),
             CausalEdge(
                 "housing_supply_shortage",
@@ -910,15 +978,31 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
                 ["rent_ev1", "rent_ev6"],
             ),
             CausalEdge(
-                "income_demand", "rent_pressure", 0.77, (0.64, 0.87), ["rent_ev3", "rent_ev7"]
+                "income_demand",
+                "rent_pressure",
+                0.77,
+                (0.64, 0.87),
+                ["rent_ev3", "rent_ev7"],
             ),
-            CausalEdge("construction_costs", "rent_pressure", 0.63, (0.49, 0.76), ["rent_ev5"]),
-            CausalEdge("rent_pressure", "high_rent", 0.93, (0.85, 0.97), ["rent_ev6", "rent_ev8"]),
+            CausalEdge(
+                "construction_costs",
+                "rent_pressure",
+                0.63,
+                (0.49, 0.76),
+                ["rent_ev5"],
+            ),
+            CausalEdge(
+                "rent_pressure",
+                "high_rent",
+                0.93,
+                (0.85, 0.97),
+                ["rent_ev6", "rent_ev8"],
+            ),
         ]
         hypothesis = HypothesisChain(
             id="demo_rent_primary",
-            name="供给约束与需求集聚主导假说",
-            description="住房供给受限、需求集中和成本上升共同作用，导致核心区域租金长期高企。",
+            name="Supply constraint and demand concentration hypothesis",
+            description="Constrained supply, concentrated demand, and higher costs worked together to keep rents high.",
             variables=variables,
             edges=edges,
             path_probability=0.68,
@@ -938,7 +1022,7 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
                     0.19,
                     0.37,
                     0.71,
-                )
+                ),
             ],
             counterfactual_score=0.71,
         )
@@ -951,9 +1035,9 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
             total_evidence_count=8,
             total_uncertainty=0.16,
             recommended_next_steps=[
-                "接入城市级供给与租金时间序列",
-                "比较分区限制与成本因素的边际影响",
-                "引入人口迁移与就业集聚的细粒度数据",
+                "Connect city-level rent and housing-supply time series.",
+                "Estimate marginal contribution of zoning versus costs.",
+                "Add migration and employment concentration detail.",
             ],
             is_demo=True,
             demo_topic="rent",
@@ -967,26 +1051,32 @@ def topic_aware_demo_result(query: str) -> AnalysisResult:
 
 
 PROVIDERS: dict[str, dict] = {
+    "ofoxai": {
+        "label": "OfoxAI\uff08OpenAI-compatible\uff09",
+        "base_url": "https://api.ofox.ai/v1",
+        "models": {
+            "openai/gpt-5.4-mini": {
+                "label": "GPT-5.4 Mini\uff08OfoxAI\uff0c\u9ed8\u8ba4\uff09",
+                "json_mode": True,
+            },
+            "openai/gpt-5.4": {"label": "GPT-5.4\uff08OfoxAI\uff09", "json_mode": True},
+        },
+    },
     "openrouter": {
         "label": "OpenRouter（多模型中转）",
         "base_url": "https://openrouter.ai/api/v1",
         "models": {
-            "deepseek/deepseek-chat": {"label": "DeepSeek V3（稳定别名）", "json_mode": True},
-            "deepseek/deepseek-v3.2": {"label": "DeepSeek V3.2", "json_mode": True},
-            "deepseek/deepseek-chat-v3-0324": {
-                "label": "DeepSeek V3 0324（legacy）",
+            "deepseek/deepseek-chat": {
+                "label": "DeepSeek Chat（OpenRouter，可用性需预检）",
                 "json_mode": True,
             },
-            "deepseek/deepseek-r1": {"label": "DeepSeek R1", "json_mode": True},
             "openai/gpt-4o-mini": {"label": "GPT-4o Mini", "json_mode": True},
             "google/gemini-2.5-flash": {"label": "Gemini 2.5 Flash", "json_mode": True},
-            "google/gemini-2.5-pro-preview": {"label": "Gemini 2.5 Pro", "json_mode": True},
             "anthropic/claude-sonnet-4": {"label": "Claude Sonnet 4", "json_mode": True},
             "anthropic/claude-haiku-4.5": {"label": "Claude Haiku 4.5（快速）", "json_mode": True},
             "openai/gpt-4.1-mini": {"label": "GPT-4.1 Mini", "json_mode": True},
             "openai/gpt-4.1": {"label": "GPT-4.1", "json_mode": True},
             "meta-llama/llama-4-maverick": {"label": "Llama 4 Maverick", "json_mode": True},
-            "qwen/qwen3-235b-a22b": {"label": "Qwen3 235B", "json_mode": True},
             "mistralai/mistral-small-3.1-24b-instruct": {
                 "label": "Mistral Small 3.1",
                 "json_mode": True,
@@ -1082,15 +1172,52 @@ def _select_source_names(configured_sources: str | None, domain: str) -> list[st
     return broker_source_names(configured_sources, plan)
 
 
-def _optional_hosted_source_names_from_env() -> list[str]:
+def _optional_hosted_source_names(
+    tavily_api_key: str | None = None,
+    brave_search_api_key: str | None = None,
+) -> list[str]:
     import os
 
     optional_sources: list[str] = []
-    if os.environ.get("TAVILY_API_KEY", "").strip():
+    if (tavily_api_key or os.environ.get("TAVILY_API_KEY", "")).strip():
         optional_sources.append("tavily")
-    if os.environ.get("BRAVE_SEARCH_API_KEY", "").strip():
+    if (brave_search_api_key or os.environ.get("BRAVE_SEARCH_API_KEY", "")).strip():
         optional_sources.append("brave")
     return optional_sources
+
+
+def _optional_hosted_source_names_from_env() -> list[str]:
+    return _optional_hosted_source_names()
+
+
+def _available_source_factories(
+    tavily_api_key: str | None = None,
+    brave_search_api_key: str | None = None,
+) -> dict[str, Callable[[], object]]:
+    from retrocause.sources.ap_news import APNewsAdapter as _AP
+    from retrocause.sources.arxiv import ArxivSourceAdapter as _Arxiv
+    from retrocause.sources.federal_register import FederalRegisterAdapter as _FederalRegister
+    from retrocause.sources.gdelt import GdeltNewsAdapter as _Gdelt
+    from retrocause.sources.semantic_scholar import SemanticScholarAdapter as _SS
+    from retrocause.sources.web import WebSearchAdapter as _Web
+
+    available_sources: dict[str, Callable[[], object]] = {
+        "ap_news": _AP,
+        "arxiv": _Arxiv,
+        "federal_register": _FederalRegister,
+        "semantic_scholar": _SS,
+        "web": _Web,
+        "gdelt": _Gdelt,
+    }
+    if "tavily" in _optional_hosted_source_names(tavily_api_key, None):
+        from retrocause.sources.tavily import TavilySourceAdapter as _Tavily
+
+        available_sources["tavily"] = lambda: _Tavily(tavily_api_key)
+    if "brave" in _optional_hosted_source_names(None, brave_search_api_key):
+        from retrocause.sources.brave import BraveSearchSourceAdapter as _Brave
+
+        available_sources["brave"] = lambda: _Brave(brave_search_api_key)
+    return available_sources
 
 
 def _available_source_classes_from_env() -> dict[str, type]:
@@ -1121,26 +1248,31 @@ def _available_source_classes_from_env() -> dict[str, type]:
 
 
 def run_real_analysis(
-    query: str, api_key: str, model: str, base_url: str | None
+    query: str,
+    api_key: str,
+    model: str,
+    base_url: str | None,
+    tavily_api_key: str | None = None,
+    brave_search_api_key: str | None = None,
 ) -> AnalysisResult | None:
     import os
 
     from retrocause.config import RetroCauseConfig as _Config
     from retrocause.engine import analyze as _analyze
     from retrocause.llm import LLMClient as _LLMClient
+    from retrocause.parser import parse_input as _parse_input
     from retrocause.sources.arxiv import ArxivSourceAdapter as _Arxiv
     from retrocause.sources.semantic_scholar import SemanticScholarAdapter as _SS
     from retrocause.sources.web import WebSearchAdapter as _Web
-    from retrocause.parser import parse_input as _parse_input
 
-    available_sources = _available_source_classes_from_env()
+    available_sources = _available_source_factories(tavily_api_key, brave_search_api_key)
     parsed = _parse_input(query)
     from retrocause.evidence_access import broker_source_names, plan_query as _plan_query
 
     requested_sources = broker_source_names(
         os.environ.get("RETROCAUSE_ENABLED_SOURCES"),
         _plan_query(query, parsed),
-        optional_sources=_optional_hosted_source_names_from_env(),
+        optional_sources=_optional_hosted_source_names(tavily_api_key, brave_search_api_key),
     )
 
     cfg = _Config.from_env()
@@ -1164,25 +1296,27 @@ def run_real_analysis_with_progress(
     model: str,
     base_url: str | None,
     on_progress: object,
+    tavily_api_key: str | None = None,
+    brave_search_api_key: str | None = None,
 ) -> AnalysisResult | None:
     import os
 
     from retrocause.config import RetroCauseConfig as _Config
     from retrocause.engine import analyze as _analyze
     from retrocause.llm import LLMClient as _LLMClient
+    from retrocause.parser import parse_input as _parse_input
     from retrocause.sources.arxiv import ArxivSourceAdapter as _Arxiv
     from retrocause.sources.semantic_scholar import SemanticScholarAdapter as _SS
     from retrocause.sources.web import WebSearchAdapter as _Web
-    from retrocause.parser import parse_input as _parse_input
 
-    available_sources = _available_source_classes_from_env()
+    available_sources = _available_source_factories(tavily_api_key, brave_search_api_key)
     parsed = _parse_input(query)
     from retrocause.evidence_access import broker_source_names, plan_query as _plan_query
 
     requested_sources = broker_source_names(
         os.environ.get("RETROCAUSE_ENABLED_SOURCES"),
         _plan_query(query, parsed),
-        optional_sources=_optional_hosted_source_names_from_env(),
+        optional_sources=_optional_hosted_source_names(tavily_api_key, brave_search_api_key),
     )
 
     cfg = _Config.from_env()

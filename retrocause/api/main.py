@@ -14,6 +14,7 @@ from retrocause.app.demo_data import (
 )
 from retrocause.api.analysis_execution import resolve_live_analysis_settings
 from retrocause.api.evidence_routes import router as evidence_router
+from retrocause.api.live_gate import LiveAnalysisQueueTimeout, run_live_analysis_with_gate
 from retrocause.api.live_failure_response import build_empty_live_failure_response
 from retrocause.api.provider_preflight import (
     is_live_failure,
@@ -23,7 +24,7 @@ from retrocause.api.result_conversion import (
     detect_production_scenario as _detect_production_scenario,
     result_to_v2 as _result_to_v2,
 )
-from retrocause.api.runtime import TimeoutError, run_with_timeout
+from retrocause.api.runtime import TimeoutError
 from retrocause.api.run_finalization import finalize_run_response
 from retrocause.api.run_routes import router as run_router
 from retrocause.api.run_store import create_run_id
@@ -99,13 +100,15 @@ async def analyze_query(request: AnalyzeRequest):
                 request.explicit_model,
             )
             try:
-                result = run_with_timeout(
+                result = run_live_analysis_with_gate(
                     run_real_analysis,
                     400,
                     request.query,
                     request.api_key,
                     settings.model_name,
                     settings.base_url,
+                    request.tavily_api_key,
+                    request.brave_search_api_key,
                 )
             except Exception:
                 import traceback
@@ -197,16 +200,21 @@ async def analyze_query_v2(request: AnalyzeRequest):
             model_name = settings.model_name
             error_msg: str | None = None
             try:
-                result = run_with_timeout(
+                result = run_live_analysis_with_gate(
                     run_real_analysis,
                     400,
                     request.query,
                     request.api_key,
                     settings.model_name,
                     settings.base_url,
+                    request.tavily_api_key,
+                    request.brave_search_api_key,
                 )
             except TimeoutError:
                 error_msg = "Analysis timed out. Try a simpler query or try again later."
+                result = None
+            except LiveAnalysisQueueTimeout as exc:
+                error_msg = f"Live analysis queue is busy: {exc}"
                 result = None
             except Exception as exc:
                 import traceback
@@ -228,6 +236,9 @@ async def analyze_query_v2(request: AnalyzeRequest):
                     request.query,
                     error_msg or "Live analysis failed.",
                     scenario_override=request.scenario_override,
+                    providers=PROVIDERS,
+                    provider_key=request.model,
+                    model_name=model_name,
                 ),
                 request,
                 run_id,
@@ -307,7 +318,7 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                 result = None
                 error_msg = None
                 try:
-                    result = run_with_timeout(
+                    result = run_live_analysis_with_gate(
                         run_real_analysis_with_progress,
                         400,
                         request.query,
@@ -315,6 +326,8 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                         model_name,
                         settings.base_url,
                         on_progress,
+                        request.tavily_api_key,
+                        request.brave_search_api_key,
                     )
                     _elapsed = _time.time() - _t0
                     logger.info(
@@ -324,6 +337,9 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                 except TimeoutError:
                     error_msg = "Analysis timed out. Try a simpler query or try again later."
                     logger.warning("SSE stream analysis timed out after 400s")
+                except LiveAnalysisQueueTimeout as exc:
+                    error_msg = f"Live analysis queue is busy: {exc}"
+                    logger.warning("SSE stream analysis queue busy")
                 except Exception as exc:
                     logger.error(f"SSE stream analysis error: {type(exc).__name__}: {exc}")
                     error_msg = f"{type(exc).__name__}: {exc}"
@@ -353,6 +369,9 @@ async def analyze_query_v2_stream(request: AnalyzeRequest):
                         request.query,
                         error_msg or "Live analysis failed.",
                         scenario_override=request.scenario_override,
+                        providers=PROVIDERS,
+                        provider_key=request.model,
+                        model_name=model_name,
                     )
                     resp = finalize_run_response(resp, request, run_id, PROVIDERS)
                     eq.put(

@@ -1,3 +1,4 @@
+import os
 import sys, logging
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -13,8 +14,16 @@ from retrocause.engine import analyze
 cfg = RetroCauseConfig.from_env()
 print(f"config timeout={cfg.request_timeout_seconds}s, debate_rounds={cfg.debate_max_rounds}")
 
+API_KEY = (
+    os.environ.get("OPENROUTER_API_KEY")
+    or os.environ.get("RETROCAUSE_OPENROUTER_KEY")
+    or ""
+).strip()
+if not API_KEY:
+    raise SystemExit("Set OPENROUTER_API_KEY or RETROCAUSE_OPENROUTER_KEY before running.")
+
 llm = LLMClient(
-    api_key="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",
+    api_key=API_KEY,
     model="deepseek/deepseek-chat-v3-0324",
     base_url="https://openrouter.ai/api/v1",
     timeout=cfg.request_timeout_seconds,

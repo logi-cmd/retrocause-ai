@@ -296,6 +296,16 @@ def _target_date_for_range(time_range: str | None, today: date | None = None) ->
     return None
 
 
+def _is_hosted_search_result(result: SearchResult) -> bool:
+    metadata = result.metadata or {}
+    provider = str(metadata.get("provider", "")).lower()
+    cache_policy = str(metadata.get("cache_policy", "")).lower()
+    return provider in {"tavily", "brave"} or cache_policy in {
+        "derived_cache_allowed",
+        "transient_results_only",
+    }
+
+
 def time_scope_key(time_range: str | None, today: date | None = None) -> str | None:
     """Return an absolute cache bucket for relative time windows."""
 
@@ -345,6 +355,8 @@ def result_matches_time_range(
     target_date = _target_date_for_range(time_range, resolved_today)
     if time_range in {"today", "trading_day"}:
         if published is None:
+            if _is_hosted_search_result(result):
+                return True
             return target_date is not None and _result_has_target_date_signal(result, target_date)
         return published == resolved_today
     if time_range == "yesterday":
@@ -353,6 +365,8 @@ def result_matches_time_range(
         return published == resolved_today - timedelta(days=1)
     if time_range == "last_24h":
         if published is None:
+            if _is_hosted_search_result(result):
+                return True
             return target_date is not None and _result_has_target_date_signal(result, target_date)
         return resolved_today - timedelta(days=1) <= published <= resolved_today
     if time_range == "last_7d":
@@ -395,6 +409,8 @@ def _infer_entities(query: str, parsed: ParsedQuery) -> list[str]:
 def _infer_scenario(parsed: ParsedQuery, entities: list[str]) -> str:
     if parsed.domain in {"finance", "business"}:
         return "market"
+    if parsed.domain == "postmortem":
+        return "postmortem"
     if parsed.domain == "geopolitics":
         return "policy" if {"export_controls", "semiconductor"} & set(entities) else "news"
     if parsed.time_range is not None:
@@ -443,9 +459,13 @@ def broker_source_names(
     optional = [item.strip().lower() for item in optional_sources or [] if item.strip()]
     if plan.scenario == "policy":
         return _prepend_unique(["gdelt", "web"], ["ap_news", "federal_register", *optional])
+    if plan.scenario == "postmortem":
+        return _prepend_unique(["web", "ap_news", "gdelt"], optional)
     if plan.scenario in {"market", "news"}:
         if plan.time_range is not None:
             if plan.language == "zh":
+                if optional:
+                    return _prepend_unique(["web"], optional)
                 return _prepend_unique(["web", "gdelt", "ap_news"], optional)
             return _prepend_unique(["ap_news", "gdelt", "web"], optional)
         return _prepend_unique(["ap_news", "web", "gdelt", "arxiv"], optional)
@@ -543,6 +563,93 @@ def sort_results_by_quality(results: list[SearchResult]) -> list[SearchResult]:
 
 def _normalize_cache_text(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip().lower())
+
+
+_ZH_LIVE_RECOVERY_HINTS = {
+    "\u4eca\u65e5": ["today"],
+    "\u4eca\u5929": ["today"],
+    "\u6628\u65e5": ["yesterday"],
+    "\u6628\u5929": ["yesterday"],
+    "\u76d8\u4e2d": ["intraday"],
+    "\u5348\u540e": ["afternoon"],
+    "\u80a1\u4ef7": ["stock", "price"],
+    "\u80a1\u7968": ["stock", "shares"],
+    "\u4e0b\u8dcc": ["selloff", "drop"],
+    "\u8df3\u6c34": ["selloff", "drop"],
+    "\u66b4\u8dcc": ["crash", "selloff"],
+    "\u8c08\u5224": ["talks", "negotiations"],
+    "\u4f1a\u8c08": ["talks", "negotiations"],
+    "\u51fa\u53e3\u7ba1\u5236": ["export", "controls"],
+    "\u51fa\u53e3\u9650\u5236": ["export", "restrictions"],
+    "\u653f\u7b56": ["policy"],
+    "\u7f8e\u56fd": ["United", "States", "US"],
+    "\u4f0a\u6717": ["Iran"],
+    "\u4e2d\u56fd": ["China"],
+}
+
+_SCENARIO_RECOVERY_HINTS = {
+    "market": ["market", "latest"],
+    "policy": ["policy", "official"],
+    "news": ["latest", "news"],
+}
+
+
+def _should_retry_empty_live_query(
+    query: str,
+    *,
+    scenario: str,
+    language: str,
+    time_range: str | None,
+) -> bool:
+    normalized_scenario = _normalize_cache_text(scenario)
+    normalized_language = _normalize_cache_text(language)
+    return (
+        normalized_language == "zh"
+        and bool(time_range)
+        and normalized_scenario in {"market", "policy", "news"}
+        and _has_cjk(query)
+    )
+
+
+def _build_live_query_recovery_query(
+    query: str,
+    *,
+    scenario: str,
+    language: str,
+    time_range: str | None,
+    scoped_query: str,
+) -> str | None:
+    if not _should_retry_empty_live_query(
+        query,
+        scenario=scenario,
+        language=language,
+        time_range=time_range,
+    ):
+        return None
+
+    hints: list[str] = []
+    for marker, values in _ZH_LIVE_RECOVERY_HINTS.items():
+        if marker in query:
+            hints.extend(values)
+    hints.extend(_SCENARIO_RECOVERY_HINTS.get(_normalize_cache_text(scenario), []))
+
+    deduped_hints: list[str] = []
+    seen_hints: set[str] = set()
+    for hint in hints:
+        key = hint.lower()
+        if key in seen_hints:
+            continue
+        seen_hints.add(key)
+        deduped_hints.append(hint)
+
+    if not deduped_hints:
+        candidate = query
+    else:
+        candidate = f"{query} {' '.join(deduped_hints)}".strip()
+
+    if _normalize_cache_text(candidate) == _normalize_cache_text(scoped_query):
+        return None
+    return candidate
 
 
 def _source_attempt(
@@ -658,6 +765,36 @@ class EvidenceAccessLayer:
                     for result in raw_results
                     if result_matches_time_range(result, time_range, today)
                 ]
+                attempt_query = scoped_query
+                attempt_status = "ok"
+                recovery_query = None
+                if not adapter_results:
+                    attempt_status = "stale_filtered" if raw_results else "empty"
+                    recovery_query = _build_live_query_recovery_query(
+                        query,
+                        scenario=scenario,
+                        language=language,
+                        time_range=time_range,
+                        scoped_query=scoped_query,
+                    )
+                    if recovery_query:
+                        recovery_raw_results = adapter.search(  # type: ignore[attr-defined]
+                            recovery_query,
+                            max_results=max_results,
+                        )
+                        recovery_results = [
+                            result
+                            for result in recovery_raw_results
+                            if result_matches_time_range(result, time_range, today)
+                        ]
+                        if recovery_results:
+                            adapter_results = recovery_results
+                            attempt_query = recovery_query
+                            attempt_status = "recovered"
+                        else:
+                            attempt_status = (
+                                "stale_filtered" if recovery_raw_results or raw_results else "empty"
+                            )
             except Exception as exc:
                 status, error_name, retry_after_seconds = classify_source_error(exc)
                 errors[adapter_name] = status
@@ -686,9 +823,9 @@ class EvidenceAccessLayer:
             attempts.append(
                 _source_attempt(
                     adapter_name,
-                    scoped_query,
+                    attempt_query,
                     len(adapter_results),
-                    status="ok",
+                    status=attempt_status,
                 )
             )
             searched_adapters += 1

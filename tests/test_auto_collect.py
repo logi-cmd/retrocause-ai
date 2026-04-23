@@ -6,7 +6,8 @@ from datetime import date
 
 import retrocause.collector as collector_module
 from retrocause.collector import EvidenceCollector, reset_source_limit_state
-from retrocause.engine import RetroCauseEngine, analyze
+from retrocause.config import RetroCauseConfig
+from retrocause.engine import RetroCauseEngine, _collect_variable_evidence, analyze
 from retrocause.llm import ExtractedEvidence
 from retrocause.models import CausalEdge, EvidenceType
 from retrocause.sources.base import BaseSourceAdapter, SearchResult
@@ -157,6 +158,104 @@ def test_auto_collect_fallback_summary_preserves_source_metadata():
     assert new_evidence[0].extraction_method == "fallback_summary"
     assert new_evidence[0].source_tier == "base"
     assert new_evidence[0].freshness in {"stable", "recent", "unknown"}
+
+
+def test_auto_collect_fallback_runs_when_extracted_items_do_not_store():
+    _reset_source_state()
+    collector = EvidenceCollector()
+    collector.add_evidence("Duplicate claim", EvidenceType.NEWS)
+    fake_source = _FakeSourceAdapter(_make_search_results())
+
+    fake_llm = _FakeLLMClient(
+        extracted=[
+            ExtractedEvidence(
+                content="Duplicate claim",
+                relevance=0.9,
+                variables=["asteroid_impact"],
+                confidence=0.9,
+            )
+        ]
+    )
+
+    new_evidence = collector.auto_collect(
+        query="test query",
+        domain="general",
+        llm_client=fake_llm,
+        source_adapters=[fake_source],
+    )
+
+    assert any(item.extraction_method == "fallback_summary" for item in new_evidence)
+
+
+def test_chinese_evidence_matches_chinese_variable_name():
+    _reset_source_state()
+    collector = EvidenceCollector()
+    evidence = collector.add_evidence(
+        "芯原股份盘中下跌与半导体板块走弱和资金流出有关。",
+        EvidenceType.NEWS,
+        extraction_method="fallback_summary",
+    )
+
+    matched = _collect_variable_evidence(
+        collector.get_evidence(),
+        "芯原股份股价",
+        "芯原股份今天盘中下跌",
+    )
+
+    assert evidence in matched
+
+
+def test_chinese_market_analysis_builds_fallback_graph_when_llm_graph_empty():
+    _reset_source_state()
+
+    class _MarketLLM(_FakeLLMClient):
+        def decompose_query(self, query: str, domain: str) -> list[str]:
+            return ["芯原股份 今日 盘中 下跌 半导体 板块 资金 流出"]
+
+        def extract_evidence(
+            self, query: str, raw_text: str, source_type: str
+        ) -> list[ExtractedEvidence]:
+            return [
+                ExtractedEvidence(
+                    content="芯原股份盘中下跌，报道提到半导体板块走弱和资金流出。",
+                    relevance=0.9,
+                    variables=["芯原股份股价", "半导体板块", "资金流出"],
+                    confidence=0.82,
+                )
+            ]
+
+        def build_causal_graph(self, query: str, evidence_texts: list[str], domain: str) -> dict:
+            return {}
+
+    source = _NamedFakeSourceAdapter(
+        "tavily",
+        [
+            SearchResult(
+                title="芯原股份盘中下跌原因",
+                content="半导体板块走弱，资金流出。",
+                url="https://example.com/verisilicon",
+                source_type=EvidenceType.NEWS,
+                metadata={
+                    "provider": "tavily",
+                    "content_quality": "fulltext",
+                    "page_content": "芯原股份盘中下跌，报道提到半导体板块走弱和资金流出。",
+                },
+            )
+        ],
+    )
+
+    result = analyze(
+        "芯原股份今天盘中为什么下跌？",
+        llm_client=_MarketLLM(),
+        source_adapters=[source],
+        config=RetroCauseConfig(debate_max_rounds=0, max_sub_queries=1),
+    )
+
+    assert result.hypotheses
+    assert result.edges
+    assert any(edge.supporting_evidence_ids for edge in result.edges)
+    assert result.retrieval_trace[0]["source"] == "tavily"
+    assert result.refutation_checks == []
 
 
 def test_auto_collect_prefers_page_content_for_web_quality():
@@ -417,7 +516,7 @@ def test_auto_collect_excludes_stale_dated_results_for_yesterday_market_query(mo
     fake_llm = _CapturingLLM()
 
     new_evidence = collector.auto_collect(
-        query="\u6628\u5929\u6bd4\u7279\u5e01\u4ef7\u683c\u8df3\u6c34",
+        query="昨天比特币价格跳水",
         domain="finance",
         llm_client=fake_llm,
         source_adapters=[source],

@@ -37,6 +37,9 @@ def challenge_check_phrase(refuting_count: int) -> str:
 def source_trace_status_label(status: str) -> str:
     labels = {
         "ok": "ok",
+        "recovered": "recovered",
+        "empty": "no-hits",
+        "stale_filtered": "stale-filtered",
         "cached": "cached",
         "source_limited": "source-limited",
         "rate_limited": "rate-limited",

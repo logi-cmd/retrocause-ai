@@ -14,16 +14,22 @@ SECTION_TITLES = {
 }
 
 
-def production_brief_item_from_edge_payload(edge: object) -> dict[str, Any]:
+def production_brief_item_from_edge_payload(
+    edge: object,
+    evidence_by_id: dict[str, object],
+) -> dict[str, Any]:
     evidence_ids = list(dict.fromkeys(_field(edge, "supporting_evidence_ids", []) or []))
     source = humanize_identifier(str(_field(edge, "source", "")))
     target = humanize_identifier(str(_field(edge, "target", "")))
     strength = float(_field(edge, "strength", 0.0) or 0.0)
     title = f"{source} -> {target}"
     summary = (
-        f"{title} with {strength:.0%} edge strength and "
-        f"{len(evidence_ids)} supporting evidence item(s)."
+        f"{source} is likely pushing {target} "
+        f"({strength:.0%} confidence signal, {len(evidence_ids)} supporting evidence item(s))."
     )
+    excerpt = _first_evidence_excerpt(evidence_ids, evidence_by_id)
+    if excerpt:
+        summary = f"{summary} Supporting clue: {excerpt}"
     return {
         "title": title,
         "summary": summary,
@@ -70,8 +76,12 @@ def _top_edge_item_payloads(response: object) -> list[dict[str, Any]]:
     if not chains:
         return []
     top_chain = max(chains, key=lambda chain: float(_field(chain, "probability", 0.0) or 0.0))
+    evidence_by_id = {
+        str(_field(evidence, "id", "")): evidence
+        for evidence in list(_field(response, "evidences", []) or [])
+    }
     items = [
-        production_brief_item_from_edge_payload(edge)
+        production_brief_item_from_edge_payload(edge, evidence_by_id)
         for edge in list(_field(top_chain, "edges", []) or [])
         if _field(edge, "supporting_evidence_ids", [])
     ]
@@ -155,6 +165,21 @@ def _production_executive_summary(
     if brief_answer:
         return f"{scenario_label}: {brief_answer}"
     return f"{scenario_label}: no evidence-anchored production driver is available yet."
+
+
+def _first_evidence_excerpt(
+    evidence_ids: Sequence[str],
+    evidence_by_id: dict[str, object],
+) -> str:
+    for evidence_id in evidence_ids:
+        evidence = evidence_by_id.get(str(evidence_id))
+        if evidence is None:
+            continue
+        content = " ".join(str(_field(evidence, "content", "")).split())
+        if not content:
+            continue
+        return content[:180]
+    return ""
 
 
 def _field(item: object, key: str, default: object = None) -> object:

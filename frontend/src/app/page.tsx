@@ -26,6 +26,7 @@ import type {
   ApiRunStep,
   ApiSavedRunSummary,
   ApiScenario,
+  ApiSourcePreflight,
   ApiUsageLedgerItem,
 } from "@/lib/api-types";
 import {
@@ -70,18 +71,47 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_RETROCAUSE_API_BASE ?? "http://localhost:8000";
 
+const ZH_BRIEF_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/Most likely explanation:/gi, "\u6700\u53ef\u80fd\u89e3\u91ca\uff1a"],
+  [/confidence signal/gi, "\u7f6e\u4fe1\u4fe1\u53f7"],
+  [/Found/gi, "\u53d1\u73b0"],
+  [/Checked/gi, "\u5df2\u68c0\u67e5"],
+  [/challenge evidence item\(s\)/gi, "\u6761\u53cd\u8bc1\u8bc1\u636e"],
+  [/key edge\(s\)/gi, "\u6761\u5173\u952e\u8fb9"],
+  [/source type\(s\)/gi, "\u7c7b\u6765\u6e90"],
+  [/high-quality evidence item\(s\)/gi, "\u6761\u9ad8\u8d28\u91cf\u8bc1\u636e"],
+  [/total evidence item\(s\)/gi, "\u6761\u603b\u8bc1\u636e"],
+  [/supporting evidence item\(s\)/gi, "\u6761\u652f\u6301\u8bc1\u636e"],
+  [/Challenge evidence on this edge:/gi, "\u8fd9\u6761\u8fb9\u4e0a\u7684\u53cd\u8bc1\u8bc1\u636e\uff1a"],
+  [/No challenge evidence attached to this edge after targeted retrieval/gi, "\u5bf9\u8fd9\u6761\u8fb9\u8fdb\u884c\u5b9a\u5411 challenge \u68c0\u7d22\u540e\uff0c\u6ca1\u6709\u627e\u5230\u9644\u7740\u7684\u53cd\u9a73\u8bc1\u636e"],
+  [/Challenge retrieval checked this edge but returned no source results/gi, "\u5df2\u68c0\u67e5\u8fd9\u6761\u8fb9\u7684 challenge \u68c0\u7d22\uff0c\u4f46\u6ca1\u6709\u8fd4\u56de\u6765\u6e90\u7ed3\u679c"],
+  [/Challenge retrieval has not checked this edge/gi, "challenge \u68c0\u7d22\u5c1a\u672a\u68c0\u67e5\u8fd9\u6761\u8fb9"],
+  [/No challenge evidence attached to this edge/gi, "\u8fd9\u6761\u8fb9\u4e0a\u6ca1\u6709\u9644\u7740\u53cd\u9a73\u8bc1\u636e"],
+  [/Targeted challenge retrieval did not run for this result\./gi, "\u8fd9\u6b21\u7ed3\u679c\u672a\u6267\u884c\u5b9a\u5411 challenge \u68c0\u7d22\u3002"],
+  [/At least one challenge query returned no source results\./gi, "\u81f3\u5c11\u6709\u4e00\u6761 challenge \u67e5\u8be2\u6ca1\u6709\u8fd4\u56de\u6765\u6e90\u7ed3\u679c\u3002"],
+  [/At least one causal edge still lacks direct supporting evidence\./gi, "\u81f3\u5c11\u6709\u4e00\u6761\u56e0\u679c\u8fb9\u4ecd\u7f3a\u5c11\u76f4\u63a5\u652f\u6301\u8bc1\u636e\u3002"],
+  [/No trusted full-text or cached high-quality evidence is attached\./gi, "\u5f53\u524d\u6ca1\u6709\u9644\u7740\u53ef\u4fe1\u7684\u5168\u6587\u6216\u7f13\u5b58\u9ad8\u8d28\u91cf\u8bc1\u636e\u3002"],
+  [/Primary-source confirmation may still be needed for high-stakes use\./gi, "\u5bf9\u4e8e\u9ad8\u98ce\u9669\u4f7f\u7528\u573a\u666f\uff0c\u4ecd\u53ef\u80fd\u9700\u8981\u4e00\u624b\u6765\u6e90\u7684\u786e\u8ba4\u3002"],
+  [/Retrieval trace:/gi, "\u68c0\u7d22\u8f68\u8ff9\uff1a"],
+  [/source attempt\(s\)/gi, "\u6b21\u6765\u6e90\u5c1d\u8bd5"],
+  [/degraded or limited/gi, "\u6b21\u53d7\u9650\u6216\u964d\u7ea7"],
+  [/Review (\d+) checked edge\(s\);/gi, "\u8bf7\u590d\u6838 $1 \u6761\u5df2\u68c0\u67e5\u7684\u8fb9\uff1b"],
+  [/Reviewability/gi, "\u53ef\u5ba1\u9605\u6027"],
+  [/Confidence signal/gi, "\u7f6e\u4fe1\u4fe1\u53f7"],
+  [/Evidence:/gi, "\u8bc1\u636e\uff1a"],
+  [/Evidence type/gi, "\u8bc1\u636e\u7c7b\u578b"],
+  [/Supports\./gi, "\u652f\u6301\u3002"],
+  [/Challenges\./gi, "\u53cd\u9a73\u3002"],
+  [/Source:/gi, "\u6765\u6e90\uff1a"],
+  [/Reliability:/gi, "\u53ef\u4fe1\u5ea6\uff1a"],
+];
+
 function localizeBriefText(text: string, locale: "zh" | "en"): string {
   if (locale === "en") return text;
-  return localizeCausalText(text, locale)
-    .replace(/Most likely explanation:/gi, "\u6700\u53ef\u80fd\u89e3\u91ca\uff1a")
-    .replace(/confidence signal/gi, "缃俊淇″彿")
-    .replace(/Found/gi, "鍙戠幇")
-    .replace(/challenge evidence item\(s\)/gi, "\u6761\u53cd\u8bc1\u8bc1\u636e")
-    .replace(/Checked/gi, "\u5df2\u68c0\u67e5")
-    .replace(/key edge\(s\)/gi, "鏉″叧閿洜鏋滆竟")
-    .replace(/source type\(s\)/gi, "\u7c7b\u6765\u6e90")
-    .replace(/high-quality evidence item\(s\)/gi, "鏉￠珮璐ㄩ噺璇佹嵁")
-    .replace(/total evidence item\(s\)/gi, "\u6761\u603b\u8bc1\u636e");
+  return ZH_BRIEF_REPLACEMENTS.reduce(
+    (localized, [pattern, replacement]) => localized.replace(pattern, replacement),
+    localizeCausalText(text, locale)
+  );
 }
 
 function localizeEvidenceContent(content: string, locale: "zh" | "en"): string {
@@ -243,6 +273,17 @@ function localizeCausalDescription(text: string, label: string, locale: "zh" | "
     return `\u4e0e${label}\u76f8\u5173\u7684\u8bc1\u636e\u652f\u6491\u56e0\u7d20`;
   }
   return localized;
+}
+
+function localizeUncertaintyType(type: string, locale: "zh" | "en"): string {
+  if (locale === "en") return type;
+  const labels: Record<string, string> = {
+    epistemic: "\u8ba4\u77e5\u4e0d\u786e\u5b9a\u6027",
+    data: "\u6570\u636e\u4e0d\u786e\u5b9a\u6027",
+    model: "\u6a21\u578b\u4e0d\u786e\u5b9a\u6027",
+    thin_evidence: "\u8bc1\u636e\u7a00\u8584",
+  };
+  return labels[type] ?? localizeCausalText(type.replaceAll("_", " "), locale);
 }
 
 function toLocalChain(
@@ -408,7 +449,9 @@ export default function Home() {
   const [currentQuery, setCurrentQuery] = useState("");
   const [lastQuery, setLastQuery] = useState("");
   const [apiKey, setApiKey] = useState("");
-  const selectedModel = "openrouter";
+  const [tavilyApiKey, setTavilyApiKey] = useState("");
+  const [braveSearchApiKey, setBraveSearchApiKey] = useState("");
+  const selectedModel = "ofoxai";
   const [selectedExplicitModel, setSelectedExplicitModel] = useState("");
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
@@ -441,6 +484,8 @@ export default function Home() {
   const [uploadedEvidenceStatus, setUploadedEvidenceStatus] = useState("");
   const [providerPreflight, setProviderPreflight] = useState<ApiProviderPreflight | null>(null);
   const [providerPreflightLoading, setProviderPreflightLoading] = useState(false);
+  const [sourcePreflight, setSourcePreflight] = useState<ApiSourcePreflight | null>(null);
+  const [sourcePreflightLoading, setSourcePreflightLoading] = useState(false);
   const [pipelineEval, setPipelineEval] = useState<AnalyzeResponseV2["evaluation"]>(null);
   const [uncertaintyReport, setUncertaintyReport] = useState<AnalyzeResponseV2["uncertainty_report"]>(null);
   const [evidenceSourceFilter, setEvidenceSourceFilter] = useState<string>("all");
@@ -1202,6 +1247,48 @@ export default function Home() {
     }
   }, [apiKey, locale, selectedExplicitModel, selectedModel]);
 
+  const runSourcePreflight = useCallback(async () => {
+    setSourcePreflightLoading(true);
+    setSourcePreflight(null);
+    try {
+      const response = await fetch(`${API_BASE}/api/sources/preflight`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tavily_api_key: tavilyApiKey,
+          brave_search_api_key: braveSearchApiKey,
+          query: currentQuery.trim() || "RetroCause source preflight latest market news",
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Search preflight failed (${response.status})`);
+      }
+      const payload = (await response.json()) as ApiSourcePreflight;
+      setSourcePreflight(payload);
+    } catch (error) {
+      setSourcePreflight({
+        status: "error",
+        can_search: false,
+        checks: [
+          {
+            source: "request",
+            source_label: "Search preflight",
+            status: "request_failed",
+            can_search: false,
+            result_count: 0,
+            diagnosis: error instanceof Error ? error.message : "Search preflight request failed.",
+            user_action:
+              locale === "en"
+                ? "Check that the backend is running, then retry search preflight."
+                : "\u8bf7\u786e\u8ba4\u540e\u7aef\u6b63\u5728\u8fd0\u884c\uff0c\u7136\u540e\u91cd\u65b0\u641c\u7d22\u9884\u68c0\u3002",
+          },
+        ],
+      });
+    } finally {
+      setSourcePreflightLoading(false);
+    }
+  }, [braveSearchApiKey, currentQuery, locale, tavilyApiKey]);
+
   const runAnalysis = useCallback(async () => {
     const query = currentQuery.trim();
     if (!query) return;
@@ -1253,6 +1340,8 @@ export default function Home() {
       scenario_override: scenarioOverride === "auto" ? null : scenarioOverride,
     };
     if (selectedExplicitModel) body.explicit_model = selectedExplicitModel;
+    if (tavilyApiKey.trim()) body.tavily_api_key = tavilyApiKey;
+    if (braveSearchApiKey.trim()) body.brave_search_api_key = braveSearchApiKey;
 
     // Helper to process a successful payload (shared between SSE done and fallback)
     const processPayload = (payload: AnalyzeResponseV2) => {
@@ -1493,6 +1582,8 @@ export default function Home() {
     selectedModel,
     selectedExplicitModel,
     apiKey,
+    tavilyApiKey,
+    braveSearchApiKey,
     scenarioOverride,
     locale,
     localizedDemo.primaryChain,
@@ -1845,7 +1936,7 @@ export default function Home() {
             <div className="advanced-settings">
           <div className="compact-label" style={{ marginTop: "2px" }}>{t("query.model")}</div>
           <div className="provider-lock">
-            <span>OpenRouter</span>
+            <span>OfoxAI</span>
             <span>{locale === "en" ? "fixed provider" : "\u56fa\u5b9a\u63d0\u4f9b\u5546"}</span>
           </div>
           {Object.keys(availableModels).length > 0 && (
@@ -1872,6 +1963,81 @@ export default function Home() {
               ? "Stored in this browser session and sent only to the selected model provider."
               : "\u4ec5\u4fdd\u5b58\u5728\u5f53\u524d\u6d4f\u89c8\u5668\u4f1a\u8bdd\u4e2d\uff0c\u5e76\u53ea\u53d1\u9001\u7ed9\u4f60\u9009\u62e9\u7684\u6a21\u578b\u63d0\u4f9b\u5546\u3002"}
           </div>
+          <div className="compact-label" style={{ marginTop: "10px" }}>
+            {locale === "en" ? "Tavily search key (optional)" : "Tavily \u641c\u7d22\u5bc6\u94a5\uff08\u53ef\u9009\uff09"}
+          </div>
+          <input
+            type="password"
+            value={tavilyApiKey}
+            onChange={(event) => setTavilyApiKey(event.target.value)}
+            placeholder={locale === "en" ? "Use for this local run" : "\u4ec5\u7528\u4e8e\u672c\u6b21\u672c\u5730\u5206\u6790"}
+            className="analyst-input"
+          />
+          <div className="compact-label" style={{ marginTop: "8px" }}>
+            {locale === "en" ? "Brave Search key (optional)" : "Brave Search \u5bc6\u94a5\uff08\u53ef\u9009\uff09"}
+          </div>
+          <input
+            type="password"
+            value={braveSearchApiKey}
+            onChange={(event) => setBraveSearchApiKey(event.target.value)}
+            placeholder={locale === "en" ? "Use for this local run" : "\u4ec5\u7528\u4e8e\u672c\u6b21\u672c\u5730\u5206\u6790"}
+            className="analyst-input"
+          />
+          <div style={{ fontSize: "0.58rem", color: "var(--analyst-muted)", marginTop: "6px", lineHeight: 1.45 }}>
+            {locale === "en"
+              ? "Search keys are optional. They are sent to the local backend for this run and override process environment keys."
+              : "\u641c\u7d22\u5bc6\u94a5\u662f\u53ef\u9009\u9879\u3002\u5b83\u4eec\u4f1a\u5728\u672c\u6b21\u8fd0\u884c\u4e2d\u53d1\u9001\u5230\u672c\u5730\u540e\u7aef\uff0c\u5e76\u8986\u76d6\u8fdb\u7a0b\u73af\u5883\u53d8\u91cf\u3002"}
+          </div>
+          <button
+            type="button"
+            onClick={runSourcePreflight}
+            disabled={sourcePreflightLoading || (!tavilyApiKey.trim() && !braveSearchApiKey.trim())}
+            style={{
+              marginTop: "8px",
+              width: "100%",
+              padding: "8px 10px",
+              borderRadius: "8px",
+              border: "1px solid rgba(49, 95, 131, 0.24)",
+              background: sourcePreflightLoading ? "rgba(49,95,131,0.08)" : "rgba(255,255,255,0.66)",
+              color: "var(--analyst-blue)",
+              fontSize: "0.64rem",
+              fontWeight: 800,
+              cursor: sourcePreflightLoading || (!tavilyApiKey.trim() && !braveSearchApiKey.trim()) ? "not-allowed" : "pointer",
+            }}
+          >
+            {sourcePreflightLoading
+              ? locale === "en" ? "Checking search..." : "\u6b63\u5728\u9884\u68c0\u641c\u7d22..."
+              : locale === "en" ? "Run search preflight" : "\u8fd0\u884c\u641c\u7d22\u9884\u68c0"}
+          </button>
+          {sourcePreflight && (
+            <div
+              style={{
+                marginTop: "8px",
+                padding: "8px 9px",
+                borderRadius: "8px",
+                border: sourcePreflight.can_search
+                  ? "1px solid rgba(92,130,84,0.22)"
+                  : "1px solid rgba(160,80,60,0.22)",
+                background: sourcePreflight.can_search
+                  ? "rgba(92,130,84,0.08)"
+                  : "rgba(160,80,60,0.08)",
+                color: sourcePreflight.can_search ? "#526f44" : "#9a4635",
+                fontSize: "0.58rem",
+                lineHeight: 1.45,
+              }}
+            >
+              <strong>
+                {sourcePreflight.can_search
+                  ? locale === "en" ? "Search preflight passed" : "\u641c\u7d22\u9884\u68c0\u901a\u8fc7"
+                  : locale === "en" ? "Search preflight blocked" : "\u641c\u7d22\u9884\u68c0\u672a\u901a\u8fc7"}
+              </strong>
+              {sourcePreflight.checks.map((check) => (
+                <div key={check.source} style={{ marginTop: "4px", color: "#6b5a42" }}>
+                  {`${check.source_label}: ${check.status} · ${check.diagnosis || check.user_action}`}
+                </div>
+              ))}
+            </div>
+          )}
           <button
             type="button"
             onClick={runProviderPreflight}
@@ -1971,8 +2137,10 @@ export default function Home() {
                 {step.status.toUpperCase()} - {step.label}
               </div>
             ))}
-            {usageLedger.slice(0, 3).map((item) => (
-              <div key={`${item.category}-${item.name}`}>
+            {usageLedger.slice(0, 3).map((item, index) => (
+              <div
+                key={`${item.category}-${item.name}-${item.quota_owner}-${item.status}-${index}`}
+              >
                 {item.category}: {item.quota_owner} / {item.status}
               </div>
             ))}
@@ -2381,7 +2549,12 @@ export default function Home() {
             </div>
             {(selectedApiNode?.uncertainty?.explanation || uncertaintyReport?.per_node?.[selectedNote.id]?.explanation) && (
               <div style={{ color: "#6b5a42", fontSize: "0.58rem", marginTop: "8px", lineHeight: 1.5 }}>
-                {selectedApiNode?.uncertainty?.explanation ?? uncertaintyReport?.per_node?.[selectedNote.id]?.explanation}
+                {localizeBriefText(
+                  selectedApiNode?.uncertainty?.explanation ??
+                    uncertaintyReport?.per_node?.[selectedNote.id]?.explanation ??
+                    "",
+                  locale
+                )}
               </div>
             )}
           </div>
@@ -2450,11 +2623,12 @@ export default function Home() {
           <div className="compact-item" style={{ background: "rgba(255,255,255,0.72)" }}>
             <div className="compact-label">{locale === "en" ? "Uncertainty report" : "\u4e0d\u786e\u5b9a\u6027\u62a5\u544a"}</div>
             <div style={{ fontSize: "0.65rem", color: "#5c4a32", lineHeight: 1.5 }}>
-              {Math.round(uncertaintyReport.overall_uncertainty * 100)}% · {uncertaintyReport.summary}
+              {Math.round(uncertaintyReport.overall_uncertainty * 100)}% · {localizeBriefText(uncertaintyReport.summary, locale)}
             </div>
             {uncertaintyReport.dominant_uncertainty_type && (
               <div style={{ fontSize: "0.56rem", color: "#8b7355", marginTop: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                {locale === "en" ? "Dominant" : "\u4e3b\u5bfc\u7c7b\u578b"}: {uncertaintyReport.dominant_uncertainty_type}
+                {locale === "en" ? "Dominant" : "\u4e3b\u5bfc\u7c7b\u578b"}:{" "}
+                {localizeUncertaintyType(uncertaintyReport.dominant_uncertainty_type, locale)}
               </div>
             )}
           </div>

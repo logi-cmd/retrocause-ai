@@ -1,6 +1,6 @@
 # RetroCause Codebase Audit
 
-Last updated: 2026-04-18
+Last updated: 2026-04-22
 
 This is a maintenance audit, not a feature spec. It records code surfaces that are easy to miss in docs and code areas that are becoming too similar or too large.
 
@@ -45,6 +45,7 @@ Finding: `/api/analyze/v2/stream` and legacy `/api/analyze` are real surfaces bu
 | Optional Bayesian/vector extras | `pyproject.toml` optional groups `bayesian` and `vector` | Not prominent in README; probably fine because they are not primary OSS workflow |
 | Browser UI local run workflow | `frontend/src/app/page.tsx`, `/api/runs`, `/api/evidence/upload` | Documented in README and project state |
 | SourceBroker optional adapters | `retrocause/sources/tavily.py`, `retrocause/sources/brave.py`, env keys | Documented in README and retrieval strategy |
+| Live provider/search stability probe | `scripts/live_stability_probe.py` | Documented in README development notes and docs index |
 
 Decision after this audit: the browser evidence board started by `python start.py` is the supported first-run path. The CLI is a secondary local smoke-check/scripting surface, and the Streamlit app is a legacy/development demo path. README now labels both accordingly.
 
@@ -167,6 +168,8 @@ Recommendation: introduce shared test fixtures only after the next refactor targ
 | `STATE.md` | Older running log through 2026-04-10 | Keep historical, but use `docs/PROJECT_STATE.md` for current state |
 | `docs/engineering-audit.md` | Older audit still says some runtime/dependency and app-size issues from an earlier phase | Keep as historical, but do not treat all items as current blockers without rechecking |
 | `docs/roadmap-and-limitations.md` | Contains completed and historical roadmap items | Useful, but current next step should come from `docs/PROJECT_STATE.md` |
+| `README.md` | Rewritten again as clean bilingual OSS onboarding after Windows mojibake reappeared | Keep as the public source of truth for setup, providers, local workflow, API usage, and OSS/Future Pro boundary |
+| `AGENTS.md` / `pyproject.toml` | Root contributor/package metadata restored to readable text after mojibake was found during OSS cleanup | Keep these files small and guarded by root metadata readability tests |
 
 ## Current Non-Code Cleanup Backlog
 
@@ -178,6 +181,8 @@ Recommendation: introduce shared test fixtures only after the next refactor targ
 ## Test Harness Notes
 
 - `scripts/e2e_test.py` is the canonical browser dogfood script for the local OSS app. It autostarts backend/frontend services when needed.
+- `scripts/live_stability_probe.py` is the repeatable real-key provider/search probe. It runs in-process through the FastAPI app with `TestClient`, defaults to OfoxAI, supports `RETROCAUSE_LIVE_PROVIDER=openrouter` for the older OpenRouter path, supports `RETROCAUSE_LIVE_MODELS` for explicit retests, and writes a secret-free JSON report under `.agent-guardrails/evidence/`.
+- Root `npm test` pins pytest temporary files under ignored `.tmp-tests/pytest` so Windows user-Temp or stale `.pytest-tmp` ACL issues do not break normal verification.
 - On Windows, the cleanup path must terminate the process tree, not only the `npm.cmd` parent, or `next start` can keep serving stale `.next` chunks after a later build.
 - The Playwright page load checks intentionally wait for DOM content plus product elements instead of `networkidle`; the homepage can issue background requests while still being ready for user interaction.
 

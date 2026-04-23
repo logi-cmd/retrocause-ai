@@ -281,6 +281,27 @@ class EvidenceCollector:
             fallback_items.append((combined, item.source_type, item.url, 0.35))
         return fallback_items
 
+    def _add_fallback_summaries(self, results: list[SearchResult]) -> list[Evidence]:
+        new_evidence: list[Evidence] = []
+        for item in results[:2]:
+            metadata = (getattr(item, "metadata", {}) or {}) if item is not None else {}
+            for content, source_type, source_url, reliability in self._fallback_extract_from_results(
+                [item]
+            ):
+                evidence = self.add_evidence(
+                    content=content,
+                    source_type=source_type,
+                    source_url=source_url,
+                    reliability=reliability,
+                    timestamp=metadata.get("published"),
+                    extraction_method="fallback_summary",
+                    stance="supporting",
+                    stance_basis="fallback_summary",
+                )
+                if evidence is not None:
+                    new_evidence.append(evidence)
+        return new_evidence
+
     def auto_collect(
         self,
         query: str,
@@ -342,6 +363,7 @@ class EvidenceCollector:
             extraction_method = _extraction_method_from_results(all_results)
 
             extracted = llm_client.extract_evidence(query, merged_text, first_source.value)
+            added_from_extraction = 0
             for item in extracted:
                 matched_result = _best_result_for_evidence(item.content, all_results)
                 matched_metadata = (getattr(matched_result, "metadata", {}) or {})
@@ -359,28 +381,16 @@ class EvidenceCollector:
                 )
                 if evidence is not None:
                     new_evidence.append(evidence)
+                    added_from_extraction += 1
 
-            if extracted:
+            if added_from_extraction:
                 continue
 
-            logger.info(
-                "auto_collect: LLM extraction returned nothing, preserving low-confidence summaries"
-            )
-            for content, source_type, source_url, reliability in self._fallback_extract_from_results(
-                all_results
-            ):
-                evidence = self.add_evidence(
-                    content=content,
-                    source_type=source_type,
-                    source_url=source_url,
-                    reliability=reliability,
-                    timestamp=(getattr(all_results[0], "metadata", {}) or {}).get("published"),
-                    extraction_method="fallback_summary",
-                    stance="supporting",
-                    stance_basis="fallback_summary",
+            if not new_evidence:
+                logger.info(
+                    "auto_collect: LLM extraction produced no stored evidence, preserving summaries"
                 )
-                if evidence is not None:
-                    new_evidence.append(evidence)
+                new_evidence.extend(self._add_fallback_summaries(all_results))
 
             if _collection_quality_met(domain, new_evidence):
                 break
@@ -636,6 +646,7 @@ class EvidenceCollector:
             extraction_method = _extraction_method_from_results(all_results)
 
             extracted = llm_client.extract_evidence(original_query, merged_text, first_source.value)
+            added_from_extraction = 0
             for item in extracted:
                 evidence = self.add_evidence(
                     content=item.content,
@@ -650,28 +661,16 @@ class EvidenceCollector:
                 )
                 if evidence is not None:
                     new_evidence.append(evidence)
+                    added_from_extraction += 1
 
-            if extracted:
+            if added_from_extraction:
                 continue
 
-            logger.info(
-                "graph_guided_collect: LLM extraction returned nothing, preserving low-confidence summaries"
-            )
-            for content, source_type, source_url, reliability in self._fallback_extract_from_results(
-                all_results
-            ):
-                evidence = self.add_evidence(
-                    content=content,
-                    source_type=source_type,
-                    source_url=source_url,
-                    reliability=reliability,
-                    timestamp=(getattr(all_results[0], "metadata", {}) or {}).get("published"),
-                    extraction_method="fallback_summary",
-                    stance="supporting",
-                    stance_basis="fallback_summary",
+            if not new_evidence:
+                logger.info(
+                    "graph_guided_collect: LLM extraction produced no stored evidence, preserving summaries"
                 )
-                if evidence is not None:
-                    new_evidence.append(evidence)
+                new_evidence.extend(self._add_fallback_summaries(all_results))
 
         logger.info("_execute_subqueries: added %d evidence items after dedupe", len(new_evidence))
         return new_evidence

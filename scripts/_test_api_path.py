@@ -1,3 +1,4 @@
+import os
 import sys, logging, time, traceback
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -16,8 +17,16 @@ from retrocause.app.demo_data import run_real_analysis_with_progress
 cfg = RetroCauseConfig.from_env()
 print(f"config: timeout={cfg.request_timeout_seconds}s, max_sub_queries={cfg.max_sub_queries}")
 
+API_KEY = (
+    os.environ.get("OPENROUTER_API_KEY")
+    or os.environ.get("RETROCAUSE_OPENROUTER_KEY")
+    or ""
+).strip()
+if not API_KEY:
+    raise SystemExit("Set OPENROUTER_API_KEY or RETROCAUSE_OPENROUTER_KEY before running.")
+
 llm = LLMClient(
-    api_key="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",
+    api_key=API_KEY,
     model="deepseek/deepseek-chat-v3-0324",
     base_url="https://openrouter.ai/api/v1",
     timeout=cfg.request_timeout_seconds,
@@ -36,7 +45,7 @@ t0 = time.time()
 try:
     result = run_real_analysis_with_progress(
         "MH370为什么失踪",
-        "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",
+        API_KEY,
         "deepseek/deepseek-chat-v3-0324",
         "https://openrouter.ai/api/v1",
         on_progress,

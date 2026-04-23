@@ -1,11 +1,22 @@
-import sys, json, requests
+import json
+import os
+import sys
+
+import requests
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-API_KEY = "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"
+API_KEY = (
+    os.environ.get("OPENROUTER_API_KEY")
+    or os.environ.get("RETROCAUSE_OPENROUTER_KEY")
+    or ""
+).strip()
 MODEL = "deepseek/deepseek-chat-v3-0324"
 QUERY = "MH370为什么失踪"
 URL = "http://127.0.0.1:8001/api/analyze/v2/stream"
+
+if not API_KEY:
+    raise SystemExit("Set OPENROUTER_API_KEY or RETROCAUSE_OPENROUTER_KEY before running.")
 
 print(f"Testing SSE: {QUERY}")
 print(f"URL: {URL}")

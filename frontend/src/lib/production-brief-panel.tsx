@@ -14,6 +14,8 @@ export function ProductionBriefPanel({
   localizeText,
 }: ProductionBriefPanelProps) {
   const renderText = (text: string) => (locale === "en" ? text : localizeText(text, locale));
+  const localizedTitle =
+    brief.title && brief.title !== brief.scenario_key ? renderText(brief.title) : null;
 
   return (
     <div
@@ -46,6 +48,11 @@ export function ProductionBriefPanel({
           </span>
         )}
       </div>
+      {localizedTitle && (
+        <div style={{ marginTop: "6px", fontSize: "0.55rem", color: "#8b7355", fontWeight: 700 }}>
+          {localizedTitle}
+        </div>
+      )}
       <div
         style={{
           marginTop: "7px",
@@ -57,12 +64,12 @@ export function ProductionBriefPanel({
       >
         {renderText(brief.executive_summary)}
       </div>
-      {brief.sections.slice(0, 3).map((section) => (
+      {brief.sections.map((section) => (
         <div key={section.kind} style={{ marginTop: "10px" }}>
           <div style={{ fontSize: "0.58rem", color: "#315f83", fontWeight: 800 }}>
             {renderText(section.title)}
           </div>
-          {section.items.slice(0, 3).map((item) => (
+          {section.items.slice(0, 4).map((item) => (
             <div
               key={`${section.kind}-${item.title}`}
               style={{
@@ -72,29 +79,61 @@ export function ProductionBriefPanel({
                 lineHeight: 1.45,
               }}
             >
-              {renderText(item.summary)}
+              <div style={{ fontWeight: 700 }}>
+                {renderText(item.title)}
+              </div>
+              <div style={{ marginTop: "2px" }}>{renderText(item.summary)}</div>
               {item.evidence_ids.length > 0 && (
-                <span style={{ color: "#8b7355" }}>
+                <div style={{ color: "#8b7355", marginTop: "2px" }}>
                   {" "}
                   {locale === "en" ? "Evidence" : "\u8bc1\u636e"}:{" "}
                   {item.evidence_ids.join(", ")}
-                </span>
+                </div>
               )}
             </div>
           ))}
         </div>
       ))}
+      {brief.next_verification_steps.length > 0 && (
+        <div
+          style={{
+            marginTop: "9px",
+            paddingTop: "8px",
+            borderTop: "1px solid rgba(49, 95, 131, 0.12)",
+          }}
+        >
+          <div style={{ fontSize: "0.58rem", color: "#315f83", fontWeight: 800 }}>
+            {locale === "en" ? "Next verification steps" : "\u4e0b\u4e00\u6b65\u6838\u9a8c"}
+          </div>
+          {brief.next_verification_steps.slice(0, 4).map((step, index) => (
+            <div
+              key={`verification-step-${index}`}
+              style={{ marginTop: "5px", fontSize: "0.56rem", color: "#5c4a32", lineHeight: 1.45 }}
+            >
+              {index + 1}. {renderText(step)}
+            </div>
+          ))}
+        </div>
+      )}
       {brief.limits.length > 0 && (
         <div
           style={{
             marginTop: "9px",
-            fontSize: "0.56rem",
-            color: "#8b7355",
-            lineHeight: 1.45,
+            paddingTop: "8px",
+            borderTop: "1px solid rgba(160, 80, 60, 0.12)",
           }}
         >
-          {locale === "en" ? "Limit: " : "\u9650\u5236\uff1a"}
-          {renderText(brief.limits[0])}
+          <div style={{ fontSize: "0.58rem", color: "#a0503c", fontWeight: 800 }}>
+            {locale === "en" ? "Current limits" : "\u5f53\u524d\u9650\u5236"}
+          </div>
+          {brief.limits.slice(0, 3).map((limit, index) => (
+            <div
+              key={`production-limit-${index}`}
+              style={{ marginTop: "5px", fontSize: "0.56rem", color: "#8b7355", lineHeight: 1.45 }}
+            >
+              {locale === "en" ? "Limit" : "\u9650\u5236"} {index + 1}: {renderText(limit)}
+            </div>
+          ))}
         </div>
       )}
     </div>

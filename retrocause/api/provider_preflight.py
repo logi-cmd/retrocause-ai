@@ -13,6 +13,8 @@ LIVE_FAILURE_TOKENS = [
     "timed out",
     "empty result",
     "rate limit",
+    "queue is busy",
+    "already running",
 ]
 
 PREFLIGHT_ACTIONS = {
@@ -21,11 +23,15 @@ PREFLIGHT_ACTIONS = {
     "invalid_model": "Pick a model listed by the provider, then run preflight again.",
     "auth_or_permission": "Check that the API key is valid and has access to this provider/model.",
     "billing_or_quota": "Check provider balance, quota, or account limits before retrying.",
+    "rate_limited": "The provider is currently rate-limited; wait briefly or switch model/provider.",
+    "queue_busy": "Another local live analysis is running; wait for it to finish, then retry.",
     "timeout": "Try a faster model or retry when the provider is responsive.",
     "invalid_or_empty_payload": (
         "Try a model with reliable JSON output before running the full analysis."
     ),
 }
+
+_FALLBACK_MODEL_LIMIT = 3
 
 MODEL_ALIASES = {
     "openrouter": {
@@ -61,6 +67,10 @@ def classify_preflight_failure_code(error_msg: str | None) -> str:
         return "invalid_model"
     if any(token in lowered for token in ["401", "authentication", "permission", "user not found"]):
         return "auth_or_permission"
+    if any(token in lowered for token in ["429", "rate limit", "rate-limited", "ratelimit"]):
+        return "rate_limited"
+    if "queue is busy" in lowered or "already running" in lowered:
+        return "queue_busy"
     if any(token in lowered for token in ["balance", "quota", "insufficient", "credits"]):
         return "billing_or_quota"
     if "timeout" in lowered or "timed out" in lowered:
@@ -75,3 +85,44 @@ def preflight_user_action(failure_code: str | None) -> str:
         failure_code or "",
         "Inspect the provider error, then retry preflight.",
     )
+
+
+def provider_recovery_actions(
+    providers: Mapping[str, dict],
+    provider_key: str,
+    model_name: str | None,
+    failure_code: str | None,
+) -> list[str]:
+    actions = [preflight_user_action(failure_code)]
+    provider_cfg = providers.get(provider_key) or {}
+    models = list((provider_cfg.get("models") or {}).keys())
+    alternates = [model for model in models if model and model != model_name]
+
+    if failure_code == "rate_limited":
+        actions.append("Wait for the provider rate-limit window, then rerun preflight.")
+        if alternates:
+            choices = ", ".join(alternates[:_FALLBACK_MODEL_LIMIT])
+            actions.append(f"Try another {provider_key} model your key can access: {choices}.")
+        if provider_key == "openrouter" and model_name and model_name.startswith("deepseek/"):
+            actions.append(
+                "If this OpenRouter key is DeepSeek-only, retry DeepSeek later or use a direct "
+                "DeepSeek provider key."
+            )
+    elif failure_code in {"invalid_or_empty_payload", "timeout"} and alternates:
+        choices = ", ".join(alternates[:_FALLBACK_MODEL_LIMIT])
+        actions.append(f"Try another {provider_key} model with reliable JSON output: {choices}.")
+
+    deduped: list[str] = []
+    for action in actions:
+        if action and action not in deduped:
+            deduped.append(action)
+    return deduped
+
+
+def provider_recovery_action(
+    providers: Mapping[str, dict],
+    provider_key: str,
+    model_name: str | None,
+    failure_code: str | None,
+) -> str:
+    return " ".join(provider_recovery_actions(providers, provider_key, model_name, failure_code))

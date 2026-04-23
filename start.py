@@ -39,7 +39,7 @@ def main():
         processes.append(frontend_process)
 
         print("\n=== Application is running! ===")
-        print("Frontend: http://localhost:3005")
+        print("Frontend: http://127.0.0.1:3005")
         print("Backend:  http://localhost:8000\n")
 
         for p in processes:

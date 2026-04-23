@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from retrocause.api.provider_preflight import (
+    classify_preflight_failure_code,
+    preflight_user_action,
+)
+
 
 def build_production_harness_payload(response: object) -> dict[str, Any]:
     checks = [
@@ -86,18 +91,25 @@ def build_product_harness_payload(response: object) -> dict[str, Any]:
         )
 
     retrieval_trace = list(_field(response, "retrieval_trace", []) or [])
+    has_source_trace = bool(retrieval_trace)
     if retrieval_trace:
         source_hits = sum(
             max(0, int(_field(item, "result_count", 0) or 0))
             for item in retrieval_trace
         )
+        recovered_rows = sum(
+            1 for item in retrieval_trace if str(_field(item, "status", "") or "") == "recovered"
+        )
         status = "pass" if source_hits > 0 else "warn"
+        detail = f"{len(retrieval_trace)} source query row(s), {source_hits} result hit(s)."
+        if recovered_rows:
+            detail += f" {recovered_rows} recovered retry row(s)."
         checks.append(
             _harness_check_payload(
                 "source_trace",
                 "Source trace visible",
                 status,
-                f"{len(retrieval_trace)} source query row(s), {source_hits} result hit(s).",
+                detail,
             )
         )
     else:
@@ -111,6 +123,7 @@ def build_product_harness_payload(response: object) -> dict[str, Any]:
         )
 
     evidences = list(_field(response, "evidences", []) or [])
+    has_anchored_evidence = _has_anchored_evidence(chains)
     if evidences:
         stances = {
             _field(item, "stance", "")
@@ -132,6 +145,25 @@ def build_product_harness_payload(response: object) -> dict[str, Any]:
                 "Evidence stance visible",
                 "fail",
                 "No evidence items are attached.",
+            )
+        )
+
+    if has_anchored_evidence:
+        checks.append(
+            _harness_check_payload(
+                "evidence_anchor",
+                "Evidence attached to causal chain",
+                "pass",
+                "At least one chain or edge references evidence IDs.",
+            )
+        )
+    else:
+        checks.append(
+            _harness_check_payload(
+                "evidence_anchor",
+                "Evidence attached to causal chain",
+                "fail" if chains else "warn",
+                "No causal chain or edge references evidence IDs.",
             )
         )
 
@@ -193,10 +225,12 @@ def build_product_harness_payload(response: object) -> dict[str, Any]:
 
     next_actions: list[str] = []
     if not chains and _field(response, "error", None):
+        error_msg = str(_field(response, "error", None) or "")
         status = "blocked_by_model"
         summary = "The run did not produce a causal answer; the useful output is the failure diagnosis."
+        next_actions.append(preflight_user_action(classify_preflight_failure_code(error_msg)))
         next_actions.append("Run provider preflight before starting another full analysis.")
-    elif score >= 0.75 and chains:
+    elif score >= 0.75 and chains and evidences and has_anchored_evidence and has_source_trace:
         status = "ready_for_review"
         summary = "The result has enough structure for a user to review reasons, sources, and gaps."
     elif chains:
@@ -214,6 +248,8 @@ def build_product_harness_payload(response: object) -> dict[str, Any]:
         next_actions.append("Generate an analysis brief with top reasons and missing evidence.")
     if not evidences:
         next_actions.append("Collect or attach evidence before presenting causal conclusions.")
+    if chains and evidences and not has_anchored_evidence:
+        next_actions.append("Attach retrieved evidence to the causal chain before review.")
     if not next_actions:
         next_actions.append("Review the top reasons and inspect the cited evidence before trusting the conclusion.")
 
@@ -238,6 +274,27 @@ def _production_check_payload(
         "severity": severity,
         "message": message,
     }
+
+
+def _has_anchored_evidence(chains: list[object]) -> bool:
+    for chain in chains:
+        if _field(chain, "supporting_evidence_ids", []) or _field(chain, "refuting_evidence_ids", []):
+            return True
+        for edge in list(_field(chain, "edges", []) or []):
+            if _field(edge, "supporting_evidence_ids", []) or _field(
+                edge,
+                "refuting_evidence_ids",
+                [],
+            ):
+                return True
+        for node in list(_field(chain, "nodes", []) or []):
+            if _field(node, "supporting_evidence_ids", []) or _field(
+                node,
+                "refuting_evidence_ids",
+                [],
+            ):
+                return True
+    return False
 
 
 def _check_freshness_gate(response: object) -> dict[str, Any]:

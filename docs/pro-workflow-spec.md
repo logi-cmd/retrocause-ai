@@ -6,7 +6,7 @@ RetroCause OSS proves the inspectable core: a user can ask why an event happened
 
 RetroCause Pro should eventually monetize the repeated workflow around that core for individuals and small teams. The paid value is not "more AI text." The paid value is faster trusted delivery, saved context, uploaded evidence, source reliability, stakeholder-ready outputs, and operating reliability for people who must explain events more than once.
 
-Current product decision: finish the OSS version first. Do not continue turning the current Python/FastAPI + Next.js alpha into hosted Pro. Future Pro should be planned as a separate full-stack Rust rewrite after OSS release readiness is solid.
+Current product decision: the OSS version currently meets the bar for a stable-deliverable local alpha and remains publicly released as `v0.1.0-alpha.5`. Pro planning can begin, but do not continue turning the current Python/FastAPI + Next.js codebase into hosted Pro. Future Pro should be planned as a separate full-stack Rust rewrite after the OSS release bar in `docs/oss-release-gate.md` is met in real use.
 
 Pro is not an enterprise private-deployment product in the near term. Enterprise deployment, SSO, document-level ACLs, custom connectors, and data-residency commitments should remain out of scope unless a concrete paid customer justifies that maintenance burden.
 
@@ -118,10 +118,50 @@ RetroCause cannot remove limits the same way because the product depends on retr
 
 The Pro promise should be reliability under limits, not unlimited usage. A paid run should queue, reuse allowed cache, fall back to safer sources, pause on retry-after, preserve partial results, and tell the user exactly which source or provider was constrained. This is the direct monetization value for individuals and small teams: they pay for a repeatable operating workflow that turns fragile provider calls into a reviewable deliverable.
 
+## Commercial Key And Quota Strategy
+
+Commercial Pro must not route all users through one shared OpenRouter key and one shared Tavily key. That creates a single global bottleneck: one heavy user can exhaust quota for everyone, provider 429s become site-wide failures, and costs cannot be attributed cleanly.
+
+The correct strategy is not blind key rotation. Multiple provider keys or accounts can help with redundancy and tenant separation, but every call still needs quota, queueing, caching, rate-limit, and audit controls. Do not build a hidden "spray requests across keys" layer.
+
+Recommended ownership model:
+
+- OSS Local: user-supplied provider/search keys or demo mode. RetroCause stores no hosted quota promise.
+- Solo Pro: RetroCause-managed provider/search quota, with per-user daily/monthly run limits, source-call limits, LLM-token limits, concurrency limits, and visible usage ledger.
+- Team/Business: support BYOK first, plus optional managed quota. Each workspace should have independent budget, concurrency, usage ledger, and audit trail.
+- Enterprise later, only if justified: dedicated tenant provider accounts or customer-owned provider accounts, not a shared consumer key pool.
+
+Provider routing requirements:
+
+- Keep a provider account pool, but select accounts by tenant, model, source, remaining budget, health, retry-after, and error rate.
+- Respect upstream retry-after and cooldown states; do not immediately retry the same source or model through another key unless policy explicitly allows it.
+- Treat OpenRouter and search providers separately. LLM limits, search RPM, storage terms, and cache permissions are different control planes.
+- Use cheaper/stable default models for normal Pro runs and reserve expensive or slower models for higher tiers, explicit deep checks, or BYOK users.
+- Record every provider/search call in a usage ledger with quota owner: `retrocause_managed`, `workspace_managed`, `user_byok`, `local_demo`, or `uploaded_evidence`.
+
+Search-specific requirements:
+
+- Cache allowed Tavily/Brave/web-source results by normalized query, scenario, language, source policy, and absolute time bucket.
+- Use short TTLs for market/news events and longer TTLs for policy/regulatory/static sources where provider terms allow it.
+- Show `cached`, `rate_limited`, `source_limited`, `stale_filtered`, and `partial_live` states in the run trace instead of hiding provider pressure.
+- Queue or degrade low-priority runs during spikes rather than letting 100 simultaneous users fan out into 100 identical hosted-search calls.
+
+Minimum Pro infrastructure before accepting broad paid usage:
+
+- encrypted credential storage for BYOK and managed tenant keys
+- Redis or equivalent rate-limit buckets
+- durable run queue and worker pool
+- per-user and per-workspace quota ledger
+- provider account health and cooldown table
+- source-result cache with provider-term-aware retention
+- audit log for provider calls, retries, fallback, and partial-live decisions
+
+This is a hard boundary for the future Rust rewrite. The current Python/Next alpha may keep local key fields and local inspectability metadata, but it should not grow into a commercial hosted key-pool service.
+
 This also defines the OSS/Pro boundary:
 
 - OSS: local inspectable runs, explicit source trace, optional user-supplied keys, bounded adapters, and Markdown export.
-- Pro: hosted run records, usage ledger, queue, cache reuse, saved runs, exports, uploaded evidence, scheduled watch topics, lightweight team review, and source-policy controls.
+- Pro: hosted run records, usage ledger, queue, cache reuse, saved runs, exports, uploaded evidence, scheduled watch topics, lightweight team review, source-policy controls, managed quota, BYOK, tenant-aware provider routing, and provider/source audit logs.
 - Not near-term: private enterprise deployment, hidden scraping, account rotation, or promises that bypass provider terms.
 
 ## Trust Rules
@@ -132,6 +172,7 @@ This also defines the OSS/Pro boundary:
 - Reports must never hide demo, partial-live, provider failure, or stale evidence states.
 - Source trace and retrieval policy must be visible in every saved run and export.
 - Source ownership and quota status must be visible enough that users can tell whether a failure came from RetroCause-hosted quota, their own key/session, or a third-party source.
+- Commercial key handling must never depend on a single shared key or blind key rotation. It must go through quota, queue, cache, rate-limit, and audit controls.
 
 ## Success Metrics
 
@@ -141,6 +182,31 @@ This also defines the OSS/Pro boundary:
 - Scheduled briefings avoid sending weak output when provider, source, or evidence coverage is blocked.
 - Users can explain why they trust or distrust the result by pointing to evidence, challenge coverage, and gaps.
 - Rate-limited providers result in queued, retried, cached, fallback, or partial-live runs with visible status rather than silent thin evidence.
+
+## Planning Kickoff
+
+Now that the OSS line is stable enough for local delivery, Pro work should start as planning, not hosted feature creep inside this repo. The first planning pass should lock down four things before any Rust build starts:
+
+1. product scope:
+   - decide whether the first paid workflow is `Solo Pro` or `Team Lite`
+   - define what a paid user receives that OSS deliberately does not
+2. runtime architecture:
+   - choose the Rust web stack, queue, storage, and worker model
+   - define which parts stay synchronous, queued, cached, or scheduled
+3. quota and key ownership:
+   - define managed quota, BYOK, and workspace quota behavior
+   - define how provider/search rate limits are surfaced, not hidden
+4. migration boundary:
+   - decide what OSS logic is reused conceptually versus reimplemented cleanly
+   - keep the current Python/FastAPI + Next.js OSS repo as the inspectable local product, not the seed of hosted Pro
+
+Recommended immediate planning artifacts:
+
+- Pro PRD with target users, pricing assumptions, and deliverable definition
+- Rust system architecture note
+- quota/key-management policy
+- saved-run / uploaded-evidence / export data model
+- launch sequence for Solo Pro first, Team Lite second unless new evidence argues otherwise
 
 ## Implementation Phases
 
@@ -199,4 +265,9 @@ These phases are product-shape notes, not an instruction to keep implementing Pr
 
 ## Current Decision
 
-For the current alpha, stop adding Pro implementation depth and finish the OSS version first. The implemented local slice covers run metadata, usage ledger, pasted uploaded evidence, saved-run persistence, and degraded-source browser dogfood because those improve OSS inspectability; it is not a hosted Pro queue or team workspace. Future Pro should be revisited as a separate full-stack Rust rewrite after OSS release readiness. Do not write enterprise private-deployment code or hosted Pro infrastructure in this stack without an explicit planning reset.
+The OSS line is currently stable enough for local delivery but is still publicly released as `v0.1.0-alpha.5`. From this point forward:
+
+- keep OSS changes focused on local stability, inspectability, and conservative bug fixes
+- start Pro as a planning track, not a feature branch inside this stack
+- treat the implemented local slice, run metadata, usage ledger, pasted uploaded evidence, saved-run persistence, degraded-source browser dogfood, as OSS inspectability features, not a hidden hosted Pro foundation
+- do not write enterprise private-deployment code or hosted Pro infrastructure in this repo without an explicit planning reset

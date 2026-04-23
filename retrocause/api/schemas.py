@@ -7,14 +7,16 @@ from pydantic import BaseModel
 
 class AnalyzeRequest(BaseModel):
     query: str
-    model: str = "openrouter"
+    model: str = "ofoxai"
     api_key: Optional[str] = None
+    tavily_api_key: Optional[str] = None
+    brave_search_api_key: Optional[str] = None
     explicit_model: Optional[str] = None
     scenario_override: Optional[str] = None
 
 
 class ProviderPreflightRequest(BaseModel):
-    model: str = "openrouter"
+    model: str = "ofoxai"
     api_key: Optional[str] = None
     explicit_model: Optional[str] = None
 
@@ -80,6 +82,28 @@ class ProviderPreflightResponse(BaseModel):
     diagnosis: str = ""
     user_action: str = ""
     checks: List[HarnessCheckV2] = []
+
+
+class SourcePreflightRequest(BaseModel):
+    tavily_api_key: Optional[str] = None
+    brave_search_api_key: Optional[str] = None
+    query: str = "RetroCause source preflight latest market news"
+
+
+class SourcePreflightItemV2(BaseModel):
+    source: str
+    source_label: str
+    status: str
+    can_search: bool
+    result_count: int = 0
+    diagnosis: str = ""
+    user_action: str = ""
+
+
+class SourcePreflightResponse(BaseModel):
+    status: str
+    can_search: bool
+    checks: List[SourcePreflightItemV2] = []
 
 
 class ProductHarnessReportV2(BaseModel):

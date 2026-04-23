@@ -26,8 +26,9 @@ _AUTH_ERRORS = (
     openai.PermissionDeniedError,
 )
 
-_DEFAULT_MAX_RETRIES = 3
+_DEFAULT_MAX_RETRIES = int(os.environ.get("RETROCAUSE_LLM_MAX_RETRIES", "1"))
 _DEFAULT_RETRY_BASE_DELAY = 1.0  # seconds
+_DEFAULT_RETRY_MAX_DELAY = float(os.environ.get("RETROCAUSE_LLM_RETRY_MAX_DELAY", "8"))
 _DEFAULT_JSON_MAX_TOKENS = 1200
 _GENERIC_DECOMPOSITION_PATTERNS = (
     "specific cause",
@@ -169,6 +170,32 @@ def _safe_parse_json(content: str | None) -> dict | None:
     return None
 
 
+def _retry_after_seconds(exc: Exception) -> float | None:
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if not headers:
+        return None
+    retry_after = None
+    if hasattr(headers, "get"):
+        retry_after = headers.get("retry-after") or headers.get("Retry-After")
+    if retry_after is None:
+        return None
+    try:
+        delay = float(retry_after)
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, min(delay, _DEFAULT_RETRY_MAX_DELAY))
+
+
+def _retry_delay_seconds(exc: Exception, attempt: int) -> float:
+    exponential_delay = _DEFAULT_RETRY_BASE_DELAY * (2**attempt)
+    if isinstance(exc, openai.RateLimitError):
+        retry_after = _retry_after_seconds(exc)
+        if retry_after is not None:
+            return max(exponential_delay, retry_after)
+    return min(exponential_delay, _DEFAULT_RETRY_MAX_DELAY)
+
+
 def _call_with_retry(fn, *args, max_retries=_DEFAULT_MAX_RETRIES, **kwargs):
     """带指数退避的 LLM 调用包装器。
 
@@ -182,7 +209,7 @@ def _call_with_retry(fn, *args, max_retries=_DEFAULT_MAX_RETRIES, **kwargs):
         except _RETRYABLE_ERRORS as exc:
             last_exc = exc
             if attempt < max_retries:
-                delay = _DEFAULT_RETRY_BASE_DELAY * (2**attempt)
+                delay = _retry_delay_seconds(exc, attempt)
                 logger.warning(
                     "LLM 调用失败 (attempt %d/%d): %s — %.1fs 后重试",
                     attempt + 1,
@@ -313,45 +340,45 @@ _CJK_SEARCH_NOISE_TERMS = {"为什么", "原因"}
 
 _CJK_SEARCH_TRANSLATIONS.update(
     {
-        "\u4eca\u65e5": "today",
-        "\u4eca\u5929": "today",
-        "\u5348\u540e": "afternoon",
-        "\u80a1\u4ef7": "share price stock price",
-        "\u80a1\u7968": "stock shares",
-        "\u76f4\u7ebf\u8df3\u6c34": "plunge selloff",
-        "\u8df3\u6c34": "price drop selloff",
-        "\u4e3a\u4ec0\u4e48": "why reasons",
+        "今日": "today",
+        "今天": "today",
+        "午后": "afternoon",
+        "股价": "share price stock price",
+        "股票": "stock shares",
+        "直线跳水": "plunge selloff",
+        "跳水": "price drop selloff",
+        "为什么": "why reasons",
     }
 )
 
 _CJK_FINANCE_ENTITY_SUFFIXES = (
-    "\u80a1\u4efd",
-    "\u96c6\u56e2",
-    "\u79d1\u6280",
-    "\u94f6\u884c",
-    "\u8bc1\u5238",
-    "\u63a7\u80a1",
-    "\u516c\u53f8",
-    "\u7535\u5b50",
-    "\u7535\u6c14",
-    "\u80fd\u6e90",
-    "\u836f\u4e1a",
-    "\u6c7d\u8f66",
+    "股份",
+    "集团",
+    "科技",
+    "银行",
+    "证券",
+    "控股",
+    "公司",
+    "电子",
+    "电气",
+    "能源",
+    "药业",
+    "汽车",
 )
 _CJK_FINANCE_ENTITY_BOUNDARIES = (
-    "\u4eca\u65e5",
-    "\u4eca\u5929",
-    "\u5348\u540e",
-    "\u65e9\u76d8",
-    "\u5c3e\u76d8",
-    "\u80a1\u4ef7",
-    "\u80a1\u7968",
-    "\u4e3a\u4ec0\u4e48",
-    "\u4e3a\u4f55",
-    "\u76f4\u7ebf\u8df3\u6c34",
-    "\u8df3\u6c34",
-    "\u4e0b\u8dcc",
-    "\u66b4\u8dcc",
+    "今日",
+    "今天",
+    "午后",
+    "早盘",
+    "尾盘",
+    "股价",
+    "股票",
+    "为什么",
+    "为何",
+    "直线跳水",
+    "跳水",
+    "下跌",
+    "暴跌",
 )
 
 
@@ -518,6 +545,18 @@ class LLMClient:
             if data and data.get("status") == "ok":
                 return True, None
             return False, "Model preflight returned an unexpected payload."
+        except _AUTH_ERRORS as exc:
+            return False, f"{type(exc).__name__}: {exc}"
+        except openai.OpenAIError as exc:
+            return False, f"{type(exc).__name__}: {exc}"
+
+    def preflight_analysis_smoke(self) -> tuple[bool, str | None]:
+        smoke_query = "\u4e3a\u4ec0\u4e48\u7f8e\u56fd\u4f1a\u540c\u610f\u4e0e\u4f0a\u6717\u8fdb\u884c\u9996\u8f6e\u8c08\u5224\uff1f"
+        try:
+            queries = self.build_search_queries(smoke_query, "geopolitics")
+            if _queries_look_invalid(smoke_query, queries):
+                return False, "Analysis-stage smoke returned empty search queries."
+            return True, None
         except _AUTH_ERRORS as exc:
             return False, f"{type(exc).__name__}: {exc}"
         except openai.OpenAIError as exc:

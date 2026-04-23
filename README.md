@@ -12,9 +12,13 @@ RetroCause 是一个开源的因果解释工作台，用来研究复杂事件的
 
 ## Current Status / 当前状态
 
-RetroCause is a research-grade OSS alpha focused on local, inspectable causal analysis. The current priority is to make the OSS experience stable and useful before any future Pro planning.
+RetroCause is currently a stable-deliverable local OSS alpha focused on inspectable causal analysis. It is ready to clone, run, and evaluate locally. It is not a hosted service, and future Pro should still be planned as a separate full-stack Rust rewrite instead of extending the current Python/FastAPI + Next.js stack into hosted infrastructure.
 
-RetroCause 目前是 research-grade OSS alpha。当前优先级是先把 OSS 版本稳定下来，再考虑更多 Pro 行为。未来 Pro 应该作为独立的全栈 Rust 重写来规划，而不是继续在当前 Python/FastAPI + Next.js alpha 上叠加托管功能。
+RetroCause 目前是一个稳定可交付的本地 OSS alpha，重点是可检查的因果分析。它已经可以被 clone、启动并在本地评估使用。它不是托管服务，未来 Pro 仍应作为独立的全栈 Rust 重写来规划，而不是继续把当前 Python/FastAPI + Next.js 栈往托管基础设施方向堆叠。
+
+Current delivery gate: on 2026-04-23, both the active workspace and a fresh local copy passed the documented install steps plus the full root `npm test` workflow on Windows. The latest public GitHub release is still `v0.1.0-alpha.5`; see [`docs/oss-release-gate.md`](docs/oss-release-gate.md) for the non-alpha `v0.1.0` release bar.
+
+当前交付门槛：在 2026-04-23，当前工作区和一个全新的本地副本都按文档完成了安装，并通过了根目录完整 `npm test` 流程。当前公开 GitHub release 仍然是 `v0.1.0-alpha.5`；非 alpha 的 `v0.1.0` 发布门槛见 [`docs/oss-release-gate.md`](docs/oss-release-gate.md)。
 
 
 What works locally:
@@ -48,8 +52,8 @@ Known limits:
 - Results are evidence-grounded explanations, not verified causal truth.
 - Live quality depends on source availability, model behavior, API quota, and provider rate limits.
 - Source trace rows describe retrieval health. They are not evidence for or against a cause by themselves.
-- Saved runs and uploaded evidence are local alpha features. They are not hosted storage, team sharing, ACLs, or secure document management.
-- PDF/DOCX export, scheduled watch topics, team review, branded reports, and hosted queues are not part of the OSS alpha.
+- Saved runs and uploaded evidence are local OSS features. They are not hosted storage, team sharing, ACLs, or secure document management.
+- PDF/DOCX export, scheduled watch topics, team review, branded reports, and hosted queues are not part of the OSS release.
 - Some generated labels may remain partly English in Chinese mode, but live graph nodes should keep their specific meaning.
 
 已知限制：
@@ -198,13 +202,13 @@ python start.py
 
 ## Local Workflow Features / 本地工作流功能
 
-The OSS alpha includes small local workflow features because they make inspection easier:
+The OSS release includes small local workflow features because they make inspection easier:
 
 - Run status: every V2 analysis response includes a local `run_id`, status, run steps, and usage ledger.
 - Saved runs: recent run payloads can be reopened from the browser UI.
 - Uploaded evidence: pasted notes can be stored locally and reused as user-provided evidence.
 
-OSS alpha 包含一些小型本地工作流功能，因为它们能让检查过程更清楚：
+OSS 版本包含一些小型本地工作流功能，因为它们能让检查过程更清楚：
 
 - Run status：每个 V2 分析响应包含本地 `run_id`、状态、步骤和 usage ledger。
 - Saved runs：最近的运行结果可以在浏览器 UI 中重新打开。

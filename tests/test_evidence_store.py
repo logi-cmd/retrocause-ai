@@ -35,8 +35,8 @@ class InMemoryEvidenceStore(EvidenceStore):
 
 def test_evidence_store_reuses_high_quality_cjk_queries():
     store = InMemoryEvidenceStore("evidence_store.json")
-    stored_query = "\u004d\u0048\u0033\u0037\u0030\u4e3a\u4ec0\u4e48\u5931\u8e2a\uff1f"
-    related_query = "\u4e3a\u4ec0\u4e48\u004d\u0048\u0033\u0037\u0030\u4f1a\u5931\u8e2a\uff1f"
+    stored_query = "MH370为什么失踪？"
+    related_query = "为什么MH370会失踪？"
     evidence = _make_evidence(
         evidence_id="ev-0001",
         content="MH370 disappearance remains linked to flight path deviation and delayed tracking.",
@@ -125,8 +125,8 @@ def test_evidence_store_does_not_reuse_relative_yesterday_across_calendar_days()
 
 def test_evidence_store_does_not_reuse_thin_cjk_overlap_between_different_us_questions():
     store = InMemoryEvidenceStore("evidence_store.json")
-    iran_query = "\u4e3a\u4ec0\u4e48\u7f8e\u56fd\u4f1a\u540c\u610f\u4e0e\u4f0a\u6717\u8fdb\u884c\u9996\u8f6e\u8c08\u5224\uff1f"
-    different_query = "\u7f8e\u56fd\u4e3a\u4ec0\u4e48\u4f1a\u63a8\u51fa\u65b0\u7684\u534a\u5bfc\u4f53\u51fa\u53e3\u7ba1\u5236\uff1f"
+    iran_query = "为什么美国会同意与伊朗进行首轮谈判？"
+    different_query = "美国为什么会推出新的半导体出口管制？"
 
     evidence = _make_evidence(
         evidence_id="ev-iran",

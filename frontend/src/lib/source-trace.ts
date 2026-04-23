@@ -43,6 +43,12 @@ export function formatSourceStatusLabel(
   switch (status) {
     case "ok":
       return locale === "en" ? "Ready" : "\u53ef\u7528";
+    case "recovered":
+      return locale === "en" ? "Recovered" : "\u5df2\u6062\u590d";
+    case "empty":
+      return locale === "en" ? "No hits" : "\u65e0\u547d\u4e2d";
+    case "stale_filtered":
+      return locale === "en" ? "Stale filtered" : "\u5df2\u8fc7\u671f";
     case "cached":
       return locale === "en" ? "Cached" : "\u7f13\u5b58";
     case "source_limited":
@@ -61,7 +67,12 @@ export function formatSourceStatusLabel(
 }
 
 export function isDegradedSourceTrace(item: ApiRetrievalTrace): boolean {
-  return ["source_limited", "rate_limited", "forbidden", "timeout", "source_error"].includes(
-    sourceTraceStatus(item)
-  );
+  return [
+    "source_limited",
+    "rate_limited",
+    "forbidden",
+    "timeout",
+    "source_error",
+    "stale_filtered",
+  ].includes(sourceTraceStatus(item));
 }

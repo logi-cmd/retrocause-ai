@@ -1,23 +1,20 @@
 {
   "schemaVersion": 3,
-  "task": "Continue RetroCause maintainability cleanup by first extracting a small backend helper from retrocause/api/main.py, then clarifying the canonical frontend graph/card path versus legacy canvas components; keep docs/evidence synchronized and verify with npm test and guardrails.",
+  "task": "Stabilize the OSS RetroCause release into a stable-deliverable local product by finishing current docs/frontend/backend/live-stability work, syncing docs/evidence, and verifying with npm test plus guardrails.",
   "preset": "generic",
-  "createdAt": "2026-04-17T16:32:32.253Z",
+  "createdAt": "2026-04-23T13:50:15.545Z",
   "allowedPaths": [
-    "frontend/src/app/page.tsx",
-    "frontend/src/lib/",
-    "frontend/src/components/",
-    "tests/test_comprehensive.py",
-    "frontend/README.md",
-    "docs/codebase-audit.md",
-    "docs/INDEX.md",
-    "docs/PROJECT_STATE.md",
     "README.md",
-    "scripts/e2e_test.py",
-    "retrocause/api/",
-    "retrocause/app/demo_data.py",
-    ".agent-guardrails/evidence/",
-    ".agent-guardrails/task-contract.json"
+    "AGENTS.md",
+    "pyproject.toml",
+    "package.json",
+    "start.py",
+    "docs/",
+    "frontend/",
+    "retrocause/",
+    "scripts/",
+    "tests/",
+    ".agent-guardrails/evidence/"
   ],
   "requiredCommands": [
     "npm test"
@@ -27,15 +24,7 @@
   ],
   "intendedFiles": [],
   "protectedPaths": [],
-  "allowedChangeTypes": [
-    "refactor",
-    "frontend",
-    "interface",
-    "tests",
-    "docs",
-    "other",
-    "guardrails-internal"
-  ],
+  "allowedChangeTypes": [],
   "riskLevel": "medium",
   "requiresReviewNotes": false,
   "validationProfile": "standard",
@@ -74,6 +63,7 @@
   "rollbackNotes": "",
   "riskJustification": "",
   "autoFilledFields": [
+    "证据路径",
     "安全要求",
     "依赖要求",
     "性能要求",
@@ -82,14 +72,15 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "12431d85-b3cb-4d7b-929c-e55eab21f63a",
-    "createdAt": "2026-04-17T16:32:32.252Z",
+    "sessionId": "21dd6483-3f89-457e-b465-022ea50310d1",
+    "createdAt": "2026-04-23T13:50:15.545Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Refactor RetroCause frontend homepage by extracting pure TypeScript types and formatting/status helpers from frontend/src/app/page.tsx into frontend/src/lib without changing user-visible behavior; keep the first slice small and verify with frontend lint/build, npm test if needed, and guardrails.",
+    "taskRequest": "Stabilize the OSS RetroCause release into a stable-deliverable local product by finishing current docs/frontend/backend/live-stability work, syncing docs/evidence, and verifying with npm test plus guardrails.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],
     "autoFilledFields": [
+      "证据路径",
       "安全要求",
       "依赖要求",
       "性能要求",
@@ -121,7 +112,7 @@
       "Report the commands you actually ran: npm test",
       "Keep the evidence note current: .agent-guardrails/evidence/current-task.md",
       "Keep security, dependency, performance, understanding, and continuity concerns explicit in the evidence note and review summary.",
-      "Finish with npx agent-guardrails check --review before handing off or merging."
+      "Finish with agent-guardrails check --review before handing off or merging."
     ],
     "riskSignals": [],
     "archaeologyNotes": [],
@@ -130,7 +121,7 @@
       "Run required commands: npm test",
       "Update evidence: .agent-guardrails/evidence/current-task.md",
       "Keep security, dependency, performance, understanding, continuity concerns explicit in the evidence note and review summary.",
-      "Run npx agent-guardrails check --review before completing the task."
+      "Run agent-guardrails check --review before completing the task."
     ],
     "roughIntent": null
   }

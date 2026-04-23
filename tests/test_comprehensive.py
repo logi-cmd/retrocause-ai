@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import pytest
+import tomllib
 import urllib.request
 from uuid import uuid4
 from pathlib import Path
@@ -23,9 +24,10 @@ from retrocause.api.main import (
     app,
 )
 from retrocause.api.harness import build_product_harness_payload
-from retrocause.api.provider_routes import preflight_provider
+from retrocause.api.live_failure_response import build_empty_live_failure_response
+from retrocause.api.provider_routes import preflight_provider, preflight_sources
 from retrocause.api.provider_preflight import resolve_provider_model
-from retrocause.api.schemas import ProviderPreflightRequest
+from retrocause.api.schemas import ProviderPreflightRequest, SourcePreflightRequest
 from retrocause.app.demo_data import (
     PROVIDERS,
     detect_demo_topic,
@@ -157,6 +159,27 @@ def test_frontend_and_e2e_expose_pro_workflow_slices():
     assert "source-trace-status" in e2e_source
 
 
+def test_frontend_usage_ledger_rows_use_collision_safe_keys():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert "usageLedger.slice(0, 3).map((item, index) => (" in page_source
+    assert 'key={`${item.category}-${item.name}-${item.quota_owner}-${item.status}-${index}`}' in page_source
+
+
+def test_frontend_dev_server_allows_local_hydration_origins():
+    frontend_package = json.loads(
+        (REPO_ROOT / "frontend" / "package.json").read_text(encoding="utf-8")
+    )
+    next_config = (REPO_ROOT / "frontend" / "next.config.ts").read_text(encoding="utf-8")
+    start_script = (REPO_ROOT / "start.py").read_text(encoding="utf-8")
+
+    assert frontend_package["scripts"]["dev"] == "next dev --hostname 127.0.0.1"
+    assert 'allowedDevOrigins: ["127.0.0.1", "localhost"]' in next_config
+    assert "Frontend: http://127.0.0.1:3005" in start_script
+
+
 def test_frontend_exposes_chinese_a_share_market_sample():
     page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
         encoding="utf-8"
@@ -201,6 +224,23 @@ def test_frontend_page_has_no_known_mojibake_strings():
     assert '"\\u6765\\u6e90\\u95ee\\u9898"' in page_source
 
 
+def test_frontend_brief_localization_strings_are_clean():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+
+    assert "缃俊淇″彿" not in page_source
+    assert "鍙戠幇" not in page_source
+    assert "鏉″叧閿洜鏋滆竟" not in page_source
+    assert "鏉￠珮璐ㄩ噺璇佹嵁" not in page_source
+    assert '"\\u7f6e\\u4fe1\\u4fe1\\u53f7"' in page_source
+    assert '"\\u53d1\\u73b0"' in page_source
+    assert '"\\u6761\\u5173\\u952e\\u8fb9"' in page_source
+    assert '"\\u6761\\u9ad8\\u8d28\\u91cf\\u8bc1\\u636e"' in page_source
+    assert "localizeBriefText(uncertaintyReport.summary, locale)" in page_source
+    assert "localizeUncertaintyType" in page_source
+
+
 def test_api_live_failure_messages_have_no_known_mojibake_strings():
     api_source = (REPO_ROOT / "retrocause" / "api" / "main.py").read_text(encoding="utf-8")
     page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
@@ -213,17 +253,73 @@ def test_api_live_failure_messages_have_no_known_mojibake_strings():
     assert " 路 " not in page_source
 
 
-def test_openrouter_default_uses_stable_deepseek_alias_before_0324_snapshot():
+def test_openrouter_catalog_keeps_curated_models_that_work_in_retrocause():
     model_ids = list(PROVIDERS["openrouter"]["models"].keys())
 
     assert model_ids[0] == "deepseek/deepseek-chat"
-    assert "deepseek/deepseek-chat-v3-0324" in model_ids
-    assert model_ids.index("deepseek/deepseek-chat") < model_ids.index(
-        "deepseek/deepseek-chat-v3-0324"
-    )
-    assert "legacy" in PROVIDERS["openrouter"]["models"]["deepseek/deepseek-chat-v3-0324"][
-        "label"
-    ].lower()
+    assert "google/gemini-2.5-flash" in model_ids
+    assert "anthropic/claude-haiku-4.5" in model_ids
+    assert "deepseek/deepseek-chat" in model_ids
+    assert "deepseek/deepseek-v3.2" not in model_ids
+    assert "deepseek/deepseek-chat-v3-0324" not in model_ids
+    assert "deepseek/deepseek-r1" not in model_ids
+    assert "google/gemini-2.5-pro-preview" not in model_ids
+    assert "qwen/qwen3-235b-a22b" not in model_ids
+
+
+def test_ofoxai_is_default_provider_catalog():
+    assert AnalyzeRequest(query="Why did Bitcoin move today?").model == "ofoxai"
+    assert ProviderPreflightRequest().model == "ofoxai"
+    assert list(PROVIDERS.keys())[0] == "ofoxai"
+    assert PROVIDERS["ofoxai"]["base_url"] == "https://api.ofox.ai/v1"
+    assert list(PROVIDERS["ofoxai"]["models"].keys())[0] == "openai/gpt-5.4-mini"
+
+
+def test_readme_has_clean_bilingual_oss_onboarding():
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+
+    forbidden_fragments = [
+        "涓枃",
+        "鍥犳灉",
+        "锛",
+        "鈥",
+        "鏄",
+        "杩",
+        "绠",
+        "歚",
+        "乽",
+    ]
+    for fragment in forbidden_fragments:
+        assert fragment not in readme
+
+    assert "输入一个“为什么会这样？”的问题" in readme
+    assert "OfoxAI 是默认的本地模型提供商路径" in readme
+    assert "芯原股份今天盘中为什么下跌？" in readme
+    assert "These are local inspectability features. They are not hosted Pro infrastructure." in readme
+
+
+def test_root_project_metadata_has_no_known_mojibake_strings():
+    agents = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    pyproject_text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    pyproject = tomllib.loads(pyproject_text)
+
+    forbidden_fragments = [
+        "鍏",
+        "璇",
+        "锛",
+        "鈥",
+        "鏄",
+        "閫",
+        "绠",
+        "浠",
+    ]
+    for document in [agents, pyproject_text]:
+        for fragment in forbidden_fragments:
+            assert fragment not in document
+
+    assert "先阅读" in agents
+    assert "Agent 规则" in agents
+    assert pyproject["project"]["description"].startswith("Evidence-backed causal explanation")
 
 
 def test_openrouter_catalog_uses_current_flash_and_haiku_model_ids():
@@ -233,6 +329,17 @@ def test_openrouter_catalog_uses_current_flash_and_haiku_model_ids():
     assert "anthropic/claude-haiku-4.5" in model_ids
     assert "google/gemini-2.5-flash-preview" not in model_ids
     assert "anthropic/claude-haiku-4" not in model_ids
+    assert "google/gemini-2.5-pro-preview" not in model_ids
+    assert "qwen/qwen3-235b-a22b" not in model_ids
+
+
+def test_provider_catalog_labels_have_no_known_mojibake_strings():
+    forbidden_fragments = ["锛", "闃块噷", "鏅鸿氨", "鏂癸級", "涓婁笅鏂"]
+
+    for provider_cfg in PROVIDERS.values():
+        assert not any(fragment in provider_cfg["label"] for fragment in forbidden_fragments)
+        for model_cfg in provider_cfg["models"].values():
+            assert not any(fragment in model_cfg["label"] for fragment in forbidden_fragments)
 
 
 def test_openrouter_catalog_live_public_model_smoke():
@@ -263,11 +370,20 @@ def test_analyze_v2_uses_stable_deepseek_alias_for_legacy_snapshot(monkeypatch):
 
     captured: dict[str, str | None] = {}
 
-    def fake_run_real_analysis(query, api_key, model, base_url):
+    def fake_run_real_analysis(
+        query,
+        api_key,
+        model,
+        base_url,
+        tavily_api_key=None,
+        brave_search_api_key=None,
+    ):
         captured["query"] = query
         captured["api_key"] = api_key
         captured["model"] = model
         captured["base_url"] = base_url
+        captured["tavily_api_key"] = tavily_api_key
+        captured["brave_search_api_key"] = brave_search_api_key
         return _sample_result_with_one_supported_chain(query)
 
     monkeypatch.setattr("retrocause.app.demo_data.run_real_analysis", fake_run_real_analysis)
@@ -288,6 +404,130 @@ def test_analyze_v2_uses_stable_deepseek_alias_for_legacy_snapshot(monkeypatch):
     payload = response.json()
     assert payload["analysis_mode"] == "live"
     assert payload["chains"]
+
+
+def test_frontend_and_api_expose_per_run_hosted_search_keys():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    api_source = (REPO_ROOT / "retrocause" / "api" / "schemas.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "tavilyApiKey" in page_source
+    assert "braveSearchApiKey" in page_source
+    assert "tavily_api_key" in page_source
+    assert "brave_search_api_key" in page_source
+    assert "tavily_api_key" in api_source
+    assert "brave_search_api_key" in api_source
+    assert "/api/sources/preflight" in page_source
+    assert "Run search preflight" in page_source
+
+
+@pytest.mark.anyio
+async def test_analyze_v2_passes_user_search_keys_to_live_analysis(monkeypatch):
+    captured: dict[str, str | None] = {}
+
+    def fake_run_real_analysis(
+        query,
+        api_key,
+        model,
+        base_url,
+        tavily_api_key=None,
+        brave_search_api_key=None,
+    ):
+        captured["query"] = query
+        captured["api_key"] = api_key
+        captured["model"] = model
+        captured["base_url"] = base_url
+        captured["tavily_api_key"] = tavily_api_key
+        captured["brave_search_api_key"] = brave_search_api_key
+        return _sample_result_with_one_supported_chain(query)
+
+    monkeypatch.setattr("retrocause.app.demo_data.run_real_analysis", fake_run_real_analysis)
+
+    response = await analyze_query_v2(
+        AnalyzeRequest(
+            query="Why did Bitcoin move today?",
+            model="openrouter",
+            api_key="sk-test",
+            explicit_model="openai/gpt-4o-mini",
+            tavily_api_key="tvly-test",
+            brave_search_api_key="brave-test",
+            scenario_override="market",
+        )
+    )
+
+    assert response.analysis_mode == "live"
+    assert captured["tavily_api_key"] == "tvly-test"
+    assert captured["brave_search_api_key"] == "brave-test"
+
+
+@pytest.mark.anyio
+async def test_source_preflight_reports_missing_search_keys(monkeypatch):
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.delenv("BRAVE_SEARCH_API_KEY", raising=False)
+
+    response = await preflight_sources(SourcePreflightRequest())
+
+    assert response.status == "error"
+    assert response.can_search is False
+    assert {check.source: check.status for check in response.checks} == {
+        "tavily": "missing_api_key",
+        "brave": "missing_api_key",
+    }
+
+
+@pytest.mark.anyio
+async def test_source_preflight_checks_tavily_without_leaking_key(monkeypatch):
+    monkeypatch.delenv("BRAVE_SEARCH_API_KEY", raising=False)
+
+    def fake_search(self, query, max_results=5):
+        assert query == "RetroCause source preflight latest market news"
+        assert max_results == 1
+        return [object()]
+
+    monkeypatch.setattr("retrocause.sources.tavily.TavilySourceAdapter.search", fake_search)
+
+    response = await preflight_sources(SourcePreflightRequest(tavily_api_key="tvly-test"))
+
+    tavily = next(check for check in response.checks if check.source == "tavily")
+    brave = next(check for check in response.checks if check.source == "brave")
+
+    assert response.status == "ok"
+    assert response.can_search is True
+    assert tavily.status == "ok"
+    assert tavily.can_search is True
+    assert tavily.result_count == 1
+    assert "tvly-test" not in tavily.diagnosis
+    assert brave.status == "missing_api_key"
+
+
+@pytest.mark.anyio
+async def test_source_preflight_uses_environment_search_key_without_leaking(monkeypatch):
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-env-test")
+    monkeypatch.delenv("BRAVE_SEARCH_API_KEY", raising=False)
+
+    def fake_search(self, query, max_results=5):
+        assert query == "RetroCause source preflight latest market news"
+        assert max_results == 1
+        return [object()]
+
+    monkeypatch.setattr("retrocause.sources.tavily.TavilySourceAdapter.search", fake_search)
+
+    response = await preflight_sources(SourcePreflightRequest())
+
+    tavily = next(check for check in response.checks if check.source == "tavily")
+    brave = next(check for check in response.checks if check.source == "brave")
+
+    assert response.status == "ok"
+    assert response.can_search is True
+    assert tavily.status == "ok"
+    assert tavily.can_search is True
+    assert tavily.result_count == 1
+    assert "tvly-env-test" not in tavily.diagnosis
+    assert "tvly-env-test" not in tavily.user_action
+    assert brave.status == "missing_api_key"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -616,6 +856,20 @@ def test_postmortem_production_brief_has_expected_sections():
     assert response.scenario.key == "postmortem"
     assert response.production_brief is not None
     assert "Operational Causes" in [section.title for section in response.production_brief.sections]
+
+
+def test_market_production_brief_uses_evidence_excerpt_and_next_steps():
+    result = _sample_result_with_one_supported_chain("Why did bitcoin fall today?")
+    response = _result_to_v2(result, is_demo=False)
+
+    assert response.production_brief is not None
+    drivers = next(
+        section for section in response.production_brief.sections if section.kind == "drivers"
+    )
+    assert drivers.items
+    assert "Supporting clue:" in drivers.items[0].summary
+    assert "Source evidence links the primary driver to the observed outcome." in drivers.items[0].summary
+    assert response.production_brief.next_verification_steps
 
 
 def test_recent_market_result_needs_fresh_evidence_before_ready():
@@ -1217,6 +1471,8 @@ def test_frontend_surfaces_rate_limited_source_trace_language():
     assert "@/lib/source-trace-panel" in page_source
     assert "formatSourceStatusLabel" in source_trace_panel_source
     assert "Rate limited" in source_trace_source
+    assert "Recovered" in source_trace_source
+    assert "Stale filtered" in source_trace_source
     assert "Source limited" in source_trace_source
     assert "Timed out" in source_trace_source
     assert "Source error" in source_trace_source
@@ -1319,12 +1575,17 @@ def test_api_timeout_runtime_helper_is_extracted():
     runtime_source = (REPO_ROOT / "retrocause" / "api" / "runtime.py").read_text(
         encoding="utf-8"
     )
+    live_gate_source = (REPO_ROOT / "retrocause" / "api" / "live_gate.py").read_text(
+        encoding="utf-8"
+    )
 
-    assert "from retrocause.api.runtime import TimeoutError, run_with_timeout" in api_source
+    assert "from retrocause.api.runtime import TimeoutError" in api_source
     assert "def _run_with_timeout" not in api_source
     assert "class _TimeoutError" not in api_source
     assert "def run_with_timeout" in runtime_source
     assert "class TimeoutError" in runtime_source
+    assert "from retrocause.api.runtime import run_with_timeout" in live_gate_source
+    assert "def run_live_analysis_with_gate" in live_gate_source
 
 
 def test_api_markdown_brief_builder_is_extracted():
@@ -1731,6 +1992,17 @@ def test_frontend_renders_production_brief_and_use_case_selector():
     assert "Production brief" in production_brief_source
 
 
+def test_frontend_production_brief_panel_surfaces_next_steps_and_limits():
+    production_brief_source = (
+        REPO_ROOT / "frontend" / "src" / "lib" / "production-brief-panel.tsx"
+    ).read_text(encoding="utf-8")
+
+    assert "brief.next_verification_steps" in production_brief_source
+    assert "brief.limits" in production_brief_source
+    assert "Next verification steps" in production_brief_source
+    assert "Current limits" in production_brief_source
+
+
 def test_frontend_offers_three_production_use_cases():
     page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
         encoding="utf-8"
@@ -1835,6 +2107,8 @@ async def test_analyze_query_v2_returns_partial_live_instead_of_demo_on_live_fai
     assert response.analysis_mode == "partial_live"
     assert response.error is not None
     assert response.chains == []
+    assert response.evaluation is not None
+    assert any("api key" in action.lower() for action in response.evaluation.recommended_actions)
 
 
 @pytest.mark.anyio
@@ -2330,6 +2604,39 @@ async def test_provider_preflight_runs_model_health_check(monkeypatch):
     assert "model" in response.user_action.lower()
 
 
+@pytest.mark.anyio
+async def test_provider_preflight_requires_analysis_stage_smoke(monkeypatch):
+    class FakeLLM:
+        def __init__(self, api_key, model, base_url, timeout):
+            self.api_key = api_key
+            self.model = model
+            self.base_url = base_url
+            self.timeout = timeout
+
+        def preflight_model_access(self):
+            return True, None
+
+        def preflight_analysis_smoke(self):
+            return False, "Analysis-stage smoke returned empty search queries."
+
+    monkeypatch.setattr("retrocause.llm.LLMClient", FakeLLM)
+
+    response = await preflight_provider(
+        ProviderPreflightRequest(
+            model="openrouter",
+            api_key="sk-test",
+            explicit_model="openai/gpt-4o-mini",
+        )
+    )
+
+    assert response.status == "error"
+    assert response.can_run_analysis is False
+    assert response.failure_code == "invalid_or_empty_payload"
+    assert any(check.id == "model_access" and check.status == "pass" for check in response.checks)
+    assert any(check.id == "analysis_smoke" and check.status == "fail" for check in response.checks)
+    assert "reliable json output" in response.user_action.lower()
+
+
 def test_product_harness_marks_model_blocked_empty_result_as_actionable():
     response = AnalyzeResponseV2(
         query="US Iran Islamabad talks ended without agreement",
@@ -2358,6 +2665,180 @@ def test_product_harness_marks_model_blocked_empty_result_as_actionable():
         for check in report["checks"]
     )
     assert any("preflight" in action.lower() for action in report["next_actions"])
+
+
+def test_empty_live_failure_response_includes_specific_user_action():
+    response = build_empty_live_failure_response(
+        "Why did Bitcoin move today?",
+        "LLM calls failed for deepseek/deepseek-chat - empty result",
+    )
+
+    assert response.analysis_mode == "partial_live"
+    assert response.evaluation is not None
+    assert response.evaluation.weaknesses == [
+        "LLM calls failed for deepseek/deepseek-chat - empty result"
+    ]
+    assert any(
+        "reliable json output" in action.lower() for action in response.evaluation.recommended_actions
+    )
+    assert any("preflight" in action.lower() for action in response.evaluation.recommended_actions)
+
+
+def test_provider_failure_classifier_detects_rate_limits():
+    from retrocause.api.provider_preflight import (
+        classify_preflight_failure_code,
+        provider_recovery_actions,
+        preflight_user_action,
+    )
+
+    failure_code = classify_preflight_failure_code(
+        "RateLimitError: Error code: 429 - deepseek/deepseek-chat is temporarily rate-limited"
+    )
+
+    assert failure_code == "rate_limited"
+    assert "rate-limited" in preflight_user_action(failure_code).lower()
+    recovery_actions = provider_recovery_actions(
+        PROVIDERS,
+        "openrouter",
+        "deepseek/deepseek-chat",
+        failure_code,
+    )
+    joined = " ".join(recovery_actions)
+    assert "Try another openrouter model" in joined
+    assert "retry DeepSeek later" in joined
+
+
+def test_empty_live_failure_response_includes_model_recovery_actions():
+    response = build_empty_live_failure_response(
+        "Why did Bitcoin move today?",
+        "RateLimitError: Error code: 429 - deepseek/deepseek-chat is temporarily rate-limited",
+        providers=PROVIDERS,
+        provider_key="openrouter",
+        model_name="deepseek/deepseek-chat",
+    )
+
+    evaluation_actions = response.evaluation.recommended_actions if response.evaluation else []
+    product_actions = response.product_harness.next_actions if response.product_harness else []
+    joined = " ".join([*evaluation_actions, *product_actions])
+    assert "rate-limit window" in joined
+    assert "Try another openrouter model" in joined
+
+
+def test_live_analysis_gate_reports_busy_when_local_analysis_is_already_running(monkeypatch):
+    from retrocause.api.provider_preflight import classify_preflight_failure_code, is_live_failure
+    from retrocause.api.live_gate import (
+        LiveAnalysisQueueTimeout,
+        _LIVE_ANALYSIS_SEMAPHORE,
+        run_live_analysis_with_gate,
+    )
+
+    monkeypatch.setenv("RETROCAUSE_LIVE_QUEUE_WAIT_SECONDS", "0.01")
+    acquired = _LIVE_ANALYSIS_SEMAPHORE.acquire(timeout=0.1)
+    assert acquired is True
+    try:
+        with pytest.raises(LiveAnalysisQueueTimeout):
+            run_live_analysis_with_gate(lambda: "unused", 1)
+    finally:
+        _LIVE_ANALYSIS_SEMAPHORE.release()
+    assert is_live_failure("Live analysis queue is busy: another run is already running")
+    assert (
+        classify_preflight_failure_code("Live analysis queue is busy: another run is already running")
+        == "queue_busy"
+    )
+
+
+def test_llm_retry_after_parser_clamps_provider_delay():
+    from retrocause.llm import _retry_after_seconds
+
+    class _Response:
+        headers = {"retry-after": "99"}
+
+    class _ProviderError(Exception):
+        response = _Response()
+
+    assert _retry_after_seconds(_ProviderError()) == 8
+
+
+def test_product_harness_mentions_recovered_source_trace_rows():
+    response = AnalyzeResponseV2(
+        query="Why did Bitcoin move today?",
+        is_demo=False,
+        demo_topic=None,
+        analysis_mode="live",
+        freshness_status="fresh",
+        time_range="today",
+        partial_live_reasons=[],
+        recommended_chain_id=None,
+        chains=[],
+        evidences=[],
+        upstream_map={"entries": []},
+        retrieval_trace=[
+            {
+                "source": "web",
+                "source_label": "Trusted web search",
+                "query": "Bitcoin move today stock price selloff",
+                "result_count": 2,
+                "cache_hit": False,
+                "status": "recovered",
+                "source_kind": "web_search",
+                "stability": "medium",
+                "cache_policy": "short_lived_cache_allowed",
+            }
+        ],
+        challenge_checks=[],
+        evaluation=PipelineEvaluationV2(
+            evidence_sufficiency=0.5,
+            probability_coherence=0.5,
+            chain_diversity=0.5,
+            overall_confidence=0.5,
+            weaknesses=[],
+            recommended_actions=[],
+        ),
+    )
+
+    payload = build_product_harness_payload(response)
+    source_trace_check = next(check for check in payload["checks"] if check["id"] == "source_trace")
+
+    assert "recovered" in source_trace_check["detail"].lower()
+
+
+def test_product_harness_does_not_mark_chain_without_evidence_ready():
+    result = _sample_result_with_one_supported_chain("芯原股份今天盘中为什么下跌？")
+    response = _result_to_v2(result, is_demo=False)
+    response.evidences = []
+
+    payload = build_product_harness_payload(response)
+
+    assert payload["status"] == "needs_more_evidence"
+    assert any(
+        check["id"] == "evidence_stance" and check["status"] == "fail"
+        for check in payload["checks"]
+    )
+    assert any("evidence" in action.lower() for action in payload["next_actions"])
+
+
+def test_product_harness_does_not_mark_live_result_without_source_trace_ready():
+    result = _sample_result_with_one_supported_chain("芯原股份今天盘中为什么下跌？")
+    response = _result_to_v2(result, is_demo=False)
+    response.retrieval_trace = []
+
+    payload = build_product_harness_payload(response)
+
+    assert payload["status"] == "needs_more_evidence"
+    assert any(
+        check["id"] == "source_trace" and check["status"] == "fail"
+        for check in payload["checks"]
+    )
+    assert any("source trace" in action.lower() for action in payload["next_actions"])
+
+
+def test_detect_demo_topic_accepts_real_chinese_stock_query():
+    assert detect_demo_topic("为什么某股票暴跌？") == "stock"
+
+
+def test_provider_labels_expose_clean_chinese_copy():
+    assert PROVIDERS["openrouter"]["label"] == "OpenRouter（多模型中转）"
+    assert PROVIDERS["openrouter"]["models"]["anthropic/claude-haiku-4.5"]["label"] == "Claude Haiku 4.5（快速）"
 
 
 def test_product_harness_rewards_useful_evidence_backed_result():

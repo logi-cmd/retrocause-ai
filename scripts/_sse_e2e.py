@@ -1,18 +1,27 @@
 """SSE E2E test — verify real analysis (is_demo=False) through stream endpoint."""
 
-import requests
-import json
-import sys
 import io
+import json
+import os
+import sys
+
+import requests
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
-API_KEY = "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"
+API_KEY = (
+    os.environ.get("OPENROUTER_API_KEY")
+    or os.environ.get("RETROCAUSE_OPENROUTER_KEY")
+    or ""
+).strip()
 QUERY = "Why is the sky blue?"
 MODEL = "deepseek/deepseek-chat-v3-0324"
 BASE_URL = "https://openrouter.ai/api/v1"
 ENDPOINT = "http://localhost:8001/api/analyze/v2/stream"
+
+if not API_KEY:
+    raise SystemExit("Set OPENROUTER_API_KEY or RETROCAUSE_OPENROUTER_KEY before running.")
 
 payload = {
     "query": QUERY,

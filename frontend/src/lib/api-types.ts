@@ -167,6 +167,20 @@ export type ApiProviderPreflight = {
   checks: ApiHarnessCheck[];
 };
 
+export type ApiSourcePreflight = {
+  status: string;
+  can_search: boolean;
+  checks: Array<{
+    source: string;
+    source_label: string;
+    status: string;
+    can_search: boolean;
+    result_count: number;
+    diagnosis: string;
+    user_action: string;
+  }>;
+};
+
 export type ApiRunStep = {
   id: string;
   label: string;

@@ -48,6 +48,28 @@ class _Source(BaseSourceAdapter):
         return self._results[:max_results]
 
 
+class _RecoverySource(BaseSourceAdapter):
+    def __init__(self, name: str, primary_query: str, recovered_results: list[SearchResult]):
+        self._name = name
+        self._primary_query = primary_query
+        self._recovered_results = recovered_results
+        self.calls: list[str] = []
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def source_type(self) -> EvidenceType:
+        return EvidenceType.NEWS
+
+    def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
+        self.calls.append(query)
+        if query == self._primary_query:
+            return []
+        return self._recovered_results[:max_results]
+
+
 class _Response:
     def __init__(self, status_code: int, headers: dict[str, str] | None = None):
         self.status_code = status_code
@@ -220,6 +242,57 @@ def test_access_layer_filters_stale_results_for_yesterday_queries():
     assert batch.attempts[0].result_count == 1
 
 
+def test_access_layer_recovers_empty_chinese_intraday_market_query_with_retry():
+    reset_evidence_access_state()
+    access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
+    query = "芯原股份今日午后股价为什么直线跳水？"
+    primary_query = enrich_query_with_time_context(query, "today", today=date(2026, 4, 21))
+    source = _RecoverySource(
+        "web",
+        primary_query,
+        [_dated_result("Recovered market hit", "2026-04-21")],
+    )
+
+    batch = access.search(
+        query,
+        [source],
+        max_results=2,
+        time_range="today",
+        today=date(2026, 4, 21),
+        scenario="market",
+        language="zh",
+        source_policy="market",
+    )
+
+    assert source.calls[0] == primary_query
+    assert len(source.calls) == 2
+    assert source.calls[1] != primary_query
+    assert batch.attempts[0].status == "recovered"
+    assert batch.attempts[0].query == source.calls[1]
+    assert [item.title for item in batch.results] == ["Recovered market hit"]
+
+
+def test_access_layer_marks_time_filtered_live_results_as_stale_filtered():
+    reset_evidence_access_state()
+    access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
+    source = _Source("web", [_dated_result("stale market hit", "2026-04-16")])
+
+    batch = access.search(
+        "芯原股份今日午后股价为什么直线跳水？",
+        [source],
+        max_results=2,
+        time_range="today",
+        today=date(2026, 4, 21),
+        scenario="market",
+        language="zh",
+        source_policy="market",
+    )
+
+    assert batch.results == []
+    assert batch.attempts[0].status == "stale_filtered"
+    assert batch.attempts[0].result_count == 0
+
+
 def test_access_layer_records_source_errors_and_continues_to_next_adapter():
     reset_evidence_access_state()
     access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
@@ -359,6 +432,18 @@ def test_result_time_matching_requires_date_signal_when_metadata_missing():
     assert result_matches_time_range(undated_target, "yesterday", today=date(2026, 4, 13))
 
 
+def test_result_time_matching_allows_hosted_search_for_today_when_undated():
+    hosted = SearchResult(
+        title="芯原股份盘中下跌原因",
+        content="Hosted search returned a same-day market result without explicit published date.",
+        url="https://example.com/stock",
+        source_type=EvidenceType.NEWS,
+        metadata={"provider": "tavily", "content_quality": "fulltext"},
+    )
+
+    assert result_matches_time_range(hosted, "today", today=date(2026, 4, 21))
+
+
 def test_source_broker_routes_market_and_policy_queries_to_scenario_fit_sources():
     market_plan = plan_query("比特币今日价格为何跳水")
     policy_plan = plan_query("美国为什么会推出新的半导体出口管制？")
@@ -373,13 +458,33 @@ def test_source_broker_routes_market_and_policy_queries_to_scenario_fit_sources(
 
 
 def test_source_broker_routes_chinese_intraday_stock_queries_to_web_first():
-    query = "\u82af\u539f\u80a1\u4efd\u4eca\u65e5\u5348\u540e\u80a1\u4ef7\u4e3a\u4ec0\u4e48\u76f4\u7ebf\u8df3\u6c34\uff1f"
+    query = "芯原股份今日午后股价为什么直线跳水？"
     plan = plan_query(query)
 
     assert plan.language == "zh"
     assert plan.scenario == "market"
     assert plan.time_range == "today"
     assert broker_source_names(None, plan)[:3] == ["web", "gdelt", "ap_news"]
+
+
+def test_source_broker_keeps_chinese_intraday_hosted_path_short_when_available():
+    query = "芯原股份今日午后股价为什么直线跳水？"
+    plan = plan_query(query)
+
+    assert broker_source_names(None, plan, optional_sources=["tavily"]) == ["tavily", "web"]
+
+
+def test_source_broker_routes_outage_postmortems_to_live_web_sources():
+    plan = plan_query("Why did the latest Cloudflare outage happen?")
+
+    assert plan.domain == "postmortem"
+    assert plan.scenario == "postmortem"
+    assert broker_source_names(None, plan, optional_sources=["tavily"])[:4] == [
+        "tavily",
+        "web",
+        "ap_news",
+        "gdelt",
+    ]
 
 
 def test_source_broker_respects_explicit_source_override():
@@ -451,6 +556,8 @@ def test_broker_source_names_can_include_optional_hosted_sources_when_enabled():
 def test_optional_tavily_adapter_requires_api_key(monkeypatch):
     from retrocause.app.demo_data import (
         _available_source_classes_from_env,
+        _available_source_factories,
+        _optional_hosted_source_names,
         _optional_hosted_source_names_from_env,
     )
 
@@ -458,6 +565,8 @@ def test_optional_tavily_adapter_requires_api_key(monkeypatch):
 
     assert "tavily" not in _optional_hosted_source_names_from_env()
     assert "tavily" not in _available_source_classes_from_env()
+    assert "tavily" in _optional_hosted_source_names(tavily_api_key="tvly-test")
+    assert "tavily" in _available_source_factories(tavily_api_key="tvly-test")
 
     monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
 
@@ -468,6 +577,8 @@ def test_optional_tavily_adapter_requires_api_key(monkeypatch):
 def test_optional_brave_adapter_requires_api_key(monkeypatch):
     from retrocause.app.demo_data import (
         _available_source_classes_from_env,
+        _available_source_factories,
+        _optional_hosted_source_names,
         _optional_hosted_source_names_from_env,
     )
 
@@ -475,6 +586,8 @@ def test_optional_brave_adapter_requires_api_key(monkeypatch):
 
     assert "brave" not in _optional_hosted_source_names_from_env()
     assert "brave" not in _available_source_classes_from_env()
+    assert "brave" in _optional_hosted_source_names(brave_search_api_key="brave-test")
+    assert "brave" in _available_source_factories(brave_search_api_key="brave-test")
 
     monkeypatch.setenv("BRAVE_SEARCH_API_KEY", "brave-test")
 
