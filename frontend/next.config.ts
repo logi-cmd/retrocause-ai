@@ -5,7 +5,11 @@ import { fileURLToPath } from "node:url";
 const rootDir = dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   devIndicators: false,
+  experimental: {
+    workerThreads: true,
+  },
   turbopack: {
     root: rootDir,
   },

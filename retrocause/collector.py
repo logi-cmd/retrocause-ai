@@ -11,6 +11,7 @@ from retrocause.evidence_access import (
     EvidenceAccessLayer,
     EvidenceAccessPolicy,
     SourceAttempt,
+    plan_query,
     reset_evidence_access_state,
 )
 from retrocause.models import CausalEdge, CausalVariable, Evidence, EvidenceType
@@ -173,6 +174,9 @@ def _parallel_search(
     max_results: int,
     min_source_adapters: int = 1,
     time_range: str | None = None,
+    scenario: str = "unknown",
+    language: str = "unknown",
+    source_policy: str = "default",
 ) -> EvidenceAccessBatch:
     """Search adapters in priority order and stop once enough results are collected."""
     return _EVIDENCE_ACCESS.search(
@@ -182,6 +186,9 @@ def _parallel_search(
         min_source_adapters=min_source_adapters,
         time_range=time_range,
         today=_today(),
+        scenario=scenario,
+        language=language,
+        source_policy=source_policy,
     )
 
 
@@ -274,6 +281,27 @@ class EvidenceCollector:
             fallback_items.append((combined, item.source_type, item.url, 0.35))
         return fallback_items
 
+    def _add_fallback_summaries(self, results: list[SearchResult]) -> list[Evidence]:
+        new_evidence: list[Evidence] = []
+        for item in results[:2]:
+            metadata = (getattr(item, "metadata", {}) or {}) if item is not None else {}
+            for content, source_type, source_url, reliability in self._fallback_extract_from_results(
+                [item]
+            ):
+                evidence = self.add_evidence(
+                    content=content,
+                    source_type=source_type,
+                    source_url=source_url,
+                    reliability=reliability,
+                    timestamp=metadata.get("published"),
+                    extraction_method="fallback_summary",
+                    stance="supporting",
+                    stance_basis="fallback_summary",
+                )
+                if evidence is not None:
+                    new_evidence.append(evidence)
+        return new_evidence
+
     def auto_collect(
         self,
         query: str,
@@ -289,6 +317,7 @@ class EvidenceCollector:
             return []
 
         effective_time_range = time_range if time_range is not None else parse_input(query).time_range
+        plan = plan_query(query)
         query_builder = getattr(llm_client, "build_search_queries", None)
         if callable(query_builder):
             sub_queries = query_builder(query, domain)
@@ -320,6 +349,9 @@ class EvidenceCollector:
                 max_results_per_source,
                 min_source_adapters=min_source_adapters,
                 time_range=effective_time_range,
+                scenario=plan.scenario,
+                language=plan.language,
+                source_policy=plan.scenario,
             )
             self.access_trace.extend(access_batch.attempts)
             all_results = access_batch.results
@@ -331,6 +363,7 @@ class EvidenceCollector:
             extraction_method = _extraction_method_from_results(all_results)
 
             extracted = llm_client.extract_evidence(query, merged_text, first_source.value)
+            added_from_extraction = 0
             for item in extracted:
                 matched_result = _best_result_for_evidence(item.content, all_results)
                 matched_metadata = (getattr(matched_result, "metadata", {}) or {})
@@ -348,28 +381,16 @@ class EvidenceCollector:
                 )
                 if evidence is not None:
                     new_evidence.append(evidence)
+                    added_from_extraction += 1
 
-            if extracted:
+            if added_from_extraction:
                 continue
 
-            logger.info(
-                "auto_collect: LLM extraction returned nothing, preserving low-confidence summaries"
-            )
-            for content, source_type, source_url, reliability in self._fallback_extract_from_results(
-                all_results
-            ):
-                evidence = self.add_evidence(
-                    content=content,
-                    source_type=source_type,
-                    source_url=source_url,
-                    reliability=reliability,
-                    timestamp=(getattr(all_results[0], "metadata", {}) or {}).get("published"),
-                    extraction_method="fallback_summary",
-                    stance="supporting",
-                    stance_basis="fallback_summary",
+            if not new_evidence:
+                logger.info(
+                    "auto_collect: LLM extraction produced no stored evidence, preserving summaries"
                 )
-                if evidence is not None:
-                    new_evidence.append(evidence)
+                new_evidence.extend(self._add_fallback_summaries(all_results))
 
             if _collection_quality_met(domain, new_evidence):
                 break
@@ -433,6 +454,7 @@ class EvidenceCollector:
         new_evidence: list[Evidence] = []
         checks: list[dict] = []
         effective_time_range = time_range if time_range is not None else parse_input(query).time_range
+        plan = plan_query(query)
 
         for edge in candidate_edges:
             src_label = edge.source.replace("_", " ")
@@ -443,6 +465,9 @@ class EvidenceCollector:
                 source_adapters,
                 max_results_per_source,
                 time_range=effective_time_range,
+                scenario=plan.scenario,
+                language=plan.language,
+                source_policy=plan.scenario,
             )
             self.access_trace.extend(access_batch.attempts)
             all_results = access_batch.results
@@ -599,12 +624,16 @@ class EvidenceCollector:
     ) -> list[Evidence]:
         new_evidence: list[Evidence] = []
         effective_time_range = time_range if time_range is not None else parse_input(original_query).time_range
+        plan = plan_query(original_query)
         for sub_query in sub_queries:
             access_batch = _parallel_search(
                 sub_query,
                 source_adapters,
                 max_results_per_source,
                 time_range=effective_time_range,
+                scenario=plan.scenario,
+                language=plan.language,
+                source_policy=plan.scenario,
             )
             self.access_trace.extend(access_batch.attempts)
             all_results = access_batch.results
@@ -617,6 +646,7 @@ class EvidenceCollector:
             extraction_method = _extraction_method_from_results(all_results)
 
             extracted = llm_client.extract_evidence(original_query, merged_text, first_source.value)
+            added_from_extraction = 0
             for item in extracted:
                 evidence = self.add_evidence(
                     content=item.content,
@@ -631,28 +661,16 @@ class EvidenceCollector:
                 )
                 if evidence is not None:
                     new_evidence.append(evidence)
+                    added_from_extraction += 1
 
-            if extracted:
+            if added_from_extraction:
                 continue
 
-            logger.info(
-                "graph_guided_collect: LLM extraction returned nothing, preserving low-confidence summaries"
-            )
-            for content, source_type, source_url, reliability in self._fallback_extract_from_results(
-                all_results
-            ):
-                evidence = self.add_evidence(
-                    content=content,
-                    source_type=source_type,
-                    source_url=source_url,
-                    reliability=reliability,
-                    timestamp=(getattr(all_results[0], "metadata", {}) or {}).get("published"),
-                    extraction_method="fallback_summary",
-                    stance="supporting",
-                    stance_basis="fallback_summary",
+            if not new_evidence:
+                logger.info(
+                    "graph_guided_collect: LLM extraction produced no stored evidence, preserving summaries"
                 )
-                if evidence is not None:
-                    new_evidence.append(evidence)
+                new_evidence.extend(self._add_fallback_summaries(all_results))
 
         logger.info("_execute_subqueries: added %d evidence items after dedupe", len(new_evidence))
         return new_evidence

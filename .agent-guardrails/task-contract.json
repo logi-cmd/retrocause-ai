@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 3,
+  "task": "Land the already-tested keyless OSS and Pro Rust graph foundation branch into main from an unrelated-history remote main, preserving the current project files, test evidence, docs, and Pro workspace so development can continue on Pro.",
+  "preset": "generic",
+  "createdAt": "2026-04-24T04:06:14.061Z",
+  "allowedPaths": [
+    ".agent-guardrails/",
+    ".codex/",
+    ".env.example",
+    ".gitignore",
+    ".impeccable.md",
+    "README.md",
+    "STATE.md",
+    "docs/",
+    "evidence_board_mockup.html",
+    "evidence_board_screenshot.png",
+    "evidence_board_screenshot_v2.png",
+    "evidence_board_screenshot_v3.png",
+    "frontend/",
+    "logs/",
+    "package-lock.json",
+    "package.json",
+    "pro/",
+    "pyproject.toml",
+    "retrocause/",
+    "scripts/",
+    "start.py",
+    "tests/"
+  ],
+  "requiredCommands": [
+    "cargo test --manifest-path pro/Cargo.toml"
+  ],
+  "evidencePaths": [
+    ".agent-guardrails/evidence/current-task.md"
+  ],
+  "intendedFiles": [],
+  "protectedPaths": [],
+  "allowedChangeTypes": [],
+  "riskLevel": "high",
+  "requiresReviewNotes": false,
+  "validationProfile": "standard",
+  "securityRequirements": [
+    "Mention auth, secrets, permissions, and sensitive-data handling explicitly."
+  ],
+  "dependencyRequirements": [
+    "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
+  ],
+  "performanceRequirements": [
+    "Mention performance, latency, or load impact in evidence."
+  ],
+  "understandingRequirements": [
+    "Explain the main tradeoffs so future maintainers can follow the change."
+  ],
+  "continuityRequirements": [
+    "Mention reuse targets and any deliberate continuity break in evidence."
+  ],
+  "acknowledgedSkips": [],
+  "patternSummary": "",
+  "smallestViableChange": "",
+  "assumptions": [],
+  "acceptanceCriteria": [],
+  "nonGoals": [],
+  "expectedBehaviorChanges": [],
+  "userVisibleEffects": [],
+  "intendedSymbols": [],
+  "expectedPublicSurfaceChanges": [],
+  "expectedBoundaryExceptions": [],
+  "expectedTestTargets": [],
+  "productionProfile": "",
+  "nfrRequirements": [],
+  "expectedLoadSensitivePaths": [],
+  "expectedConcurrencyImpact": "",
+  "observabilityRequirements": [],
+  "rollbackNotes": "",
+  "riskJustification": "",
+  "autoFilledFields": [
+    "安全要求",
+    "依赖要求",
+    "性能要求",
+    "可理解性要求",
+    "连续性要求"
+  ],
+  "session": {
+    "version": 1,
+    "sessionId": "e2048202-0aa2-45e8-93f0-fe803d71b546",
+    "createdAt": "2026-04-24T04:06:14.059Z",
+    "repoRoot": "D:\\opencode\\retrocause-ai",
+    "taskRequest": "Land the already-tested keyless OSS and Pro Rust graph foundation branch into main from an unrelated-history remote main, preserving the current project files, test evidence, docs, and Pro workspace so development can continue on Pro.",
+    "contractSource": "preset-defaults",
+    "selectedFiles": [],
+    "changedFiles": [],
+    "autoFilledFields": [
+      "安全要求",
+      "依赖要求",
+      "性能要求",
+      "可理解性要求",
+      "连续性要求"
+    ],
+    "requiredCommandsSuggested": [
+      "cargo test --manifest-path pro/Cargo.toml"
+    ],
+    "evidencePathSuggested": ".agent-guardrails/evidence/current-task.md",
+    "riskDimensions": {
+      "securityRequirements": [
+        "Mention auth, secrets, permissions, and sensitive-data handling explicitly."
+      ],
+      "dependencyRequirements": [
+        "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
+      ],
+      "performanceRequirements": [
+        "Mention performance, latency, or load impact in evidence."
+      ],
+      "understandingRequirements": [
+        "Explain the main tradeoffs so future maintainers can follow the change."
+      ],
+      "continuityRequirements": [
+        "Mention reuse targets and any deliberate continuity break in evidence."
+      ]
+    },
+    "finishCheckHints": [
+      "Report the commands you actually ran: cargo test --manifest-path pro/Cargo.toml",
+      "Keep the evidence note current: .agent-guardrails/evidence/current-task.md",
+      "Keep security, dependency, performance, understanding, and continuity concerns explicit in the evidence note and review summary.",
+      "Finish with agent-guardrails check --review before handing off or merging."
+    ],
+    "riskSignals": [],
+    "archaeologyNotes": [],
+    "nextActions": [
+      "Implement the smallest change that fits the contract.",
+      "Run required commands: cargo test --manifest-path pro/Cargo.toml",
+      "Update evidence: .agent-guardrails/evidence/current-task.md",
+      "Capture review-oriented notes before finishing.",
+      "Keep security, dependency, performance, understanding, continuity concerns explicit in the evidence note and review summary.",
+      "Run agent-guardrails check --review before completing the task."
+    ],
+    "roughIntent": null
+  }
+}

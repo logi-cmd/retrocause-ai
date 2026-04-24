@@ -1,0 +1,591 @@
+use axum::{
+    Router,
+    response::{Html, IntoResponse},
+    routing::get,
+};
+use maud::{DOCTYPE, Markup, PreEscaped, html};
+use retrocause_pro_domain::{GraphEdge, GraphNode, NodeKind, RunSeed, sample_run};
+
+const CANVAS_WIDTH: u16 = 1220;
+const CANVAS_HEIGHT: u16 = 720;
+
+fn router() -> Router {
+    Router::new().route("/", get(index))
+}
+
+async fn index() -> impl IntoResponse {
+    Html(render_page(&sample_run()).into_string())
+}
+
+fn render_page(run: &RunSeed) -> Markup {
+    let seed_json = serde_json::to_string_pretty(run).expect("serialize seed run");
+
+    html! {
+        (DOCTYPE)
+        html lang="en" {
+            head {
+                meta charset="utf-8";
+                meta name="viewport" content="width=device-width, initial-scale=1";
+                title { "RetroCause Pro" }
+                link rel="preconnect" href="https://fonts.googleapis.com";
+                link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="";
+                link
+                    href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap"
+                    rel="stylesheet";
+                style { (PreEscaped(styles())) }
+            }
+            body {
+                main class="field-shell" {
+                    section class="graph-field" aria-label="Knowledge graph operating field" {
+                        header class="hud hud--top" {
+                            div class="brand-lockup" {
+                                div class="brand-mark" { "RC" }
+                                div {
+                                    p class="eyebrow" { "RetroCause Pro" }
+                                    h1 { "Causal graph command room" }
+                                }
+                            }
+                            div class="run-state" {
+                                span class="state-token state-token--live" { (run.run_state) }
+                                span class="state-token" { "confidence " (percent(run.confidence)) }
+                                span class="state-token" { (run.nodes.len()) " nodes" }
+                                span class="state-token" { (run.edges.len()) " edges" }
+                            }
+                        }
+
+                        div class="question-band" {
+                            p class="eyebrow" { "Run" }
+                            h2 { (run.title) }
+                            p { (run.question) }
+                        }
+
+                        div class="graph-viewport" {
+                            div class="axis-line axis-line--x" {}
+                            div class="axis-line axis-line--y" {}
+                            svg
+                                class="graph-wires"
+                                viewBox={(format!("0 0 {} {}", CANVAS_WIDTH, CANVAS_HEIGHT))}
+                                aria-hidden="true"
+                            {
+                                @for edge in &run.edges {
+                                    (render_edge(run, edge))
+                                }
+                            }
+                            @for node in &run.nodes {
+                                (render_node(node))
+                            }
+                        }
+
+                        aside class="focus-docket" aria-label="Focus queue" {
+                            p class="eyebrow" { "Focus queue" }
+                            ol {
+                                @for step in run.next_steps {
+                                    li { (step) }
+                                }
+                            }
+                        }
+
+                        aside class="source-pulse" aria-label="Source pulse" {
+                            p class="eyebrow" { "Source pulse" }
+                            @for source in &run.source_status {
+                                (render_source_meter(source.source, source.status, source.note))
+                            }
+                        }
+
+                        footer class="command-deck" {
+                            div class="verdict" {
+                                p class="eyebrow" { "Current read" }
+                                strong { (run.verdict) }
+                            }
+                            div class="command-clusters" aria-label="Run signals" {
+                                span { (run.run_state) }
+                                span { (percent(run.confidence)) " confidence" }
+                                span { (run.nodes.len()) " nodes tracked" }
+                                span { (run.edges.len()) " causal links" }
+                            }
+                        }
+
+                        details class="seed-drawer" {
+                            summary { "Run payload" }
+                            pre { (seed_json) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn render_edge(run: &RunSeed, edge: &GraphEdge) -> Markup {
+    let source = run
+        .nodes
+        .iter()
+        .find(|node| node.id == edge.source)
+        .expect("known source node");
+    let target = run
+        .nodes
+        .iter()
+        .find(|node| node.id == edge.target)
+        .expect("known target node");
+
+    let path = wire_path(source, target);
+    let label_x = (source.x + target.x) / 2;
+    let label_y = (source.y + target.y) / 2;
+
+    html! {
+        path class="wire-shadow" d=(path.clone()) {}
+        path class="wire" d=(path) {}
+        text class="wire-label" x=(label_x) y=(label_y) { (edge.label) }
+    }
+}
+
+fn render_node(node: &GraphNode) -> Markup {
+    html! {
+        article
+            class=(format!("graph-node {:?}", node.kind).to_lowercase().replace(' ', "-"))
+            style=(format!("left:{}px; top:{}px;", node.x, node.y))
+        {
+            div class="node-head" {
+                p class="node-kind" { (node_kind_label(node.kind)) }
+                span { (percent(node.confidence)) }
+            }
+            h3 { (node.title) }
+            p { (node.summary) }
+        }
+    }
+}
+
+fn render_source_meter(source: &str, status: &str, note: &str) -> Markup {
+    html! {
+        article class="source-meter" {
+            div {
+                strong { (source) }
+                p { (note) }
+            }
+            span class=(format!("status-dot status-dot--{}", status)) {}
+        }
+    }
+}
+
+fn wire_path(source: &GraphNode, target: &GraphNode) -> String {
+    let start_x = i32::from(source.x) + 168;
+    let start_y = i32::from(source.y) + 86;
+    let end_x = i32::from(target.x);
+    let end_y = i32::from(target.y) + 86;
+    let control_x = (start_x + end_x) / 2;
+    format!("M {start_x} {start_y} C {control_x} {start_y}, {control_x} {end_y}, {end_x} {end_y}")
+}
+
+fn percent(value: f32) -> String {
+    format!("{:.0}%", value * 100.0)
+}
+
+fn node_kind_label(kind: NodeKind) -> &'static str {
+    match kind {
+        NodeKind::Driver => "driver",
+        NodeKind::Enabler => "enabler",
+        NodeKind::Risk => "risk",
+        NodeKind::Outcome => "outcome",
+    }
+}
+
+fn styles() -> &'static str {
+    r#"
+:root {
+  color-scheme: dark;
+  --bg: oklch(0.16 0.016 148);
+  --bg-lift: oklch(0.2 0.018 148);
+  --panel: oklch(0.24 0.018 148 / 0.9);
+  --panel-hard: oklch(0.29 0.02 148 / 0.96);
+  --line: oklch(0.74 0.075 96);
+  --text: oklch(0.93 0.01 118);
+  --muted: oklch(0.72 0.026 132);
+  --accent: oklch(0.78 0.09 95);
+  --danger: oklch(0.66 0.13 27);
+  --driver: oklch(0.76 0.08 95);
+  --enabler: oklch(0.78 0.06 168);
+  --risk: oklch(0.7 0.12 27);
+  --outcome: oklch(0.76 0.05 205);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Hanken Grotesk", sans-serif;
+  background:
+    linear-gradient(color-mix(in oklch, var(--text) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklch, var(--text) 4%, transparent) 1px, transparent 1px),
+    var(--bg);
+  background-size: 36px 36px, 36px 36px, auto;
+  color: var(--text);
+}
+
+.field-shell {
+  min-height: 100vh;
+  padding: 0.75rem;
+}
+
+.graph-field {
+  min-height: calc(100vh - 1.5rem);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--text) 10%, transparent);
+  border-radius: 8px;
+  background:
+    linear-gradient(115deg, color-mix(in oklch, var(--bg-lift) 88%, black), var(--bg));
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.32);
+}
+
+.hud,
+.question-band,
+.focus-docket,
+.source-pulse,
+.command-deck,
+.seed-drawer {
+  position: absolute;
+  z-index: 5;
+  border: 1px solid color-mix(in oklch, var(--text) 10%, transparent);
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--panel) 92%, black);
+  backdrop-filter: blur(14px);
+}
+
+.hud--top {
+  top: 0.9rem;
+  left: 0.9rem;
+  right: 0.9rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+}
+
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.brand-mark {
+  width: 2.6rem;
+  height: 2.6rem;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--accent);
+  color: oklch(0.18 0.018 148);
+  font-family: "Sora", sans-serif;
+  font-weight: 700;
+}
+
+.run-state,
+.command-clusters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.state-token,
+.command-clusters span {
+  border: 1px solid color-mix(in oklch, var(--text) 11%, transparent);
+  border-radius: 999px;
+  padding: 0.32rem 0.62rem;
+  color: color-mix(in oklch, var(--text) 88%, var(--muted));
+  background: color-mix(in oklch, var(--panel-hard) 82%, black);
+  font-size: 0.78rem;
+}
+
+.state-token--live {
+  color: oklch(0.9 0.05 128);
+}
+
+.question-band {
+  top: 5.5rem;
+  left: 0.9rem;
+  max-width: min(620px, calc(100% - 1.8rem));
+  padding: 0.95rem 1rem;
+}
+
+.graph-viewport {
+  position: absolute;
+  inset: 8.6rem 1rem 5.7rem;
+  overflow: auto;
+  border-radius: 8px;
+  background:
+    linear-gradient(color-mix(in oklch, var(--text) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklch, var(--text) 5%, transparent) 1px, transparent 1px),
+    color-mix(in oklch, var(--bg-lift) 88%, black);
+  background-size: 42px 42px, 42px 42px, auto;
+  border: 1px solid color-mix(in oklch, var(--text) 8%, transparent);
+}
+
+.axis-line {
+  position: absolute;
+  background: color-mix(in oklch, var(--accent) 28%, transparent);
+  opacity: 0.35;
+}
+
+.axis-line--x {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+}
+
+.axis-line--y {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+}
+
+.graph-wires {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1220px;
+  height: 720px;
+}
+
+.wire-shadow {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 7;
+  stroke-linecap: round;
+}
+
+.wire {
+  fill: none;
+  stroke: color-mix(in oklch, var(--line) 78%, var(--text));
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.wire-label {
+  fill: color-mix(in oklch, var(--text) 72%, var(--muted));
+  font-size: 11px;
+}
+
+.graph-node {
+  position: absolute;
+  width: 248px;
+  padding: 0.86rem;
+  display: grid;
+  gap: 0.5rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in oklch, white 22%, transparent);
+  color: oklch(0.18 0.018 148);
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.28);
+}
+
+.graph-node.driver { background: color-mix(in oklch, var(--driver) 88%, white); }
+.graph-node.enabler { background: color-mix(in oklch, var(--enabler) 88%, white); }
+.graph-node.risk { background: color-mix(in oklch, var(--risk) 86%, white); }
+.graph-node.outcome { background: color-mix(in oklch, var(--outcome) 88%, white); }
+
+.node-head,
+.source-meter {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.node-kind,
+.eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.node-kind {
+  color: color-mix(in oklch, black 58%, transparent);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Sora", sans-serif;
+  font-weight: 600;
+}
+
+h1 { font-size: 1.34rem; }
+h2 { font-size: 1.1rem; }
+h3 { font-size: 0.98rem; }
+
+p {
+  line-height: 1.55;
+  color: color-mix(in oklch, var(--text) 84%, var(--muted));
+}
+
+.graph-node p {
+  color: color-mix(in oklch, black 76%, transparent);
+}
+
+.focus-docket {
+  left: 1rem;
+  bottom: 6.1rem;
+  width: min(360px, calc(100% - 2rem));
+  padding: 0.9rem 1rem;
+}
+
+.focus-docket ol {
+  margin: 0.7rem 0 0;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.62rem;
+}
+
+.source-pulse {
+  right: 1rem;
+  top: 5.5rem;
+  width: min(340px, calc(100% - 2rem));
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.source-meter {
+  padding: 0.72rem;
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--panel-hard) 72%, black);
+}
+
+.source-meter p {
+  font-size: 0.82rem;
+  margin-top: 0.22rem;
+}
+
+.status-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.status-dot--verified { background: oklch(0.74 0.12 150); }
+.status-dot--cached { background: oklch(0.75 0.08 205); }
+.status-dot--rate_limited { background: var(--danger); }
+
+.command-deck {
+  left: 1rem;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.86rem 1rem;
+}
+
+.verdict {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.seed-drawer {
+  right: 1rem;
+  bottom: 6.1rem;
+  width: min(420px, calc(100% - 2rem));
+  padding: 0.8rem 0.9rem;
+}
+
+.seed-drawer summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.seed-drawer pre {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0.7rem 0 0;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: color-mix(in oklch, black 24%, var(--panel-hard));
+  color: color-mix(in oklch, var(--text) 88%, var(--muted));
+  font-size: 0.78rem;
+}
+
+@media (max-width: 1080px) {
+  .hud--top,
+  .command-deck {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .graph-field {
+    overflow: visible;
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .hud,
+  .question-band,
+  .focus-docket,
+  .source-pulse,
+  .command-deck,
+  .seed-drawer,
+  .graph-viewport {
+    position: relative;
+    inset: auto;
+    width: auto;
+  }
+
+  .graph-viewport {
+    min-height: 980px;
+  }
+}
+"#
+}
+
+#[tokio::main]
+async fn main() {
+    let port = std::env::var("PRO_WEB_PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(3007);
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", port))
+        .await
+        .expect("bind pro web listener");
+
+    println!("RetroCause Pro Web listening on http://127.0.0.1:{port}");
+    axum::serve(listener, router())
+        .await
+        .expect("serve pro web");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wire_path_contains_expected_curve_command() {
+        let run = sample_run();
+        let path = wire_path(&run.nodes[0], &run.nodes[1]);
+        assert!(path.starts_with('M'));
+        assert!(path.contains('C'));
+    }
+
+    #[test]
+    fn rendered_page_contains_graph_first_sections() {
+        let page = render_page(&sample_run()).into_string();
+        assert!(page.contains("Knowledge graph operating field"));
+        assert!(page.contains("graph-viewport"));
+        assert!(page.contains("Focus queue"));
+        assert!(page.contains("Source pulse"));
+    }
+}

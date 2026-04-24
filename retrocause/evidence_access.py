@@ -31,7 +31,9 @@ QUALITY_ORDER = {
 }
 
 _SOURCE_LAST_CALL_AT: dict[str, float] = {}
-_SOURCE_QUERY_CACHE: dict[tuple[str, str, int], tuple[float, list[SearchResult]]] = {}
+_SOURCE_QUERY_CACHE: dict[
+    tuple[str, str, str, str, str, str, int], tuple[float, list[SearchResult]]
+] = {}
 _SOURCE_COOLDOWN_UNTIL: dict[str, float] = {}
 
 
@@ -61,6 +63,20 @@ class EvidenceAccessPolicy:
 
 
 @dataclass(frozen=True)
+class SourceProfile:
+    """Stable retrieval-source policy metadata for broker and UI traces."""
+
+    name: str
+    source_label: str
+    source_kind: str
+    stability: str
+    cache_policy: str
+    default_monthly_budget: int
+    default_rpm: int
+    requires_credential: bool
+
+
+@dataclass(frozen=True)
 class SourceAttempt:
     """Trace record for one source-adapter attempt."""
 
@@ -69,6 +85,12 @@ class SourceAttempt:
     result_count: int
     cache_hit: bool = False
     error: str | None = None
+    status: str = "ok"
+    retry_after_seconds: int | None = None
+    source_label: str = ""
+    source_kind: str = "unknown"
+    stability: str = "unknown"
+    cache_policy: str = "no_cache_policy"
 
 
 @dataclass(frozen=True)
@@ -88,6 +110,99 @@ def reset_evidence_access_state() -> None:
     _SOURCE_LAST_CALL_AT.clear()
     _SOURCE_QUERY_CACHE.clear()
     _SOURCE_COOLDOWN_UNTIL.clear()
+
+
+SOURCE_PROFILES: dict[str, SourceProfile] = {
+    "ap_news": SourceProfile(
+        name="ap_news",
+        source_label="AP News",
+        source_kind="wire_news",
+        stability="high",
+        cache_policy="short_lived_cache_allowed",
+        default_monthly_budget=5000,
+        default_rpm=30,
+        requires_credential=False,
+    ),
+    "gdelt": SourceProfile(
+        name="gdelt",
+        source_label="GDELT Global Knowledge Graph",
+        source_kind="news_index",
+        stability="medium",
+        cache_policy="short_lived_cache_allowed",
+        default_monthly_budget=10000,
+        default_rpm=60,
+        requires_credential=False,
+    ),
+    "gdelt_news": SourceProfile(
+        name="gdelt_news",
+        source_label="GDELT Global Knowledge Graph",
+        source_kind="news_index",
+        stability="medium",
+        cache_policy="short_lived_cache_allowed",
+        default_monthly_budget=10000,
+        default_rpm=60,
+        requires_credential=False,
+    ),
+    "web": SourceProfile(
+        name="web",
+        source_label="Trusted web search",
+        source_kind="web_search",
+        stability="medium",
+        cache_policy="short_lived_cache_allowed",
+        default_monthly_budget=3000,
+        default_rpm=20,
+        requires_credential=False,
+    ),
+    "federal_register": SourceProfile(
+        name="federal_register",
+        source_label="Federal Register",
+        source_kind="official_record",
+        stability="high",
+        cache_policy="long_lived_cache_allowed",
+        default_monthly_budget=5000,
+        default_rpm=60,
+        requires_credential=False,
+    ),
+    "arxiv": SourceProfile(
+        name="arxiv",
+        source_label="arXiv",
+        source_kind="academic_index",
+        stability="high",
+        cache_policy="long_lived_cache_allowed",
+        default_monthly_budget=5000,
+        default_rpm=30,
+        requires_credential=False,
+    ),
+    "semantic_scholar": SourceProfile(
+        name="semantic_scholar",
+        source_label="Semantic Scholar",
+        source_kind="academic_index",
+        stability="medium",
+        cache_policy="short_lived_cache_allowed",
+        default_monthly_budget=5000,
+        default_rpm=30,
+        requires_credential=False,
+    ),
+}
+
+
+def source_profile(source_name: str) -> SourceProfile:
+    """Return source policy metadata, falling back to a conservative unknown profile."""
+
+    normalized = source_name.strip().lower()
+    return SOURCE_PROFILES.get(
+        normalized,
+        SourceProfile(
+            name=normalized or "unknown",
+            source_label=source_name or "Unknown source",
+            source_kind="unknown",
+            stability="unknown",
+            cache_policy="no_cache_policy",
+            default_monthly_budget=0,
+            default_rpm=0,
+            requires_credential=False,
+        ),
+    )
 
 
 def _has_cjk(text: str) -> bool:
@@ -161,6 +276,15 @@ def _target_date_for_range(time_range: str | None, today: date | None = None) ->
     return None
 
 
+def _is_hosted_search_result(result: SearchResult) -> bool:
+    metadata = result.metadata or {}
+    cache_policy = str(metadata.get("cache_policy", "")).lower()
+    return cache_policy in {
+        "derived_cache_allowed",
+        "transient_results_only",
+    }
+
+
 def time_scope_key(time_range: str | None, today: date | None = None) -> str | None:
     """Return an absolute cache bucket for relative time windows."""
 
@@ -210,6 +334,8 @@ def result_matches_time_range(
     target_date = _target_date_for_range(time_range, resolved_today)
     if time_range in {"today", "trading_day"}:
         if published is None:
+            if _is_hosted_search_result(result):
+                return True
             return target_date is not None and _result_has_target_date_signal(result, target_date)
         return published == resolved_today
     if time_range == "yesterday":
@@ -218,6 +344,8 @@ def result_matches_time_range(
         return published == resolved_today - timedelta(days=1)
     if time_range == "last_24h":
         if published is None:
+            if _is_hosted_search_result(result):
+                return True
             return target_date is not None and _result_has_target_date_signal(result, target_date)
         return resolved_today - timedelta(days=1) <= published <= resolved_today
     if time_range == "last_7d":
@@ -260,6 +388,8 @@ def _infer_entities(query: str, parsed: ParsedQuery) -> list[str]:
 def _infer_scenario(parsed: ParsedQuery, entities: list[str]) -> str:
     if parsed.domain in {"finance", "business"}:
         return "market"
+    if parsed.domain == "postmortem":
+        return "postmortem"
     if parsed.domain == "geopolitics":
         return "policy" if {"export_controls", "semiconductor"} & set(entities) else "news"
     if parsed.time_range is not None:
@@ -286,18 +416,44 @@ def plan_query(query: str, parsed: ParsedQuery | None = None) -> QueryPlan:
     )
 
 
-def broker_source_names(configured_sources: str | None, plan: QueryPlan) -> list[str]:
+def _prepend_unique(items: list[str], prefix: list[str]) -> list[str]:
+    ordered: list[str] = []
+    for item in [*prefix, *items]:
+        if item not in ordered:
+            ordered.append(item)
+    return ordered
+
+
+def broker_source_names(
+    configured_sources: str | None,
+    plan: QueryPlan,
+    *,
+    optional_sources: list[str] | None = None,
+) -> list[str]:
     """Select source classes by scenario, while honoring explicit operator overrides."""
 
     if configured_sources:
         return [item.strip() for item in configured_sources.split(",") if item.strip()]
 
+    optional = [
+        item.strip().lower()
+        for item in optional_sources or []
+        if item.strip()
+        and item.strip().lower() in SOURCE_PROFILES
+        and not SOURCE_PROFILES[item.strip().lower()].requires_credential
+    ]
     if plan.scenario == "policy":
-        return ["ap_news", "federal_register", "gdelt", "web"]
+        return _prepend_unique(["gdelt", "web"], ["ap_news", "federal_register", *optional])
+    if plan.scenario == "postmortem":
+        return _prepend_unique(["web", "ap_news", "gdelt"], optional)
     if plan.scenario in {"market", "news"}:
         if plan.time_range is not None:
-            return ["ap_news", "gdelt", "web"]
-        return ["ap_news", "web", "gdelt", "arxiv"]
+            if plan.language == "zh":
+                if optional:
+                    return _prepend_unique(["web"], optional)
+                return _prepend_unique(["web", "gdelt", "ap_news"], optional)
+            return _prepend_unique(["ap_news", "gdelt", "web"], optional)
+        return _prepend_unique(["ap_news", "web", "gdelt", "arxiv"], optional)
     if plan.scenario == "academic":
         return ["arxiv", "semantic_scholar", "web"]
     return ["arxiv", "semantic_scholar", "web"]
@@ -306,52 +462,71 @@ def broker_source_names(configured_sources: str | None, plan: QueryPlan) -> list
 def describe_source_name(source_name: str) -> dict[str, str]:
     """Return stable UI-facing metadata for a retrieval source adapter."""
 
-    normalized = source_name.strip().lower()
-    descriptions = {
-        "ap_news": {
-            "source_label": "AP News",
-            "source_kind": "wire_news",
-            "stability": "high",
-        },
-        "gdelt": {
-            "source_label": "GDELT Global Knowledge Graph",
-            "source_kind": "news_index",
-            "stability": "medium",
-        },
-        "gdelt_news": {
-            "source_label": "GDELT Global Knowledge Graph",
-            "source_kind": "news_index",
-            "stability": "medium",
-        },
-        "web": {
-            "source_label": "Trusted web search",
-            "source_kind": "web_search",
-            "stability": "medium",
-        },
-        "federal_register": {
-            "source_label": "Federal Register",
-            "source_kind": "official_record",
-            "stability": "high",
-        },
-        "arxiv": {
-            "source_label": "arXiv",
-            "source_kind": "academic_index",
-            "stability": "high",
-        },
-        "semantic_scholar": {
-            "source_label": "Semantic Scholar",
-            "source_kind": "academic_index",
-            "stability": "medium",
-        },
+    profile = source_profile(source_name)
+    return {
+        "source_label": profile.source_label,
+        "source_kind": profile.source_kind,
+        "stability": profile.stability,
+        "cache_policy": profile.cache_policy,
     }
-    return descriptions.get(
-        normalized,
-        {
-            "source_label": source_name or "Unknown source",
-            "source_kind": "unknown",
-            "stability": "unknown",
-        },
-    )
+
+
+def _retry_after_seconds_from_headers(headers: object) -> int | None:
+    if not headers:
+        return None
+    for key in ("retry-after", "Retry-After", "x-ratelimit-reset-after"):
+        value = None
+        if isinstance(headers, dict):
+            value = headers.get(key)
+        else:
+            getter = getattr(headers, "get", None)
+            if callable(getter):
+                value = getter(key)
+        if value is None:
+            continue
+        try:
+            return max(0, int(float(str(value).strip())))
+        except ValueError:
+            return None
+    return None
+
+
+def _http_status_code(exc: Exception) -> int | None:
+    for attr in ("status_code", "status"):
+        value = getattr(exc, attr, None)
+        if isinstance(value, int):
+            return value
+    response = getattr(exc, "response", None)
+    if response is None:
+        return None
+    value = getattr(response, "status_code", None) or getattr(response, "status", None)
+    return value if isinstance(value, int) else None
+
+
+def _retry_after_seconds(exc: Exception) -> int | None:
+    value = getattr(exc, "retry_after", None) or getattr(exc, "retry_after_seconds", None)
+    if value is not None:
+        try:
+            return max(0, int(float(str(value).strip())))
+        except ValueError:
+            return None
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None) if response is not None else None
+    return _retry_after_seconds_from_headers(headers)
+
+
+def classify_source_error(exc: Exception) -> tuple[str, str | None, int | None]:
+    """Map upstream adapter failures into stable retrieval-health statuses."""
+
+    status_code = _http_status_code(exc)
+    retry_after = _retry_after_seconds(exc)
+    if status_code == 429:
+        return "rate_limited", "rate_limited", retry_after
+    if status_code in {401, 403}:
+        return "forbidden", "forbidden", retry_after
+    if isinstance(exc, TimeoutError) or "timeout" in exc.__class__.__name__.lower():
+        return "timeout", "timeout", retry_after
+    return "source_error", "source_error", retry_after
 
 
 def _result_quality(result: SearchResult) -> str:
@@ -371,6 +546,123 @@ def sort_results_by_quality(results: list[SearchResult]) -> list[SearchResult]:
     return sorted(results, key=_quality_rank)
 
 
+def _normalize_cache_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text.strip().lower())
+
+
+_ZH_LIVE_RECOVERY_HINTS = {
+    "\u4eca\u65e5": ["today"],
+    "\u4eca\u5929": ["today"],
+    "\u6628\u65e5": ["yesterday"],
+    "\u6628\u5929": ["yesterday"],
+    "\u76d8\u4e2d": ["intraday"],
+    "\u5348\u540e": ["afternoon"],
+    "\u80a1\u4ef7": ["stock", "price"],
+    "\u80a1\u7968": ["stock", "shares"],
+    "\u4e0b\u8dcc": ["selloff", "drop"],
+    "\u8df3\u6c34": ["selloff", "drop"],
+    "\u66b4\u8dcc": ["crash", "selloff"],
+    "\u8c08\u5224": ["talks", "negotiations"],
+    "\u4f1a\u8c08": ["talks", "negotiations"],
+    "\u51fa\u53e3\u7ba1\u5236": ["export", "controls"],
+    "\u51fa\u53e3\u9650\u5236": ["export", "restrictions"],
+    "\u653f\u7b56": ["policy"],
+    "\u7f8e\u56fd": ["United", "States", "US"],
+    "\u4f0a\u6717": ["Iran"],
+    "\u4e2d\u56fd": ["China"],
+}
+
+_SCENARIO_RECOVERY_HINTS = {
+    "market": ["market", "latest"],
+    "policy": ["policy", "official"],
+    "news": ["latest", "news"],
+}
+
+
+def _should_retry_empty_live_query(
+    query: str,
+    *,
+    scenario: str,
+    language: str,
+    time_range: str | None,
+) -> bool:
+    normalized_scenario = _normalize_cache_text(scenario)
+    normalized_language = _normalize_cache_text(language)
+    return (
+        normalized_language == "zh"
+        and bool(time_range)
+        and normalized_scenario in {"market", "policy", "news"}
+        and _has_cjk(query)
+    )
+
+
+def _build_live_query_recovery_query(
+    query: str,
+    *,
+    scenario: str,
+    language: str,
+    time_range: str | None,
+    scoped_query: str,
+) -> str | None:
+    if not _should_retry_empty_live_query(
+        query,
+        scenario=scenario,
+        language=language,
+        time_range=time_range,
+    ):
+        return None
+
+    hints: list[str] = []
+    for marker, values in _ZH_LIVE_RECOVERY_HINTS.items():
+        if marker in query:
+            hints.extend(values)
+    hints.extend(_SCENARIO_RECOVERY_HINTS.get(_normalize_cache_text(scenario), []))
+
+    deduped_hints: list[str] = []
+    seen_hints: set[str] = set()
+    for hint in hints:
+        key = hint.lower()
+        if key in seen_hints:
+            continue
+        seen_hints.add(key)
+        deduped_hints.append(hint)
+
+    if not deduped_hints:
+        candidate = query
+    else:
+        candidate = f"{query} {' '.join(deduped_hints)}".strip()
+
+    if _normalize_cache_text(candidate) == _normalize_cache_text(scoped_query):
+        return None
+    return candidate
+
+
+def _source_attempt(
+    adapter_name: str,
+    query: str,
+    result_count: int,
+    *,
+    status: str = "ok",
+    cache_hit: bool = False,
+    error: str | None = None,
+    retry_after_seconds: int | None = None,
+) -> SourceAttempt:
+    profile = source_profile(adapter_name)
+    return SourceAttempt(
+        name=adapter_name,
+        query=query,
+        result_count=result_count,
+        cache_hit=cache_hit,
+        error=error,
+        status=status,
+        retry_after_seconds=retry_after_seconds,
+        source_label=profile.source_label,
+        source_kind=profile.source_kind,
+        stability=profile.stability,
+        cache_policy=profile.cache_policy,
+    )
+
+
 class EvidenceAccessLayer:
     """Search aggregator and source broker boundary for evidence retrieval."""
 
@@ -386,6 +678,9 @@ class EvidenceAccessLayer:
         min_source_adapters: int = 1,
         time_range: str | None = None,
         today: date | None = None,
+        scenario: str = "unknown",
+        language: str = "unknown",
+        source_policy: str = "default",
     ) -> EvidenceAccessBatch:
         """Search multiple source adapters with cache, cooldown, and trace metadata."""
 
@@ -396,12 +691,21 @@ class EvidenceAccessLayer:
         searched_adapters = 0
         min_adapters = max(1, min(min_source_adapters, len(source_adapters)))
         scoped_query = enrich_query_with_time_context(query, time_range, today)
+        absolute_time_scope = time_scope_key(time_range, today) or "evergreen"
+        normalized_scoped_query = _normalize_cache_text(scoped_query)
+        normalized_source_policy = _normalize_cache_text(source_policy) or "default"
+        normalized_scenario = _normalize_cache_text(scenario) or "unknown"
+        normalized_language = _normalize_cache_text(language) or "unknown"
 
         for adapter in source_adapters:
             adapter_name = str(getattr(adapter, "name", adapter.__class__.__name__))
             cache_key = (
                 adapter_name,
-                f"{time_scope_key(time_range, today) or 'evergreen'}::{scoped_query.strip().lower()}",
+                normalized_source_policy,
+                normalized_scenario,
+                normalized_language,
+                absolute_time_scope,
+                normalized_scoped_query,
                 max_results,
             )
             now = time.time()
@@ -409,10 +713,11 @@ class EvidenceAccessLayer:
             if cached and now - cached[0] <= self.policy.query_cache_ttl:
                 adapter_results = cached[1]
                 attempts.append(
-                    SourceAttempt(
-                        name=adapter_name,
-                        query=scoped_query,
-                        result_count=len(adapter_results),
+                    _source_attempt(
+                        adapter_name,
+                        scoped_query,
+                        len(adapter_results),
+                        status="cached",
                         cache_hit=True,
                     )
                 )
@@ -425,13 +730,14 @@ class EvidenceAccessLayer:
 
             cooldown_until = _SOURCE_COOLDOWN_UNTIL.get(adapter_name, 0.0)
             if cooldown_until > now:
-                errors[adapter_name] = "cooldown"
+                errors[adapter_name] = "source_limited"
                 attempts.append(
-                    SourceAttempt(
-                        name=adapter_name,
-                        query=scoped_query,
-                        result_count=0,
-                        error="cooldown",
+                    _source_attempt(
+                        adapter_name,
+                        scoped_query,
+                        0,
+                        status="source_limited",
+                        error="source_limited",
                     )
                 )
                 continue
@@ -444,15 +750,47 @@ class EvidenceAccessLayer:
                     for result in raw_results
                     if result_matches_time_range(result, time_range, today)
                 ]
+                attempt_query = scoped_query
+                attempt_status = "ok"
+                recovery_query = None
+                if not adapter_results:
+                    attempt_status = "stale_filtered" if raw_results else "empty"
+                    recovery_query = _build_live_query_recovery_query(
+                        query,
+                        scenario=scenario,
+                        language=language,
+                        time_range=time_range,
+                        scoped_query=scoped_query,
+                    )
+                    if recovery_query:
+                        recovery_raw_results = adapter.search(  # type: ignore[attr-defined]
+                            recovery_query,
+                            max_results=max_results,
+                        )
+                        recovery_results = [
+                            result
+                            for result in recovery_raw_results
+                            if result_matches_time_range(result, time_range, today)
+                        ]
+                        if recovery_results:
+                            adapter_results = recovery_results
+                            attempt_query = recovery_query
+                            attempt_status = "recovered"
+                        else:
+                            attempt_status = (
+                                "stale_filtered" if recovery_raw_results or raw_results else "empty"
+                            )
             except Exception as exc:
-                error_name = exc.__class__.__name__
-                errors[adapter_name] = error_name
+                status, error_name, retry_after_seconds = classify_source_error(exc)
+                errors[adapter_name] = status
                 attempts.append(
-                    SourceAttempt(
-                        name=adapter_name,
-                        query=scoped_query,
-                        result_count=0,
+                    _source_attempt(
+                        adapter_name,
+                        scoped_query,
+                        0,
+                        status=status,
                         error=error_name,
+                        retry_after_seconds=retry_after_seconds,
                     )
                 )
                 logger.warning(
@@ -468,10 +806,11 @@ class EvidenceAccessLayer:
             _SOURCE_LAST_CALL_AT[adapter_name] = time.time()
             _SOURCE_QUERY_CACHE[cache_key] = (time.time(), adapter_results)
             attempts.append(
-                SourceAttempt(
-                    name=adapter_name,
-                    query=scoped_query,
-                    result_count=len(adapter_results),
+                _source_attempt(
+                    adapter_name,
+                    attempt_query,
+                    len(adapter_results),
+                    status=attempt_status,
                 )
             )
             searched_adapters += 1

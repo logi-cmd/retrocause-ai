@@ -1,0 +1,565 @@
+﻿{
+    "query":  "?????????????? ???????????",
+    "is_demo":  true,
+    "demo_topic":  "default",
+    "analysis_mode":  "demo",
+    "freshness_status":  "unknown",
+    "time_range":  null,
+    "partial_live_reasons":  [
+
+                             ],
+    "recommended_chain_id":  "h1",
+    "chains":  [
+                   {
+                       "chain_id":  "h1",
+                       "label":  "å°è¡ææå»ä¸»å¯¼åè¯´",
+                       "description":  "Chicxulub å°è¡ææå»å¼åçè¿éååºå¯¼è´æé¾ç­ç»",
+                       "probability":  0.78,
+                       "nodes":  [
+                                     {
+                                         "id":  "asteroid_impact",
+                                         "label":  "Asteroid Impact",
+                                         "description":  "å°è¡ææå»ï¼Chicxulubï¼",
+                                         "probability":  0.95,
+                                         "type":  "cause",
+                                         "depth":  0,
+                                         "upstream_ids":  [
+
+                                                          ],
+                                         "supporting_evidence_ids":  [
+                                                                         "ev1",
+                                                                         "ev2",
+                                                                         "ev4",
+                                                                         "ev7"
+                                                                     ],
+                                         "refuting_evidence_ids":  [
+
+                                                                   ],
+                                         "uncertainty":  null
+                                     },
+                                     {
+                                         "id":  "climate_change",
+                                         "label":  "Climate Change",
+                                         "description":  "å\u0085¨çæ°åå§åï¼æå»å¬å­£ + ç«å±±å¬å¤©ï¼",
+                                         "probability":  0.88,
+                                         "type":  "mediator",
+                                         "depth":  1,
+                                         "upstream_ids":  [
+                                                              "asteroid_impact"
+                                                          ],
+                                         "supporting_evidence_ids":  [
+                                                                         "ev1",
+                                                                         "ev3",
+                                                                         "ev4",
+                                                                         "ev7",
+                                                                         "ev8"
+                                                                     ],
+                                         "refuting_evidence_ids":  [
+
+                                                                   ],
+                                         "uncertainty":  null
+                                     },
+                                     {
+                                         "id":  "food_chain_collapse",
+                                         "label":  "Food Chain Collapse",
+                                         "description":  "å\u0085¨çé£ç©é¾å´©æº",
+                                         "probability":  0.82,
+                                         "type":  "mediator",
+                                         "depth":  2,
+                                         "upstream_ids":  [
+                                                              "climate_change"
+                                                          ],
+                                         "supporting_evidence_ids":  [
+                                                                         "ev6",
+                                                                         "ev7",
+                                                                         "ev8"
+                                                                     ],
+                                         "refuting_evidence_ids":  [
+
+                                                                   ],
+                                         "uncertainty":  null
+                                     },
+                                     {
+                                         "id":  "dinosaur_extinction",
+                                         "label":  "Dinosaur Extinction",
+                                         "description":  "éé¸ç±»æé¾å¤§è§æ¨¡ç­ç»",
+                                         "probability":  0.97,
+                                         "type":  "effect",
+                                         "depth":  3,
+                                         "upstream_ids":  [
+                                                              "food_chain_collapse"
+                                                          ],
+                                         "supporting_evidence_ids":  [
+                                                                         "ev6",
+                                                                         "ev8"
+                                                                     ],
+                                         "refuting_evidence_ids":  [
+
+                                                                   ],
+                                         "uncertainty":  null
+                                     }
+                                 ],
+                       "edges":  [
+                                     {
+                                         "id":  "asteroid_impact_climate_change",
+                                         "source":  "asteroid_impact",
+                                         "target":  "climate_change",
+                                         "strength":  0.9,
+                                         "type":  "causes",
+                                         "supporting_evidence_ids":  [
+                                                                         "ev1",
+                                                                         "ev4",
+                                                                         "ev7"
+                                                                     ],
+                                         "refuting_evidence_ids":  [
+
+                                                                   ],
+                                         "citation_spans":  [
+
+                                                            ],
+                                         "evidence_conflict":  "none",
+                                         "refutation_status":  "not_checked"
+                                     },
+                                     {
+                                         "id":  "climate_change_food_chain_collapse",
+                                         "source":  "climate_change",
+                                         "target":  "food_chain_collapse",
+                                         "strength":  0.85,
+                                         "type":  "causes",
+                                         "supporting_evidence_ids":  [
+                                                                         "ev7",
+                                                                         "ev8"
+                                                                     ],
+                                         "refuting_evidence_ids":  [
+
+                                                                   ],
+                                         "citation_spans":  [
+
+                                                            ],
+                                         "evidence_conflict":  "none",
+                                         "refutation_status":  "not_checked"
+                                     },
+                                     {
+                                         "id":  "food_chain_collapse_dinosaur_extinction",
+                                         "source":  "food_chain_collapse",
+                                         "target":  "dinosaur_extinction",
+                                         "strength":  0.92,
+                                         "type":  "causes",
+                                         "supporting_evidence_ids":  [
+                                                                         "ev6",
+                                                                         "ev8"
+                                                                     ],
+                                         "refuting_evidence_ids":  [
+
+                                                                   ],
+                                         "citation_spans":  [
+
+                                                            ],
+                                         "evidence_conflict":  "none",
+                                         "refutation_status":  "not_checked"
+                                     }
+                                 ],
+                       "supporting_evidence_ids":  [
+                                                       "ev1",
+                                                       "ev2",
+                                                       "ev3",
+                                                       "ev4",
+                                                       "ev6",
+                                                       "ev7",
+                                                       "ev8"
+                                                   ],
+                       "refuting_evidence_ids":  [
+
+                                                 ],
+                       "refutation_status":  "not_checked",
+                       "counterfactual":  {
+                                              "items":  [
+                                                            {
+                                                                "intervention":  "Remove asteroid_impact",
+                                                                "original_outcome":  "P(chain) = 0.70",
+                                                                "counterfactual_outcome":  "P(chain) = 0.08",
+                                                                "strength":  0.88
+                                                            },
+                                                            {
+                                                                "intervention":  "Remove climate_change",
+                                                                "original_outcome":  "P(chain) = 0.70",
+                                                                "counterfactual_outcome":  "P(chain) = 0.12",
+                                                                "strength":  0.83
+                                                            }
+                                                        ],
+                                              "overall_confidence":  0.86
+                                          },
+                       "depth":  3
+                   },
+                   {
+                       "chain_id":  "h2",
+                       "label":  "ç«å±±æ´»å¨ä¸»å¯¼åè¯´",
+                       "description":  "Deccan Traps æç»­ç«å±±æ´»å¨éè¿æ¸©å®¤æåºåæµ·æ´é\u0085¸åå¯¼è´ç­ç»",
+                       "probability":  0.42,
+                       "nodes":  [
+                                     {
+                                         "id":  "volcanic_activity",
+                                         "label":  "Volcanic Activity",
+                                         "description":  "Deccan Traps å¤§è§æ¨¡ç«å±±æ´»å¨",
+                                         "probability":  0.78,
+                                         "type":  "cause",
+                                         "depth":  0,
+                                         "upstream_ids":  [
+
+                                                          ],
+                                         "supporting_evidence_ids":  [
+                                                                         "ev3"
+                                                                     ],
+                                         "refuting_evidence_ids":  [
+
+                                                                   ],
+                                         "uncertainty":  null
+                                     },
+                                     {
+                                         "id":  "climate_change",
+                                         "label":  "Climate Change",
+                                         "description":  "å\u0085¨çæ°åå§åï¼æå»å¬å­£ + ç«å±±å¬å¤©ï¼",
+                                         "probability":  0.88,
+                                         "type":  "mediator",
+                                         "depth":  1,
+                                         "upstream_ids":  [
+                                                              "volcanic_activity"
+                                                          ],
+                                         "supporting_evidence_ids":  [
+                                                                         "ev3",
+                                                                         "ev7",
+                                                                         "ev8"
+                                                                     ],
+                                         "refuting_evidence_ids":  [
+
+                                                                   ],
+                                         "uncertainty":  null
+                                     },
+                                     {
+                                         "id":  "food_chain_collapse",
+                                         "label":  "Food Chain Collapse",
+                                         "description":  "å\u0085¨çé£ç©é¾å´©æº",
+                                         "probability":  0.82,
+                                         "type":  "mediator",
+                                         "depth":  2,
+                                         "upstream_ids":  [
+                                                              "climate_change"
+                                                          ],
+                                         "supporting_evidence_ids":  [
+                                                                         "ev6",
+                                                                         "ev7",
+                                                                         "ev8"
+                                                                     ],
+                                         "refuting_evidence_ids":  [
+
+                                                                   ],
+                                         "uncertainty":  null
+                                     },
+                                     {
+                                         "id":  "dinosaur_extinction",
+                                         "label":  "Dinosaur Extinction",
+                                         "description":  "éé¸ç±»æé¾å¤§è§æ¨¡ç­ç»",
+                                         "probability":  0.97,
+                                         "type":  "effect",
+                                         "depth":  3,
+                                         "upstream_ids":  [
+                                                              "food_chain_collapse"
+                                                          ],
+                                         "supporting_evidence_ids":  [
+                                                                         "ev6",
+                                                                         "ev8"
+                                                                     ],
+                                         "refuting_evidence_ids":  [
+
+                                                                   ],
+                                         "uncertainty":  null
+                                     }
+                                 ],
+                       "edges":  [
+                                     {
+                                         "id":  "volcanic_activity_climate_change",
+                                         "source":  "volcanic_activity",
+                                         "target":  "climate_change",
+                                         "strength":  0.65,
+                                         "type":  "causes",
+                                         "supporting_evidence_ids":  [
+                                                                         "ev3"
+                                                                     ],
+                                         "refuting_evidence_ids":  [
+
+                                                                   ],
+                                         "citation_spans":  [
+
+                                                            ],
+                                         "evidence_conflict":  "none",
+                                         "refutation_status":  "not_checked"
+                                     },
+                                     {
+                                         "id":  "climate_change_food_chain_collapse",
+                                         "source":  "climate_change",
+                                         "target":  "food_chain_collapse",
+                                         "strength":  0.85,
+                                         "type":  "causes",
+                                         "supporting_evidence_ids":  [
+                                                                         "ev7",
+                                                                         "ev8"
+                                                                     ],
+                                         "refuting_evidence_ids":  [
+
+                                                                   ],
+                                         "citation_spans":  [
+
+                                                            ],
+                                         "evidence_conflict":  "none",
+                                         "refutation_status":  "not_checked"
+                                     },
+                                     {
+                                         "id":  "food_chain_collapse_dinosaur_extinction",
+                                         "source":  "food_chain_collapse",
+                                         "target":  "dinosaur_extinction",
+                                         "strength":  0.92,
+                                         "type":  "causes",
+                                         "supporting_evidence_ids":  [
+                                                                         "ev6",
+                                                                         "ev8"
+                                                                     ],
+                                         "refuting_evidence_ids":  [
+
+                                                                   ],
+                                         "citation_spans":  [
+
+                                                            ],
+                                         "evidence_conflict":  "none",
+                                         "refutation_status":  "not_checked"
+                                     }
+                                 ],
+                       "supporting_evidence_ids":  [
+                                                       "ev3",
+                                                       "ev6",
+                                                       "ev7",
+                                                       "ev8"
+                                                   ],
+                       "refuting_evidence_ids":  [
+
+                                                 ],
+                       "refutation_status":  "not_checked",
+                       "counterfactual":  {
+                                              "items":  [
+                                                            {
+                                                                "intervention":  "Remove volcanic_activity",
+                                                                "original_outcome":  "P(chain) = 0.35",
+                                                                "counterfactual_outcome":  "P(chain) = 0.18",
+                                                                "strength":  0.49
+                                                            }
+                                                        ],
+                                              "overall_confidence":  0.49
+                                          },
+                       "depth":  3
+                   }
+               ],
+    "evidences":  [
+                      {
+                          "id":  "ev1",
+                          "content":  "Alvarez ç­äºº (1980) å¨ K-Pg ççº¿åç°é±å¼å¸¸ï¼æ¯æå°è¡ææå»åè¯´",
+                          "source":  "EvidenceType.SCIENTIFIC",
+                          "reliability":  "0.97",
+                          "is_supporting":  true,
+                          "source_tier":  "base",
+                          "freshness":  "unknown",
+                          "timestamp":  "1980-06-06",
+                          "extraction_method":  "manual",
+                          "stance":  "supporting",
+                          "stance_basis":  "legacy_or_manual"
+                      },
+                      {
+                          "id":  "ev2",
+                          "content":  "Chicxulub é¨ç³åç´å¾çº¦ 180kmï¼å¹´ä»£ä¸ K-Pg ççº¿å»å",
+                          "source":  "EvidenceType.SCIENTIFIC",
+                          "reliability":  "0.96",
+                          "is_supporting":  true,
+                          "source_tier":  "base",
+                          "freshness":  "unknown",
+                          "timestamp":  "1991-01-01",
+                          "extraction_method":  "manual",
+                          "stance":  "supporting",
+                          "stance_basis":  "legacy_or_manual"
+                      },
+                      {
+                          "id":  "ev3",
+                          "content":  "Deccan Traps ç«å±±æ´»å¨å¨ 66Ma ååæç»­çº¦ 75 ä¸å¹´",
+                          "source":  "EvidenceType.LITERATURE",
+                          "reliability":  "0.82",
+                          "is_supporting":  true,
+                          "source_tier":  "base",
+                          "freshness":  "unknown",
+                          "timestamp":  "2009-12-01",
+                          "extraction_method":  "manual",
+                          "stance":  "supporting",
+                          "stance_basis":  "legacy_or_manual"
+                      },
+                      {
+                          "id":  "ev4",
+                          "content":  "å\u0085¨ç K-Pg ççº¿å°å±ä¸­å²å»ç³è±åç»ççç²çå¹¿æ³åå¸",
+                          "source":  "EvidenceType.DATA",
+                          "reliability":  "0.91",
+                          "is_supporting":  true,
+                          "source_tier":  "base",
+                          "freshness":  "unknown",
+                          "timestamp":  "2010-03-15",
+                          "extraction_method":  "manual",
+                          "stance":  "supporting",
+                          "stance_basis":  "legacy_or_manual"
+                      },
+                      {
+                          "id":  "ev6",
+                          "content":  "åç³è®°å½æ¾ç¤ºéé¸ç±»æé¾å¨å¤§çº¦ 66Ma åçªç¶æ¶å¤±",
+                          "source":  "EvidenceType.ARCHIVE",
+                          "reliability":  "0.94",
+                          "is_supporting":  true,
+                          "source_tier":  "base",
+                          "freshness":  "unknown",
+                          "timestamp":  "2020-01-10",
+                          "extraction_method":  "manual",
+                          "stance":  "supporting",
+                          "stance_basis":  "legacy_or_manual"
+                      },
+                      {
+                          "id":  "ev7",
+                          "content":  "æ°åæ¨¡åæ¾ç¤ºæå»å¬å­£å¯æç»­æ°å¹´è³æ°åå¹´",
+                          "source":  "EvidenceType.DATA",
+                          "reliability":  "0.81",
+                          "is_supporting":  true,
+                          "source_tier":  "base",
+                          "freshness":  "unknown",
+                          "timestamp":  "2017-08-01",
+                          "extraction_method":  "manual",
+                          "stance":  "supporting",
+                          "stance_basis":  "legacy_or_manual"
+                      },
+                      {
+                          "id":  "ev8",
+                          "content":  "é¨åæ·±æµ·çç©åæ·¡æ°´çç©å­æ´»ï¼æ¯æé£ç©é¾å´©æºåè¯´",
+                          "source":  "EvidenceType.LITERATURE",
+                          "reliability":  "0.79",
+                          "is_supporting":  true,
+                          "source_tier":  "base",
+                          "freshness":  "unknown",
+                          "timestamp":  "2016-11-05",
+                          "extraction_method":  "manual",
+                          "stance":  "supporting",
+                          "stance_basis":  "legacy_or_manual"
+                      }
+                  ],
+    "upstream_map":  {
+                         "entries":  [
+                                         {
+                                             "node_id":  "asteroid_impact",
+                                             "node_label":  "Asteroid Impact",
+                                             "upstream_node_ids":  [
+
+                                                                   ]
+                                         },
+                                         {
+                                             "node_id":  "climate_change",
+                                             "node_label":  "Climate Change",
+                                             "upstream_node_ids":  [
+                                                                       "asteroid_impact",
+                                                                       "volcanic_activity"
+                                                                   ]
+                                         },
+                                         {
+                                             "node_id":  "food_chain_collapse",
+                                             "node_label":  "Food Chain Collapse",
+                                             "upstream_node_ids":  [
+                                                                       "climate_change"
+                                                                   ]
+                                         },
+                                         {
+                                             "node_id":  "dinosaur_extinction",
+                                             "node_label":  "Dinosaur Extinction",
+                                             "upstream_node_ids":  [
+                                                                       "food_chain_collapse"
+                                                                   ]
+                                         },
+                                         {
+                                             "node_id":  "volcanic_activity",
+                                             "node_label":  "Volcanic Activity",
+                                             "upstream_node_ids":  [
+
+                                                                   ]
+                                         }
+                                     ]
+                     },
+    "evaluation":  null,
+    "retrieval_trace":  [
+
+                        ],
+    "challenge_checks":  [
+
+                         ],
+    "analysis_brief":  {
+                           "answer":  "Most likely explanation: å°è¡ææå»ä¸»å¯¼åè¯´ (78% confidence signal).",
+                           "confidence":  0.78,
+                           "top_reasons":  [
+                                               "asteroid impact -\u003e climate change (90% edge strength, 3 support, 0 challenge).",
+                                               "climate change -\u003e food chain collapse (85% edge strength, 2 support, 0 challenge).",
+                                               "food chain collapse -\u003e dinosaur extinction (92% edge strength, 2 support, 0 challenge)."
+                                           ],
+                           "challenge_summary":  "Challenge retrieval has not checked this result yet.",
+                           "missing_evidence":  [
+                                                    "Targeted challenge retrieval did not run for this result.",
+                                                    "No trusted full-text or cached high-quality evidence is attached."
+                                                ],
+                           "source_coverage":  "0 source type(s), 0 high-quality evidence item(s), 0 total evidence item(s)."
+                       },
+    "product_harness":  {
+                            "name":  "result_value_harness",
+                            "score":  0.75,
+                            "status":  "ready_for_review",
+                            "user_value_summary":  "The result has enough structure for a user to review reasons, sources, and gaps.",
+                            "checks":  [
+                                           {
+                                               "id":  "causal_chain",
+                                               "label":  "Causal chain present",
+                                               "status":  "pass",
+                                               "detail":  "2 chain(s), 6 edge(s)."
+                                           },
+                                           {
+                                               "id":  "analysis_summary",
+                                               "label":  "Analysis summary present",
+                                               "status":  "pass",
+                                               "detail":  "The response includes a synthesized answer and reason list."
+                                           },
+                                           {
+                                               "id":  "source_trace",
+                                               "label":  "Source trace visible",
+                                               "status":  "fail",
+                                               "detail":  "No source-level retrieval trace is visible."
+                                           },
+                                           {
+                                               "id":  "evidence_stance",
+                                               "label":  "Evidence stance visible",
+                                               "status":  "pass",
+                                               "detail":  "7 evidence item(s), stance(s): supporting."
+                                           },
+                                           {
+                                               "id":  "challenge_coverage",
+                                               "label":  "Challenge coverage checked",
+                                               "status":  "warn",
+                                               "detail":  "No targeted challenge retrieval is attached."
+                                           },
+                                           {
+                                               "id":  "actionable_failure",
+                                               "label":  "Failure state actionable",
+                                               "status":  "pass",
+                                               "detail":  "demo"
+                                           }
+                                       ],
+                            "next_actions":  [
+                                                 "Expose source trace rows so the user can see where evidence came from.",
+                                                 "Run targeted challenge retrieval for the strongest causal edges."
+                                             ]
+                        },
+    "uncertainty_report":  null,
+    "error":  "RuntimeError: BadRequestError: Error code: 400 - {\u0027error\u0027: {\u0027message\u0027: \u0027anthropic/claude-haiku-4 is not a valid model ID\u0027, \u0027code\u0027: 400}, \u0027user_id\u0027: \u0027user_397IvjovoAm6ZZUlw8biP9dIOHr\u0027}"
+}

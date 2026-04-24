@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from retrocause.evidence_access import (
     EvidenceAccessLayer,
     EvidenceAccessPolicy,
@@ -9,12 +11,15 @@ from retrocause.evidence_access import (
     plan_query,
     reset_evidence_access_state,
     result_matches_time_range,
+    source_profile,
     time_scope_key,
 )
 from datetime import date
 
 from retrocause.models import EvidenceType
 from retrocause.sources.base import BaseSourceAdapter, SearchResult
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class _Source(BaseSourceAdapter):
@@ -23,7 +28,7 @@ class _Source(BaseSourceAdapter):
         name: str,
         results: list[SearchResult],
         *,
-        fail: bool = False,
+        fail: bool | Exception = False,
     ):
         self._name = name
         self._results = results
@@ -40,9 +45,45 @@ class _Source(BaseSourceAdapter):
 
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         self.calls.append(query)
+        if isinstance(self._fail, Exception):
+            raise self._fail
         if self._fail:
             raise ConnectionError("source unavailable")
         return self._results[:max_results]
+
+
+class _RecoverySource(BaseSourceAdapter):
+    def __init__(self, name: str, primary_query: str, recovered_results: list[SearchResult]):
+        self._name = name
+        self._primary_query = primary_query
+        self._recovered_results = recovered_results
+        self.calls: list[str] = []
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def source_type(self) -> EvidenceType:
+        return EvidenceType.NEWS
+
+    def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
+        self.calls.append(query)
+        if query == self._primary_query:
+            return []
+        return self._recovered_results[:max_results]
+
+
+class _Response:
+    def __init__(self, status_code: int, headers: dict[str, str] | None = None):
+        self.status_code = status_code
+        self.headers = headers or {}
+
+
+class _HttpError(Exception):
+    def __init__(self, status_code: int, headers: dict[str, str] | None = None):
+        super().__init__(f"HTTP {status_code}")
+        self.response = _Response(status_code, headers)
 
 
 def _result(title: str, quality: str, url: str) -> SearchResult:
@@ -101,6 +142,87 @@ def test_access_layer_reuses_cached_adapter_results_without_new_upstream_call():
     assert second.cache_hits == 1
 
 
+def test_access_cache_key_separates_scenario_and_language():
+    reset_evidence_access_state()
+    access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
+    source = _Source("cached", [_result("cached item", "fulltext", "https://example.com/c")])
+
+    market_en = access.search(
+        "US Iran talks",
+        [source],
+        max_results=2,
+        scenario="market",
+        language="en",
+        source_policy="news",
+    )
+    policy_en = access.search(
+        "US Iran talks",
+        [source],
+        max_results=2,
+        scenario="policy",
+        language="en",
+        source_policy="news",
+    )
+    policy_zh = access.search(
+        "US Iran talks",
+        [source],
+        max_results=2,
+        scenario="policy",
+        language="zh",
+        source_policy="news",
+    )
+
+    assert len(source.calls) == 3
+    assert market_en.cache_hits == 0
+    assert policy_en.cache_hits == 0
+    assert policy_zh.cache_hits == 0
+
+
+def test_access_cache_key_reuses_same_absolute_time_bucket():
+    reset_evidence_access_state()
+    access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
+    source = _Source(
+        "cached",
+        [_dated_result("yesterday bitcoin selloff", "2026-04-12")],
+    )
+
+    first = access.search(
+        "bitcoin price drop",
+        [source],
+        max_results=2,
+        time_range="yesterday",
+        today=date(2026, 4, 13),
+        scenario="market",
+        language="en",
+        source_policy="news",
+    )
+    second = access.search(
+        "bitcoin price drop",
+        [source],
+        max_results=2,
+        time_range="yesterday",
+        today=date(2026, 4, 13),
+        scenario="market",
+        language="en",
+        source_policy="news",
+    )
+    next_day = access.search(
+        "bitcoin price drop",
+        [source],
+        max_results=2,
+        time_range="yesterday",
+        today=date(2026, 4, 14),
+        scenario="market",
+        language="en",
+        source_policy="news",
+    )
+
+    assert len(source.calls) == 2
+    assert first.cache_hits == 0
+    assert second.cache_hits == 1
+    assert next_day.cache_hits == 0
+
+
 def test_access_layer_filters_stale_results_for_yesterday_queries():
     reset_evidence_access_state()
     access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
@@ -124,6 +246,57 @@ def test_access_layer_filters_stale_results_for_yesterday_queries():
     assert batch.attempts[0].result_count == 1
 
 
+def test_access_layer_recovers_empty_chinese_intraday_market_query_with_retry():
+    reset_evidence_access_state()
+    access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
+    query = "芯原股份今日午后股价为什么直线跳水？"
+    primary_query = enrich_query_with_time_context(query, "today", today=date(2026, 4, 21))
+    source = _RecoverySource(
+        "web",
+        primary_query,
+        [_dated_result("Recovered market hit", "2026-04-21")],
+    )
+
+    batch = access.search(
+        query,
+        [source],
+        max_results=2,
+        time_range="today",
+        today=date(2026, 4, 21),
+        scenario="market",
+        language="zh",
+        source_policy="market",
+    )
+
+    assert source.calls[0] == primary_query
+    assert len(source.calls) == 2
+    assert source.calls[1] != primary_query
+    assert batch.attempts[0].status == "recovered"
+    assert batch.attempts[0].query == source.calls[1]
+    assert [item.title for item in batch.results] == ["Recovered market hit"]
+
+
+def test_access_layer_marks_time_filtered_live_results_as_stale_filtered():
+    reset_evidence_access_state()
+    access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
+    source = _Source("web", [_dated_result("stale market hit", "2026-04-16")])
+
+    batch = access.search(
+        "芯原股份今日午后股价为什么直线跳水？",
+        [source],
+        max_results=2,
+        time_range="today",
+        today=date(2026, 4, 21),
+        scenario="market",
+        language="zh",
+        source_policy="market",
+    )
+
+    assert batch.results == []
+    assert batch.attempts[0].status == "stale_filtered"
+    assert batch.attempts[0].result_count == 0
+
+
 def test_access_layer_records_source_errors_and_continues_to_next_adapter():
     reset_evidence_access_state()
     access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
@@ -133,8 +306,40 @@ def test_access_layer_records_source_errors_and_continues_to_next_adapter():
     batch = access.search("policy shock", [broken, healthy], max_results=1)
 
     assert [item.name for item in batch.attempts] == ["broken", "healthy"]
-    assert batch.errors == {"broken": "ConnectionError"}
+    assert batch.errors == {"broken": "source_error"}
+    assert batch.attempts[0].status == "source_error"
     assert [result.title for result in batch.results] == ["healthy item"]
+
+
+def test_access_layer_classifies_rate_limited_sources():
+    reset_evidence_access_state()
+    access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
+    limited = _Source("web", [], fail=_HttpError(429, {"retry-after": "7"}))
+    healthy = _Source("ap_news", [_result("healthy item", "fulltext", "https://example.com/h")])
+
+    batch = access.search("latest market shock", [limited, healthy], max_results=1)
+
+    assert batch.errors == {"web": "rate_limited"}
+    assert batch.attempts[0].status == "rate_limited"
+    assert batch.attempts[0].retry_after_seconds == 7
+    assert batch.attempts[0].source_label == "Trusted web search"
+    assert batch.attempts[0].source_kind == "web_search"
+    assert batch.attempts[1].status == "ok"
+    assert [result.title for result in batch.results] == ["healthy item"]
+
+
+def test_access_layer_classifies_forbidden_sources():
+    reset_evidence_access_state()
+    access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
+    forbidden = _Source("gdelt", [], fail=_HttpError(403))
+
+    batch = access.search("policy shock", [forbidden], max_results=1)
+
+    assert batch.errors == {"gdelt": "forbidden"}
+    assert batch.attempts[0].status == "forbidden"
+    assert batch.attempts[0].retry_after_seconds is None
+    assert batch.attempts[0].source_label == "GDELT Global Knowledge Graph"
+    assert batch.attempts[0].cache_policy == "short_lived_cache_allowed"
 
 
 def test_access_layer_cools_down_recently_failed_sources():
@@ -148,10 +353,28 @@ def test_access_layer_cools_down_recently_failed_sources():
     first = access.search("policy shock", [broken, healthy], max_results=1)
     second = access.search("policy shock updated", [broken, healthy], max_results=1)
 
-    assert first.errors == {"broken": "ConnectionError"}
-    assert second.errors == {"broken": "cooldown"}
+    assert first.errors == {"broken": "source_error"}
+    assert second.errors == {"broken": "source_limited"}
     assert len(broken.calls) == 1
     assert [result.title for result in second.results] == ["healthy item"]
+
+
+def test_access_layer_marks_cooldown_as_source_limited():
+    reset_evidence_access_state()
+    access = EvidenceAccessLayer(
+        EvidenceAccessPolicy(query_cache_ttl=60, source_error_cooldown_seconds=30)
+    )
+    broken = _Source("broken", [], fail=ConnectionError("source unavailable"))
+
+    first = access.search("policy shock", [broken], max_results=1)
+    second = access.search("policy shock updated", [broken], max_results=1)
+
+    assert first.attempts[0].status == "source_error"
+    assert second.errors == {"broken": "source_limited"}
+    assert second.attempts[0].status == "source_limited"
+    assert second.attempts[0].error == "source_limited"
+    assert second.attempts[0].source_label == "broken"
+    assert len(broken.calls) == 1
 
 
 def test_query_planner_detects_language_time_entities_and_scenario():
@@ -213,16 +436,61 @@ def test_result_time_matching_requires_date_signal_when_metadata_missing():
     assert result_matches_time_range(undated_target, "yesterday", today=date(2026, 4, 13))
 
 
+def test_result_time_matching_allows_hosted_search_for_today_when_undated():
+    hosted = SearchResult(
+        title="芯原股份盘中下跌原因",
+        content="Hosted search returned a same-day market result without explicit published date.",
+        url="https://example.com/stock",
+        source_type=EvidenceType.NEWS,
+        metadata={"content_quality": "fulltext", "cache_policy": "derived_cache_allowed"},
+    )
+
+    assert result_matches_time_range(hosted, "today", today=date(2026, 4, 21))
+
+
 def test_source_broker_routes_market_and_policy_queries_to_scenario_fit_sources():
     market_plan = plan_query("比特币今日价格为何跳水")
     policy_plan = plan_query("美国为什么会推出新的半导体出口管制？")
 
-    assert broker_source_names(None, market_plan)[:3] == ["ap_news", "gdelt", "web"]
+    assert broker_source_names(None, market_plan)[:3] == ["web", "gdelt", "ap_news"]
     assert broker_source_names(None, policy_plan)[:4] == [
         "ap_news",
         "federal_register",
         "gdelt",
         "web",
+    ]
+
+
+def test_source_broker_routes_chinese_intraday_stock_queries_to_web_first():
+    query = "芯原股份今日午后股价为什么直线跳水？"
+    plan = plan_query(query)
+
+    assert plan.language == "zh"
+    assert plan.scenario == "market"
+    assert plan.time_range == "today"
+    assert broker_source_names(None, plan)[:3] == ["web", "gdelt", "ap_news"]
+
+
+def test_source_broker_keeps_chinese_intraday_path_keyless():
+    query = "芯原股份今日午后股价为什么直线跳水？"
+    plan = plan_query(query)
+
+    assert broker_source_names(None, plan, optional_sources=["hosted_search"])[:3] == [
+        "web",
+        "gdelt",
+        "ap_news",
+    ]
+
+
+def test_source_broker_routes_outage_postmortems_to_live_web_sources():
+    plan = plan_query("Why did the latest Cloudflare outage happen?")
+
+    assert plan.domain == "postmortem"
+    assert plan.scenario == "postmortem"
+    assert broker_source_names(None, plan, optional_sources=["hosted_search"])[:3] == [
+        "web",
+        "ap_news",
+        "gdelt",
     ]
 
 
@@ -241,11 +509,63 @@ def test_source_descriptions_explain_reliability_for_ui_trace():
         "source_label": "AP News",
         "source_kind": "wire_news",
         "stability": "high",
+        "cache_policy": "short_lived_cache_allowed",
     }
     assert web == {
         "source_label": "Trusted web search",
         "source_kind": "web_search",
         "stability": "medium",
+        "cache_policy": "short_lived_cache_allowed",
     }
     assert official["source_kind"] == "official_record"
     assert official["stability"] == "high"
+
+
+def test_source_profiles_expose_budget_and_storage_policy():
+    ap = describe_source_name("ap_news")
+    unknown_hosted = source_profile("hosted_search")
+
+    assert ap["cache_policy"] == "short_lived_cache_allowed"
+    assert unknown_hosted.requires_credential is False
+    assert unknown_hosted.cache_policy == "no_cache_policy"
+
+
+def test_broker_source_names_keeps_hosted_sources_out_of_keyless_oss():
+    market_plan = plan_query("Why did Bitcoin price fall today?")
+    policy_plan = plan_query("Why did the US announce new semiconductor export controls?")
+    override_plan = plan_query("Why did dinosaurs go extinct?")
+
+    assert broker_source_names(None, market_plan, optional_sources=["hosted_search"])[:3] == [
+        "ap_news",
+        "gdelt",
+        "web",
+    ]
+    assert broker_source_names(None, policy_plan, optional_sources=["hosted_search"])[:4] == [
+        "ap_news",
+        "federal_register",
+        "gdelt",
+        "web",
+    ]
+    assert broker_source_names("web,arxiv", override_plan, optional_sources=["hosted_search"]) == [
+        "web",
+        "arxiv",
+    ]
+
+
+def test_oss_available_source_factories_are_keyless(monkeypatch):
+    from retrocause.app.demo_data import (
+        _available_source_classes_from_env,
+        _available_source_factories,
+    )
+
+    factories = _available_source_factories()
+    classes = _available_source_classes_from_env()
+    assert "hosted_search" not in factories
+    assert "hosted_search" not in classes
+
+    assert "tavily.py" not in {
+        path.name for path in (REPO_ROOT / "retrocause" / "sources").glob("*.py")
+    }
+    assert "brave.py" not in {
+        path.name for path in (REPO_ROOT / "retrocause" / "sources").glob("*.py")
+    }

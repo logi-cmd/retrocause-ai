@@ -1,7 +1,7 @@
 [project]
 name = "retrocause"
 version = "0.1.0"
-description = "通用回溯因果推理引擎：给结果，逆推原因"
+description = "Evidence-backed causal explanation workspace for why-did-this-happen questions"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = [
@@ -46,5 +46,3 @@ addopts = "-v --tb=short"
 
 [tool.setuptools.packages.find]
 include = ["retrocause*"]
-
-

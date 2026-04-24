@@ -26,8 +26,9 @@ _AUTH_ERRORS = (
     openai.PermissionDeniedError,
 )
 
-_DEFAULT_MAX_RETRIES = 3
+_DEFAULT_MAX_RETRIES = int(os.environ.get("RETROCAUSE_LLM_MAX_RETRIES", "1"))
 _DEFAULT_RETRY_BASE_DELAY = 1.0  # seconds
+_DEFAULT_RETRY_MAX_DELAY = float(os.environ.get("RETROCAUSE_LLM_RETRY_MAX_DELAY", "8"))
 _DEFAULT_JSON_MAX_TOKENS = 1200
 _GENERIC_DECOMPOSITION_PATTERNS = (
     "specific cause",
@@ -169,6 +170,32 @@ def _safe_parse_json(content: str | None) -> dict | None:
     return None
 
 
+def _retry_after_seconds(exc: Exception) -> float | None:
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if not headers:
+        return None
+    retry_after = None
+    if hasattr(headers, "get"):
+        retry_after = headers.get("retry-after") or headers.get("Retry-After")
+    if retry_after is None:
+        return None
+    try:
+        delay = float(retry_after)
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, min(delay, _DEFAULT_RETRY_MAX_DELAY))
+
+
+def _retry_delay_seconds(exc: Exception, attempt: int) -> float:
+    exponential_delay = _DEFAULT_RETRY_BASE_DELAY * (2**attempt)
+    if isinstance(exc, openai.RateLimitError):
+        retry_after = _retry_after_seconds(exc)
+        if retry_after is not None:
+            return max(exponential_delay, retry_after)
+    return min(exponential_delay, _DEFAULT_RETRY_MAX_DELAY)
+
+
 def _call_with_retry(fn, *args, max_retries=_DEFAULT_MAX_RETRIES, **kwargs):
     """带指数退避的 LLM 调用包装器。
 
@@ -182,7 +209,7 @@ def _call_with_retry(fn, *args, max_retries=_DEFAULT_MAX_RETRIES, **kwargs):
         except _RETRYABLE_ERRORS as exc:
             last_exc = exc
             if attempt < max_retries:
-                delay = _DEFAULT_RETRY_BASE_DELAY * (2**attempt)
+                delay = _retry_delay_seconds(exc, attempt)
                 logger.warning(
                     "LLM 调用失败 (attempt %d/%d): %s — %.1fs 后重试",
                     attempt + 1,
@@ -311,6 +338,50 @@ _CJK_GENERIC_QUERY_TERMS = {"为什么", "原因", "美国"}
 _CJK_SEARCH_NOISE_TERMS = {"为什么", "原因"}
 
 
+_CJK_SEARCH_TRANSLATIONS.update(
+    {
+        "今日": "today",
+        "今天": "today",
+        "午后": "afternoon",
+        "股价": "share price stock price",
+        "股票": "stock shares",
+        "直线跳水": "plunge selloff",
+        "跳水": "price drop selloff",
+        "为什么": "why reasons",
+    }
+)
+
+_CJK_FINANCE_ENTITY_SUFFIXES = (
+    "股份",
+    "集团",
+    "科技",
+    "银行",
+    "证券",
+    "控股",
+    "公司",
+    "电子",
+    "电气",
+    "能源",
+    "药业",
+    "汽车",
+)
+_CJK_FINANCE_ENTITY_BOUNDARIES = (
+    "今日",
+    "今天",
+    "午后",
+    "早盘",
+    "尾盘",
+    "股价",
+    "股票",
+    "为什么",
+    "为何",
+    "直线跳水",
+    "跳水",
+    "下跌",
+    "暴跌",
+)
+
+
 def _significant_english_tokens(text: str) -> set[str]:
     return {
         token
@@ -329,7 +400,31 @@ def _required_cjk_anchor_tokens(original_query: str) -> set[str]:
     return tokens
 
 
+def _extract_cjk_finance_entity(query: str) -> str:
+    """Best-effort Chinese market entity anchor, e.g. `芯原股份`."""
+
+    for suffix in _CJK_FINANCE_ENTITY_SUFFIXES:
+        match = re.search(rf"([\u4e00-\u9fffA-Za-z0-9]{{2,20}}{re.escape(suffix)})", query)
+        if match:
+            return match.group(1)
+
+    boundary_positions = [query.find(marker) for marker in _CJK_FINANCE_ENTITY_BOUNDARIES]
+    boundary_positions = [pos for pos in boundary_positions if pos > 0]
+    if not boundary_positions:
+        return ""
+
+    prefix = query[: min(boundary_positions)]
+    prefix = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]", "", prefix)
+    if 2 <= len(prefix) <= 16:
+        return prefix
+    return ""
+
+
 def _has_required_cjk_anchor(candidate: str, original_query: str) -> bool:
+    entity_anchor = _extract_cjk_finance_entity(original_query)
+    if entity_anchor and entity_anchor not in candidate and not _contains_cjk(candidate):
+        return False
+
     required_tokens = _required_cjk_anchor_tokens(original_query)
     if not required_tokens:
         return True
@@ -351,6 +446,9 @@ def _heuristic_search_queries(query: str, domain: str) -> list[str]:
             continue
         matched_sources.append(source)
     translated_terms = [_CJK_SEARCH_TRANSLATIONS[source] for source in matched_sources]
+    entity_anchor = _extract_cjk_finance_entity(query) if domain in {"finance", "business"} else ""
+    if entity_anchor:
+        translated_terms = [entity_anchor, *translated_terms]
     if len(translated_terms) < 2:
         return [query]
 
@@ -390,20 +488,14 @@ class LLMClient:
         初始化 LLM 客户端。
 
         Args:
-            api_key: API 密钥，为 None 时依次尝试 OPENROUTER_API_KEY / OPENAI_API_KEY 环境变量。
-            model: 模型名称（OpenRouter 格式如 "deepseek/deepseek-chat-v3-0324"）。
-            base_url: API 地址，默认 https://openrouter.ai/api/v1 或 https://api.openai.com/v1。
+            api_key: API key for non-OSS integrations. The OSS browser/API surface
+                does not read provider credentials from environment variables.
+            model: 模型名称。
+            base_url: API 地址，默认跟随显式传入的 base_url，或 OpenAI SDK 默认端点。
             timeout: 请求超时秒数，为 None 时回退到 OPENAI_TIMEOUT 环境变量（默认 60s）。
         """
-        resolved_key = (
-            api_key or os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
-        )
-        if base_url:
-            resolved_base = base_url
-        elif os.environ.get("OPENROUTER_API_KEY"):
-            resolved_base = "https://openrouter.ai/api/v1"
-        else:
-            resolved_base = None
+        resolved_key = api_key
+        resolved_base = base_url
 
         resolved_timeout = timeout or float(os.environ.get("OPENAI_TIMEOUT", "60"))
 
@@ -447,6 +539,18 @@ class LLMClient:
             if data and data.get("status") == "ok":
                 return True, None
             return False, "Model preflight returned an unexpected payload."
+        except _AUTH_ERRORS as exc:
+            return False, f"{type(exc).__name__}: {exc}"
+        except openai.OpenAIError as exc:
+            return False, f"{type(exc).__name__}: {exc}"
+
+    def preflight_analysis_smoke(self) -> tuple[bool, str | None]:
+        smoke_query = "\u4e3a\u4ec0\u4e48\u7f8e\u56fd\u4f1a\u540c\u610f\u4e0e\u4f0a\u6717\u8fdb\u884c\u9996\u8f6e\u8c08\u5224\uff1f"
+        try:
+            queries = self.build_search_queries(smoke_query, "geopolitics")
+            if _queries_look_invalid(smoke_query, queries):
+                return False, "Analysis-stage smoke returned empty search queries."
+            return True, None
         except _AUTH_ERRORS as exc:
             return False, f"{type(exc).__name__}: {exc}"
         except openai.OpenAIError as exc:

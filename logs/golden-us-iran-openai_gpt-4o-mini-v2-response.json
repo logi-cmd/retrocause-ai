@@ -1,0 +1,83 @@
+﻿{
+    "query":  "?????????????? ???????????",
+    "is_demo":  false,
+    "demo_topic":  null,
+    "analysis_mode":  "partial_live",
+    "freshness_status":  "unknown",
+    "time_range":  null,
+    "partial_live_reasons":  [
+                                 "LLM calls failed for openai/gpt-4o-mini â empty result (check API key balance and model access)"
+                             ],
+    "recommended_chain_id":  null,
+    "chains":  [
+
+               ],
+    "evidences":  [
+
+                  ],
+    "upstream_map":  {
+                         "entries":  [
+
+                                     ]
+                     },
+    "evaluation":  null,
+    "retrieval_trace":  [
+
+                        ],
+    "challenge_checks":  [
+
+                         ],
+    "analysis_brief":  null,
+    "product_harness":  {
+                            "name":  "result_value_harness",
+                            "score":  0.16666666666666666,
+                            "status":  "blocked_by_model",
+                            "user_value_summary":  "The run did not produce a causal answer; the useful output is the failure diagnosis.",
+                            "checks":  [
+                                           {
+                                               "id":  "causal_chain",
+                                               "label":  "Causal chain present",
+                                               "status":  "fail",
+                                               "detail":  "No causal chain is available for review."
+                                           },
+                                           {
+                                               "id":  "analysis_summary",
+                                               "label":  "Analysis summary present",
+                                               "status":  "fail",
+                                               "detail":  "No synthesized answer is attached."
+                                           },
+                                           {
+                                               "id":  "source_trace",
+                                               "label":  "Source trace visible",
+                                               "status":  "fail",
+                                               "detail":  "No source-level retrieval trace is visible."
+                                           },
+                                           {
+                                               "id":  "evidence_stance",
+                                               "label":  "Evidence stance visible",
+                                               "status":  "fail",
+                                               "detail":  "No evidence items are attached."
+                                           },
+                                           {
+                                               "id":  "challenge_coverage",
+                                               "label":  "Challenge coverage checked",
+                                               "status":  "fail",
+                                               "detail":  "No targeted challenge retrieval is attached."
+                                           },
+                                           {
+                                               "id":  "actionable_failure",
+                                               "label":  "Failure state actionable",
+                                               "status":  "pass",
+                                               "detail":  "LLM calls failed for openai/gpt-4o-mini â empty result (check API key balance and model access)"
+                                           }
+                                       ],
+                            "next_actions":  [
+                                                 "Run provider preflight before starting another full analysis.",
+                                                 "Expose source trace rows so the user can see where evidence came from.",
+                                                 "Run targeted challenge retrieval for the strongest causal edges.",
+                                                 "Generate an analysis brief with top reasons and missing evidence."
+                                             ]
+                        },
+    "uncertainty_report":  null,
+    "error":  "LLM calls failed for openai/gpt-4o-mini â empty result (check API key balance and model access)"
+}

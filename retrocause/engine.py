@@ -109,6 +109,14 @@ def _is_time_sensitive(parsed: ParsedQuery) -> bool:
     return parsed.time_range is not None or parsed.domain in {"finance", "business"}
 
 
+def _is_cjk_time_sensitive_market(ctx: PipelineContext) -> bool:
+    return (
+        ctx.domain in {"finance", "business"}
+        and bool(ctx.extra.get("time_range"))
+        and bool(re.search(r"[\u4e00-\u9fff]", ctx.query))
+    )
+
+
 def _source_signature(source_adapters: list[SourceAdapter] | None) -> str:
     if source_adapters is None:
         return "sources:none"
@@ -142,7 +150,7 @@ def _normalize_signal(text: str) -> str:
 
 
 def _signal_tokens(text: str) -> set[str]:
-    return {
+    latin_tokens = {
         token
         for token in re.findall(r"[a-zA-Z][a-zA-Z0-9_]{2,}", text.lower().replace("_", " "))
         if token
@@ -159,9 +167,30 @@ def _signal_tokens(text: str) -> set[str]:
             "because",
         }
     }
+    cjk_tokens = set(re.findall(r"[\u4e00-\u9fff]{2,}", text))
+    return latin_tokens | cjk_tokens
+
+
+def _cjk_phrases(text: str) -> set[str]:
+    phrases: set[str] = set()
+    for chunk in re.findall(r"[\u4e00-\u9fff]{2,}", text):
+        phrases.add(chunk)
+        max_window = min(6, len(chunk))
+        for size in range(2, max_window + 1):
+            for index in range(0, len(chunk) - size + 1):
+                phrases.add(chunk[index : index + size])
+    return phrases
 
 
 def _evidence_matches_variable(evidence, variable_name: str, description: str = "") -> bool:
+    evidence_text = (
+        f"{getattr(evidence, 'content', '')} "
+        f"{' '.join(getattr(evidence, 'linked_variables', []) or [])}"
+    )
+    for phrase in _cjk_phrases(f"{variable_name} {description}"):
+        if phrase in evidence_text:
+            return True
+
     normalized_name = _normalize_signal(variable_name)
     evidence_signals = [
         _normalize_signal(item) for item in getattr(evidence, "linked_variables", []) or []
@@ -187,19 +216,91 @@ def _collect_variable_evidence(evidences: list, variable_name: str, description:
     return [
         ev
         for ev in evidences
-        if getattr(ev, "extraction_method", "") != "fallback_summary"
-        and _evidence_matches_variable(ev, variable_name, description)
+        if _evidence_matches_variable(ev, variable_name, description)
     ]
 
 
 def _collect_edge_evidence(evidences: list, source: str, target: str) -> list:
     linked: list = []
     for evidence in evidences:
-        if getattr(evidence, "extraction_method", "") == "fallback_summary":
-            continue
         if _evidence_matches_variable(evidence, source) or _evidence_matches_variable(evidence, target):
             linked.append(evidence)
     return linked
+
+
+def _fallback_market_graph_from_evidence(query: str, evidences: list) -> dict:
+    """Build a conservative, evidence-anchored market graph when LLM DAG extraction fails."""
+    if not evidences:
+        return {}
+
+    text = "\n".join(str(getattr(evidence, "content", "") or "") for evidence in evidences)
+    result_variable = "stock_price_decline"
+    result_description = f"Observed market move in the user query: {query}"
+    cause_specs: list[tuple[str, str, tuple[str, ...]]] = [
+        (
+            "sector_pressure",
+            "Retrieved evidence mentions sector or semiconductor pressure around the move.",
+            ("板块", "半导体", "芯片", "sector", "semiconductor", "chip"),
+        ),
+        (
+            "fund_flow_pressure",
+            "Retrieved evidence mentions selling pressure, capital flow, or fund-flow pressure.",
+            ("资金", "流出", "主力", "卖出", "selloff", "selling", "outflow"),
+        ),
+        (
+            "company_news_flow",
+            "Retrieved evidence mentions company news, earnings, orders, guidance, or disclosures.",
+            ("公告", "业绩", "收入", "订单", "指引", "earnings", "revenue", "guidance"),
+        ),
+        (
+            "broader_market_pressure",
+            "Retrieved evidence mentions broader market, index, or risk-sentiment pressure.",
+            ("市场", "指数", "A股", "情绪", "market", "index", "risk"),
+        ),
+    ]
+
+    variables = [
+        {
+            "name": result_variable,
+            "description": result_description,
+        }
+    ]
+    edges: list[dict] = []
+    lowered_text = text.lower()
+    for name, description, markers in cause_specs:
+        if not any(marker.lower() in lowered_text for marker in markers):
+            continue
+        variables.append({"name": name, "description": description})
+        edges.append(
+            {
+                "source": name,
+                "target": result_variable,
+                "conditional_prob": 0.48,
+                "description": description,
+            }
+        )
+
+    if not edges:
+        variables.append(
+            {
+                "name": "retrieved_market_context",
+                "description": "Retrieved source context is relevant to the market move, but no specific cause label was extracted.",
+            }
+        )
+        edges.append(
+            {
+                "source": "retrieved_market_context",
+                "target": result_variable,
+                "conditional_prob": 0.38,
+                "description": "Use as context only until a stronger cause label is extracted.",
+            }
+        )
+
+    return {
+        "variables": variables,
+        "edges": edges,
+        "result_variable": result_variable,
+    }
 
 
 class EvidenceCollectionStep(PipelineStep):
@@ -311,8 +412,22 @@ class GraphBuildingStep(PipelineStep):
         result = self._llm_client.build_causal_graph(ctx.query, evidence_texts, ctx.domain)
 
         if not result:
-            logger.warning("GraphBuildingStep: build_causal_graph 返回空结果")
-            return ctx
+            if _is_cjk_time_sensitive_market(ctx):
+                result = _fallback_market_graph_from_evidence(ctx.query, evidence)
+                if result:
+                    ctx.extra["fallback_graph_reason"] = "llm_graph_empty"
+                    ctx.extra.setdefault("pipeline_notes", []).append(
+                        "Used a conservative evidence-anchored fallback market graph after LLM graph extraction returned empty."
+                    )
+                    logger.warning(
+                        "GraphBuildingStep: build_causal_graph 返回空结果，使用财经 fallback 图"
+                    )
+                else:
+                    logger.warning("GraphBuildingStep: build_causal_graph 返回空结果")
+                    return ctx
+            else:
+                logger.warning("GraphBuildingStep: build_causal_graph 返回空结果")
+                return ctx
 
         evidence_by_variable_name: dict[str, list] = {}
         for var_data in result.get("variables", []):
@@ -430,6 +545,12 @@ class CausalRAGStep(PipelineStep):
             return ctx
         if not ctx.variables or not ctx.edges:
             return ctx
+        if _is_cjk_time_sensitive_market(ctx):
+            logger.info("CausalRAGStep: skipping second retrieval for fast Chinese market path")
+            ctx.extra.setdefault("pipeline_notes", []).append(
+                "Skipped graph-guided second retrieval for a time-sensitive Chinese market query."
+            )
+            return ctx
 
         covered_vars = sum(1 for v in ctx.variables if v.evidence_ids)
         coverage = covered_vars / max(len(ctx.variables), 1)
@@ -480,6 +601,12 @@ class RefutationCoverageStep(PipelineStep):
         if self._llm_client is None or self._source_adapters is None:
             return ctx
         if not ctx.hypotheses:
+            return ctx
+        if _is_cjk_time_sensitive_market(ctx):
+            logger.info("RefutationCoverageStep: skipping challenge retrieval for fast Chinese market path")
+            ctx.extra.setdefault("pipeline_notes", []).append(
+                "Skipped targeted challenge retrieval for a time-sensitive Chinese market query."
+            )
             return ctx
 
         candidate_edges: list[CausalEdge] = []
@@ -612,6 +739,12 @@ class RetroCauseEngine:
                 "result_count": item.result_count,
                 "cache_hit": item.cache_hit,
                 "error": item.error,
+                "status": item.status,
+                "retry_after_seconds": item.retry_after_seconds,
+                "source_label": item.source_label,
+                "source_kind": item.source_kind,
+                "stability": item.stability,
+                "cache_policy": item.cache_policy,
             }
             for item in self.collector.access_trace
         ]

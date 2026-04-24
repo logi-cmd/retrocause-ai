@@ -48,6 +48,14 @@ DOMAIN_KEYWORDS = {
     "history": ["empire", "collapse", "dynasty", "history", "帝国", "王朝", "历史"],
     "epidemiology": ["pandemic", "virus", "epidemic", "disease", "疫情", "病毒", "流行病"],
     "business": ["company", "startup", "product", "business", "企业", "公司", "产品"],
+    "postmortem": [
+        "outage",
+        "incident",
+        "downtime",
+        "service disruption",
+        "root cause",
+        "postmortem",
+    ],
     "geopolitics": [
         "united states",
         "u.s.",

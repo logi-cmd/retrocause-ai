@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "test": "npm --prefix frontend run lint && npm --prefix frontend run build && ruff check retrocause/ && pytest tests/ --basetemp=.pytest-tmp && python scripts/e2e_test.py"
+    "test": "npm --prefix frontend run lint && npm --prefix frontend run build && python -m ruff check retrocause/ && python -m pytest tests/ --basetemp=.tmp-tests/pytest && python scripts/e2e_test.py"
   },
   "dependencies": {
     "playwright": "^1.59.1"

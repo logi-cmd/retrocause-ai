@@ -1,0 +1,12 @@
+[package]
+name = "retrocause-pro-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+axum.workspace = true
+retrocause-pro-domain = { path = "../../crates/domain" }
+serde.workspace = true
+tokio.workspace = true

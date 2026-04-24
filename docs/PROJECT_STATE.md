@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-04-22
+Last updated: 2026-04-24
 
 ## Goal
 
@@ -8,25 +8,25 @@ RetroCause is a runnable, inspectable causal explanation product for "why did th
 
 ## Current Status
 
-The OSS version is **published as an alpha prerelease** and is now the only near-term implementation focus. The SourceBroker retrieval reliability pass is implemented locally, and the current local app also has small inspectability-oriented workflow slices: run metadata, a usage ledger, minimal uploaded evidence, saved-run history, browser dogfood for degraded source rows, an analysis-stage provider preflight smoke beyond the tiny JSON check, explicit recovery labeling for zero-hit Chinese time-sensitive live searches, stale-result trace labeling, and postmortem/outage live-source routing.
+The OSS version remains the only near-term implementation focus. The active OSS browser/API surface is now explicitly keyless: it keeps the inspectability workflow slices (run metadata, usage ledger, uploaded evidence, saved-run history, degraded-source rows, local/demo causal maps, source trace structures, and reviewability checks) without accepting model or hosted-search credentials. As of 2026-04-24, the current workspace and a fresh local copy both passed the full root `npm test` workflow on Windows, and a release-state audit confirmed that the latest public GitHub release is still `v0.1.0-alpha.5`. This means the project currently meets the bar for a **stable-deliverable local OSS alpha**, not a hosted service and not yet a non-alpha `v0.1.0` release.
 
 What is done:
 
 - unified local app startup
 - FastAPI + Next.js evidence-board workflow
 - explicit demo / partial-live / live result labeling
-- provider preflight harness for API key and model checks
+- keyless provider catalog plus disabled preflight compatibility response
 - product value harness for whether a result is reviewable
 - scenario-aware OSS Production Brief Harness for market, policy/geopolitics, and postmortem workflows
 - copyable Markdown research brief in the V2 API and browser UI
 - structured in-app readable brief so Markdown is the copy/export format rather than the only reading surface
 - polished Markdown brief wording for challenge coverage, including readable source labels and clear no-refuting-evidence language instead of ambiguous `0 challenge` phrasing
-- live US/Iran Islamabad talks golden-case validation with OpenRouter DeepSeek V3
+- live US/Iran Islamabad talks golden-case validation during the earlier multi-provider alpha phase
 - refreshed live golden-case screenshot under `docs/images/golden-us-iran-live-ui.png`
 - automated validation through the root `npm test` command
 - clean public GitHub repo published at `https://github.com/logi-cmd/retrocause-ai`
 - GitHub prerelease `v0.1.0-alpha.5`
-- SourceBroker reliability pass: source profiles, scenario/language/time-aware cache keys, degraded-source classification, API/brief/UI source-health status, optional user-key Tavily/Brave adapters, and search-source preflight
+- SourceBroker reliability pass: source profiles, scenario/language/time-aware cache keys, degraded-source classification, and API/brief/UI source-health status
 - lightweight local run workflow: `run_id`, run status/steps, source/provider usage ledger, saved-run endpoints/UI, and minimal pasted uploaded evidence stored as user-owned evidence
 - OSS stabilization follow-up: narrow-viewport panel controls are browser-tested, graph path layout guards against `NaN`, demo/no-key source trace absence is explicit, API schema models, V2 result conversion, uploaded-evidence route handling, saved-run route handling, provider route/preflight handling, live-failure V2 response assembly, retrieval-trace V2 conversion, live-analysis model settings, run response finalization, Markdown brief generation, structured analysis brief assembly, production brief assembly, production/product harness payload assembly, production-scenario detection, provider preflight classification, saved-run persistence, run metadata assembly, and API timeout runtime helpers have been split out of the large route module, the legacy canvas graph now reuses the shared sticky-card renderer plus red-string path builder, and the E2E harness cleans up Windows frontend process trees while reporting 500 resource URLs
 
@@ -39,18 +39,18 @@ What is not done:
 
 ## Current Focus
 
-Stabilize the published `v0.1.0-alpha.5` OSS prerelease from real user feedback. The current quality pass has addressed the first mobile/source-trace regressions locally, started backend route-module extraction, made the homepage evidence board the canonical graph/card path while keeping older canvas components as legacy secondary surfaces, added a homepage Chinese A-share intraday sample that fills `芯原股份今天盘中为什么下跌？` while selecting the Market scenario, tightened provider preflight with an analysis-stage query-planning smoke, added a recovery retry plus visible `recovered` trace status for zero-hit Chinese time-sensitive live searches, switched the default local model path to OfoxAI, and cleaned the root README back into readable bilingual OSS onboarding. The next work should focus on README first-run validation from a clean clone, live Chinese finance query behavior with real provider/search keys, and continued maintainability cleanup around remaining legacy canvas layout/state logic plus the large API route module.
+Maintain the stable-deliverable local OSS alpha, fix real user regressions conservatively, and keep hosted provider execution out of this codebase. The stabilization pass addressed the first mobile/source-trace regressions locally, started backend route-module extraction, made the homepage evidence board the canonical graph/card path while keeping older canvas components as legacy secondary surfaces, added a homepage Chinese A-share intraday sample that fills `芯原股份今天盘中为什么下跌？` while selecting the Market scenario, removed active key entry/preflight flows from the OSS browser/API surface, deprecated OpenRouter from active support, and cleaned the root README back into readable bilingual OSS onboarding. The clean-clone first-run validation was rerun successfully on 2026-04-23. The next OSS work should focus on keyless local reviewability, continued maintainability cleanup around remaining legacy canvas layout/state logic plus the large API route module, and keeping the explicit `v0.1.0` release gate in sync with real verification results.
 
 Current UX focus: keep the OSS version useful and inspectable before adding more Pro behavior. Validate the general Production Brief Harness across real market, policy/geopolitics, postmortem, and Chinese finance questions. Future Pro workflow depth should be designed after OSS stabilization and should be a separate full-stack Rust rewrite rather than an incremental hosted extension of this alpha codebase.
 
-Current live-source status: a Tavily-backed source-layer smoke now verifies market, policy, postmortem/outage, and Chinese A-share source routes. Postmortem/outage queries route to live web/news sources instead of academic defaults, and time-filtered Chinese finance rows are surfaced as `stale_filtered`. Hosted search keys can now be supplied either through process environment variables or per-run browser/API fields, so users do not need to restart the local server just to test Tavily or Brave Search. The search-source preflight uses the same request-first, environment-fallback key resolution as live analysis, without echoing key values. The latest live-stability follow-up tightened reviewability so a causal chain with no evidence or no evidence anchors cannot be marked `ready_for_review`, lets Chinese evidence text match Chinese variable names when anchoring retrieved source summaries, shortens the Chinese time-sensitive market source path when Tavily/Brave is available, accepts undated hosted-search rows as inspectable fresh candidates instead of discarding every row, reduces default LLM retry amplification, and can build a conservative evidence-anchored fallback market graph when LLM graph extraction returns empty. OfoxAI is now the default local provider path (`https://api.ofox.ai/v1`) with `openai/gpt-5.4-mini` selected first. OpenRouter remains available as a fallback provider; legacy `deepseek/deepseek-chat-v3-0324` requests still normalize to `deepseek/deepseek-chat`. Full live analysis is now serialized by a local process gate by default (`RETROCAUSE_LIVE_MAX_CONCURRENT=1`), provider 429/rate-limit errors use capped backoff with `Retry-After` when present, and rate-limit failures include model-recovery actions for retrying later or trying another provider-accessible model. `scripts/live_stability_probe.py` is now the repeatable provider/search probe for real-key runs; it defaults to OfoxAI and only retests extra models when `RETROCAUSE_LIVE_MODELS` is set. Use `RETROCAUSE_LIVE_PROVIDER=openrouter` plus `OPENROUTER_API_KEY` to retest the older OpenRouter path.
+Current source status: the active OSS browser/API surface is keyless. It returns local/demo analysis payloads, saved-run metadata, uploaded evidence, source-trace structures, and reviewability signals without asking users for model or search credentials. Earlier hosted-source and provider-preflight experiments remain historical context only; OpenRouter is deprecated and is not part of the supported OSS provider surface. The repeatable probe in `scripts/live_stability_probe.py` now exercises the keyless local OSS scenarios instead of requiring provider credentials.
 
-Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md` and has been executed through code, frontend, export, and regression cleanup. The retrieval/output strategy is captured in `docs/retrieval-and-output-strategy.md`. The SourceBroker reliability implementation plan is saved at `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md` and has been executed through documentation/full verification. The local workflow slice is intentionally OSS inspectability work, not a commitment to build hosted Pro on this stack.
+Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md` and has been executed through code, frontend, export, and regression cleanup. The retrieval/output strategy is captured in `docs/retrieval-and-output-strategy.md`. The SourceBroker reliability implementation plan is saved at `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md` and has been executed through documentation/full verification. The explicit non-alpha release bar now lives in `docs/oss-release-gate.md`. Pro planning now starts from `docs/pro-planning-kickoff.md` and `docs/pro-workflow-spec.md`. The local workflow slice is intentionally OSS inspectability work, not a commitment to build hosted Pro on this stack.
 
 ## Working Rules
 
 - Keep project documentation synchronized with every behavior, API, UI, or pipeline change. At minimum, update the current task evidence note; when user-visible behavior changes, also update README or the relevant docs page.
-- Until the OSS version is release-ready, prioritize OSS stabilization over new Pro feature work.
+- Keep the shipped OSS alpha stable, and treat Pro work as planning-only unless a new task explicitly reopens OSS runtime changes.
 - Treat future Pro as a separate full-stack Rust rewrite. Do not grow this Python/Next alpha into the future hosted Pro architecture without an explicit planning reset.
 
 ## Done Recently
@@ -60,14 +60,14 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Added stance-aware refutation coverage, analysis brief output, and challenge coverage UI.
 - Added provider preflight and product value harness behavior so users can see whether model setup is blocking analysis and whether a returned result is reviewable.
 - Updated OSS readiness docs to distinguish local alpha completeness from polished public release completeness.
-- Completed the 2026-04-13 US/Iran Islamabad talks golden case through API and browser UI with OpenRouter DeepSeek V3.
+- Completed the 2026-04-13 US/Iran Islamabad talks golden case through API and browser UI during the earlier multi-provider alpha phase.
 - Fixed an over-broad Chinese localization regex that turned `nuclear` into `nucl出口管理条例`.
 - Published the clean OSS alpha package to `logi-cmd/retrocause-ai` and created prerelease `v0.1.0-alpha.1`.
 - Prepared `v0.1.0-alpha.2` with README status polish, zero-warning frontend lint, and explicit Turbopack root config.
 - Decided the OSS/Pro product boundary: OSS gets copyable Markdown research briefs; Pro gets hosted, PDF/DOCX, team, scheduled, branded, source-policy, and saved-comparison workflows.
 - Fixed the local WSL default distro for gstack-style tooling by installing `Ubuntu-24.04`, setting it as default instead of Docker Desktop's internal `docker-desktop` distro, and configuring a non-root default user `retrocause` with passwordless sudo for development tooling.
 - Added OSS Markdown research brief output to `/api/analyze/v2` and the browser analysis card.
-- Re-ran the US/Iran Islamabad talks golden case on 2026-04-14 with OpenRouter DeepSeek V3: live, fresh, 20 evidence items, 5 chains, 3 challenge checks, product harness `ready_for_review`, and a 4k+ character Markdown brief.
+- Re-ran the US/Iran Islamabad talks golden case on 2026-04-14 during the earlier multi-provider alpha phase: live, fresh, 20 evidence items, 5 chains, 3 challenge checks, product harness `ready_for_review`, and a 4k+ character Markdown brief.
 - Prepared `v0.1.0-alpha.3` as the first public alpha that includes the copyable Markdown research brief.
 - Added `docs/pro-workflow-spec.md` to keep future paid workflows scoped around repeatable value instead of adding vague "more AI" features.
 - Polished the Markdown research brief so top reasons use human-readable source/edge labels and checked edges with no attached refuting evidence explain that state directly.
@@ -83,17 +83,17 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Added `docs/retrieval-and-output-strategy.md` to define the retrieval-to-output pipeline, source adapter rate-limit risks, candidate hosted sources, source policies, cache requirements, run orchestration direction, and development-skill usage.
 - Wrote the SourceBroker retrieval reliability implementation plan, covering source profiles, scenario/source-policy cache keys, degraded source status classification, API/UI source trace metadata, optional Tavily/Brave adapters, docs, tests, and guardrails verification.
 - Stabilized the local Windows Next.js build by enabling Next worker threads, avoiding `spawn EPERM` during type-checking in this environment.
-- Implemented SourceBroker Task 1: source profiles now centralize labels, source kinds, stability, cache policies, default budgets/RPM, API-key requirements, and optional hosted-source ordering.
+- Implemented SourceBroker Task 1: source profiles now centralize labels, source kinds, stability, cache policies, default budgets/RPM, credential requirements, and hosted-source ordering metadata.
 - Implemented SourceBroker Task 2: retrieval cache keys now include source policy, scenario, language, absolute time bucket, normalized scoped query, adapter name, and result count, with collector paths passing scenario/language metadata into live searches.
 - Implemented SourceBroker Task 3: source attempts now classify `ok`, `cached`, `rate_limited`, `forbidden`, `timeout`, `source_error`, and `source_limited` states with retry-after and source-profile metadata.
 - Implemented SourceBroker Task 4: V2 retrieval trace and Markdown/readable brief paths now preserve and expose source status, retry-after seconds, cache policy, source kind, and stability, including real pipeline output from `SourceAttempt`.
-- Implemented SourceBroker Task 5: optional Tavily hosted search adapter is key-gated by `TAVILY_API_KEY`, maps Tavily results into `SearchResult`, and stays absent from OSS source registration when the key is not configured.
-- Implemented SourceBroker Task 6: optional Brave Search adapter is key-gated by `BRAVE_SEARCH_API_KEY`, maps Brave web results into `SearchResult`, and marks result metadata with `cache_policy=transient_results_only`.
+- Implemented SourceBroker Task 5: a Tavily hosted-search experiment mapped Tavily results into `SearchResult`; the active OSS source factory no longer registers hosted-search credentials.
+- Implemented SourceBroker Task 6: a Brave Search experiment mapped Brave web results into `SearchResult` with transient-result cache metadata; the active OSS source factory no longer registers hosted-search credentials.
 - Implemented SourceBroker Task 7: frontend source trace rows now show localized retrieval-health statuses, retry-after hints, and readable brief source-health summary counts for successful, cached, degraded, and reviewability state.
 - Implemented SourceBroker Task 8: README and retrieval docs now explain SourceBroker source states, optional hosted adapters, OSS inspectable retrieval, and OSS/Pro boundary in user-facing language.
-- Dogfooded the completed SourceBroker reliability pass across market, policy/geopolitics, and postmortem live scenarios with OpenRouter DeepSeek V3: all three returned live reviewable results with source trace rows, evidence counts, Markdown briefs, and harness `ready_for_review`.
+- Dogfooded the completed SourceBroker reliability pass across market, policy/geopolitics, and postmortem live scenarios during the earlier multi-provider alpha phase: all three returned live reviewable results with source trace rows, evidence counts, Markdown briefs, and harness `ready_for_review`.
 - Added a degraded-source drill regression covering `rate_limited`, `forbidden`, `timeout`, `source_error`, `source_limited`, and `cached` source trace rows in the same reviewable output.
-- Added multi-user/persona regression coverage for user-value outputs: no-key new users get a demo/readable brief path, invalid-key users get `blocked_by_model` with preflight next action, and reviewer users can audit degraded source states such as `rate_limited` and `forbidden` in the source trace and Markdown brief.
+- Added multi-user/persona regression coverage for user-value outputs: no-key new users get a demo/readable brief path, keyless OSS requests stay local/demo, and reviewer users can audit degraded source states such as `rate_limited` and `forbidden` in the source trace and Markdown brief.
 - Stabilized the browser E2E harness to wait for hydrated demo cards and an enabled submit button before interacting with the page, preventing false failures from stale or not-yet-hydrated local app state.
 - Documented the OpenCLI source-adapter lesson for RetroCause: OpenCLI avoids shared hosted bottlenecks mostly through local/browser/user-owned execution and bounded deterministic adapters, while RetroCause still needs run orchestration, quota ownership labeling, cache, source policies, and transparent partial results for multi-user reliability.
 - Added lightweight local run orchestration metadata to V2 analysis responses, including run id/status, run steps, saved-run persistence, and a provider/source usage ledger.
@@ -115,32 +115,31 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Moved Markdown research brief text generation into `retrocause/api/briefs.py` and made legacy `CausalGraphView` reuse the shared sticky-card renderer and sticky graph red-string path builder.
 - Hardened the browser E2E harness by avoiding `networkidle` waits for a page with background requests, reporting 500 resource URLs in console-health failures, and cleaning up Windows `npm`/`next` process trees after autostart.
 - Added a homepage Chinese A-share intraday sample query for `芯原股份今天盘中为什么下跌？`; the browser now dogfoods that the sample preserves the company anchor and selects the Market scenario before submission.
-- Fixed remaining homepage mojibake in visible Chinese labels around preflight, run orchestration, source coverage, chain comparison, and reason summaries; older requests that still send `deepseek/deepseek-chat-v3-0324` are normalized to the stable DeepSeek alias before live analysis even though the current OpenRouter picker is now curated away from the DeepSeek entries.
-- Refreshed OpenRouter picker model IDs for current public catalog availability by replacing `google/gemini-2.5-flash-preview` with `google/gemini-2.5-flash` and `anthropic/claude-haiku-4` with `anthropic/claude-haiku-4.5`; added an opt-in `RETROCAUSE_LIVE_OPENROUTER_CATALOG=1` pytest smoke that compares the local catalog to OpenRouter's public `/api/v1/models` list.
-- Added an E2E guard for the running backend provider catalog so stale local `python start.py` processes fail visibly when `/api/providers` still serves old OpenRouter IDs.
-- Curated the OpenRouter picker down to models that passed current alpha preflight/live checks in RetroCause with a real user key; removed the DeepSeek variants plus failing preview/invalid-payload entries from the picker while keeping legacy `deepseek/deepseek-chat-v3-0324` request normalization for backward compatibility.
-- Live `partial_live` failure responses now include explicit recommended actions derived from the provider failure class, and the product harness surfaces those actions alongside the existing preflight retry guidance; added regression coverage for real Chinese stock-query demo detection and clean provider-label copy.
+- Fixed remaining homepage mojibake in visible Chinese labels around earlier preflight copy, run orchestration, source coverage, chain comparison, and reason summaries.
+- Refreshed an earlier experimental provider catalog to current public model IDs during alpha probing, before later deprecating the OpenRouter path from active OSS support.
+- Added an E2E guard for the running backend provider catalog so stale local `python start.py` processes fail visibly when `/api/providers` serves out-of-date provider IDs.
+- Curated the earlier experimental multi-provider picker down to models that passed alpha preflight/live checks before later simplifying the active OSS path back to OfoxAI-first support.
+- Earlier live `partial_live` failure responses included explicit recommended actions derived from provider failure classes; current OSS behavior now stays keyless/local while preserving reviewability signals.
 - Rebuilt `retrocause/app/demo_data.py` with clean bundled demo evidence, clean provider labels, and topic-aware sample outputs so demo-only flows no longer depend on older mojibake sample strings.
-- Hardened live provider/search stability for the next OSS pass: provider preflight now requires an analysis-stage query-planning smoke after the tiny JSON check, Chinese time-sensitive market/policy searches retry a recovery query on zero-hit source attempts, and source trace plus the product harness surface recovered retry rows explicitly.
-- Ran a real source-layer live smoke with the configured Tavily key: market, policy, postmortem/outage, and Chinese A-share source routes all executed; postmortem now uses Tavily/Web instead of arXiv/Semantic Scholar, and stale Chinese finance material is surfaced as `stale_filtered` instead of being mistaken for a source outage.
-- Added `scripts/live_stability_probe.py` as a repeatable real-key provider/search stability probe, with tests that keep its provider/model defaults aligned to the current OfoxAI-first picker and verify missing-key reports do not contain secret values.
+- Hardened earlier live provider/search stability paths during alpha probing; current OSS behavior now keeps provider execution out of the browser/API surface and records keyless source-trace reviewability.
+- Ran earlier hosted-source smokes for market, policy, postmortem/outage, and Chinese A-share routes; current OSS validation is the keyless local stability probe.
+- Added `scripts/live_stability_probe.py` as a repeatable keyless OSS stability probe with tests that verify reports do not contain secret fields.
 - Pinned root `npm test` pytest temp files under ignored `.tmp-tests/pytest` after local Windows ACL issues made both `.pytest-tmp` and the user Temp pytest root unreliable.
-- Added per-run Tavily and Brave Search key fields to the local homepage/API analysis request path, while keeping environment variables as the restart-time fallback.
-- Added `/api/sources/preflight` and a homepage **Run search preflight** action so Tavily/Brave keys can be checked before running a full model-backed analysis.
+- Removed per-run hosted-search credential fields from the active local homepage/API analysis request path.
+- Kept `/api/sources/preflight` as a compatibility endpoint that reports the keyless built-in OSS source path.
 - Tightened live result reviewability after real-key probes: product harness now requires evidence and evidence anchors before `ready_for_review`, source summaries are preserved when LLM extraction produces no stored evidence, and Chinese evidence text can anchor against Chinese variable names.
-- Shortened the Chinese time-sensitive market live path: hosted search rows from Tavily/Brave can survive strict same-day filtering even when undated, optional hosted sources keep the broker from falling through to slower GDELT/AP by default, CausalRAG/refutation retrieval are skipped for this fast path, and an evidence-anchored fallback market graph is used when LLM graph extraction returns empty.
-- Rewrote the root README as readable English/Chinese OSS onboarding again after Windows mojibake reappeared, including OfoxAI default-provider setup, per-run Tavily/Brave keys, local-only saved runs/uploaded evidence, API examples, and the OSS/Future Pro boundary.
+- Shortened the Chinese time-sensitive market path during alpha probing; current OSS keeps the A-share path keyless/local and focused on reviewable demo behavior.
+- Rewrote the root README as readable English/Chinese OSS onboarding again after Windows mojibake reappeared, including the keyless OSS boundary, local-only saved runs/uploaded evidence, API examples, and the OSS/Future Pro boundary.
 - Cleaned root OSS metadata by restoring readable `AGENTS.md` contributor rules and replacing the mojibake `pyproject.toml` package description with an English package summary, with regression coverage for both files.
 
 ## Known Gaps
 
-- The OSS product can now export a Markdown research brief, show retrieval-health states, reopen local saved runs, has a clean bilingual README, and has previously passed a clean-copy install/test smoke. After the README cleanup, a fresh clean-clone first-run validation should be rerun before calling the next OSS release candidate complete.
+- The OSS product can now export a Markdown research brief, show retrieval-health states, reopen local saved runs, has a clean bilingual README, and has now passed a fresh clean-clone install/test smoke again after the latest README cleanup. This closes the first-run local-delivery gate for the current local alpha and is one input into the future non-alpha release bar.
 - Degraded-source states now have deterministic API/brief regression coverage plus browser-level source-trace dogfood for representative rate-limited/cached rows; wider visual QA across all bad-path states remains useful.
 - Direct monetization design should be deferred until OSS is solid; future Pro should be revisited as a full-stack Rust architecture rather than incremental hosted work in the current alpha stack.
-- A true provider-backed live Chinese finance run still needs verification with `OFOXAI_API_KEY` configured after the latest fast-path changes. Source-layer smoke with the configured Tavily key verifies the market/Chinese finance/postmortem source routes, and `scripts/live_stability_probe.py` is the repeatable path for the provider-backed run. Use `RETROCAUSE_LIVE_PROVIDER=openrouter` plus `OPENROUTER_API_KEY` only when retesting the older OpenRouter path.
-- The current OpenRouter picker is intentionally smaller than the full public catalog. It includes `deepseek/deepseek-chat` again for user-key compatibility, but every selected model still needs provider preflight and representative live-probe checks because model access and JSON reliability vary by account/provider.
+- Provider-backed live Chinese finance validation has moved out of OSS and into the future hosted Pro line. The current OSS validation target is keyless local reviewability.
 - The repository may still contain mojibake in legacy bilingual docs, test comments, and historical notes on Windows consoles, but the root README, `AGENTS.md`, package metadata, bundled demo data, provider labels, and current homepage/live-failure copy paths have now been cleaned or guarded by tests.
-- Local browser/API E2E now verifies that the currently running backend exposes current OpenRouter picker IDs. This catches stale local services, but it is not a substitute for a real-key provider run; `OPENROUTER_API_KEY` must be provided by the operator and any key pasted into chat should be rotated.
+- Local browser/API E2E now verifies that the currently running backend exposes the current keyless provider catalog and does not expose OpenRouter as an active option.
 - The API route module is still large even after the schema, uploaded-evidence route, saved-run route, provider route/preflight, live-failure V2 response, retrieval-trace V2 conversion, timeout, Markdown-brief, structured-analysis-brief, production-brief, production/product harness, production-scenario, provider-preflight, saved-run, and run-metadata helper extractions; streaming and the remaining main result-to-V2 conversion remain backend split candidates.
 - Legacy canvas layout/state logic remains separate from the canonical homepage evidence board, but sticky-card rendering and red-string path math now reuse shared modules.
 
@@ -148,7 +147,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 
 Start a new OSS stabilization task from the post-release QA findings:
 
-1. rerun README first-run validation from a clean clone after the latest README rewrite
-2. exercise a live Chinese finance query with `OFOXAI_API_KEY` plus real search keys and record source quality
-3. continue the maintainability cleanup from `docs/codebase-audit.md`, next targeting legacy canvas layout/state retirement or the remaining homepage panel layout/query-flow split
-4. continue backend cleanup by moving route orchestration out of `retrocause/api/main.py` in small verified slices
+1. keep the keyless OSS browser/API path stable and explicit, including Chinese finance demo reviewability
+2. continue the maintainability cleanup from `docs/codebase-audit.md`, next targeting legacy canvas layout/state retirement or the remaining homepage panel layout/query-flow split
+3. continue backend cleanup by moving route orchestration out of `retrocause/api/main.py` in small verified slices
+4. keep the `v0.1.0` release bar explicit in `docs/oss-release-gate.md` if new regressions or new release criteria appear

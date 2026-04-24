@@ -19,8 +19,8 @@ from retrocause.app.panels import (
 )
 
 st.set_page_config(
-    page_title="RetroCause — Causal Inference Explorer",
-    page_icon="🔬",
+    page_title="RetroCause - Causal Explanation Explorer",
+    page_icon="RC",
     layout="wide",
 )
 
@@ -46,15 +46,15 @@ def main() -> None:
     if result.is_demo:
         topic_label = result.demo_topic or "default"
         st.warning(
-            f"⚠️ **Demo mode** — showing pre-built example data (topic: *{topic_label}*). "
-            "Provide an API key in the sidebar to run real causal inference."
+            f"**Local OSS mode** - showing keyless example data (topic: *{topic_label}*). "
+            "Hosted model/search execution belongs to the separate Pro line."
         )
 
     render_graph_panel(result)
 
     st.divider()
 
-    st.header("📊 Analysis Results")
+    st.header("Analysis Results")
     col_q, col_d, col_e = st.columns([3, 1, 1])
     with col_q:
         st.subheader(f"**Query:** {result.query}")
@@ -62,14 +62,14 @@ def main() -> None:
         st.metric("Domain", result.domain.replace("_", " ").title())
     with col_e:
         st.metric("Evidence", result.total_evidence_count)
-    st.caption(f"Uncertainty score: {result.total_uncertainty:.2f} — Lower is better")
+    st.caption(f"Uncertainty score: {result.total_uncertainty:.2f}; lower is better")
 
     if result.hypotheses:
         top_hyp = max(result.hypotheses, key=lambda h: h.posterior_probability)
         st.success(
             f"**Leading hypothesis:** {top_hyp.name} "
             f"(posterior: {top_hyp.posterior_probability:.0%}, "
-            f"confidence: [{top_hyp.confidence_interval[0]:.0%}–{top_hyp.confidence_interval[1]:.0%}])"
+            f"confidence: [{top_hyp.confidence_interval[0]:.0%}-{top_hyp.confidence_interval[1]:.0%}])"
         )
 
     st.divider()
@@ -92,11 +92,11 @@ def main() -> None:
         st.metric("Domain", result.domain.replace("_", " ").title())
 
     if result.recommended_next_steps:
-        with st.expander("💡 Recommended Next Steps"):
+        with st.expander("Recommended Next Steps"):
             for step in result.recommended_next_steps:
                 st.write(f"- {step}")
 
-    st.caption("Built with RetroCause — Open source causal inference framework")
+    st.caption("Built with RetroCause - open-source causal explanation framework")
 
 
 if __name__ == "__main__":

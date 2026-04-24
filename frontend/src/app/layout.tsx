@@ -1,25 +1,6 @@
 ﻿import type { Metadata } from "next";
-import { Fraunces, IBM_Plex_Sans, JetBrains_Mono } from "next/font/google";
 import { I18nProvider } from "@/lib/i18n";
 import "./globals.css";
-
-const fraunces = Fraunces({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-});
-
-const ibmPlexSans = IBM_Plex_Sans({
-  variable: "--font-sans",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-  weight: ["400", "500"],
-});
 
 export const metadata: Metadata = {
   title: "RetroCause — Evidence-Backed Causal Explorer",
@@ -40,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${fraunces.variable} ${ibmPlexSans.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en">
       <body className="antialiased min-h-full flex flex-col bg-[var(--board-white)] text-[var(--ink-700)]">
         <I18nProvider>{children}</I18nProvider>
       </body>
