@@ -18,7 +18,9 @@ use retrocause_pro_queue::{
     ExecutionJob, ExecutionJobSummary, ExecutionLifecycleSpec, ExecutionQueue, ExecutionQueueError,
     ExecutionWorkOrder, execution_lifecycle_spec,
 };
-use retrocause_pro_run_store::{FileRunStore, RunStoreError};
+use retrocause_pro_run_store::{
+    FileRunStore, HostedStorageMigrationPlan, RunStoreError, hosted_storage_migration_plan,
+};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -89,6 +91,7 @@ fn router() -> Router {
             get(get_execution_work_order),
         )
         .route("/api/execution-lifecycle", get(execution_lifecycle))
+        .route("/api/storage-plan", get(storage_plan))
         .layer(middleware::from_fn(add_cors_headers))
         .with_state(AppState::open_default().expect("open pro run store"))
 }
@@ -227,6 +230,10 @@ async fn get_execution_work_order(
 
 async fn execution_lifecycle() -> Json<ExecutionLifecycleSpec> {
     Json(execution_lifecycle_spec())
+}
+
+async fn storage_plan() -> Json<HostedStorageMigrationPlan> {
+    Json(hosted_storage_migration_plan())
 }
 
 fn bad_request(error: String) -> ApiError {
@@ -414,6 +421,36 @@ mod tests {
             payload
                 .transition_guards
                 .contains(&"worker_reads_credentials_from_vault_only".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn storage_plan_exposes_hosted_migration_boundaries_without_connections() {
+        let payload = storage_plan().await.0;
+
+        assert!(!payload.connections_enabled);
+        assert!(
+            payload
+                .components
+                .iter()
+                .any(|component| component.id == "postgres_usage_ledger")
+        );
+        assert!(
+            payload
+                .components
+                .iter()
+                .any(|component| component.id == "redis_execution_queue")
+        );
+        assert!(
+            payload
+                .worker_ownership
+                .iter()
+                .any(|boundary| boundary.id == "routes_do_not_execute_jobs")
+        );
+        assert!(
+            payload
+                .non_goals
+                .contains(&"no_database_connection_in_this_slice".to_string())
         );
     }
 

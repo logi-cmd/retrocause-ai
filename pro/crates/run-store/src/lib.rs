@@ -34,6 +34,45 @@ pub enum RunStoreError {
     LockPoisoned,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct HostedStorageMigrationPlan {
+    pub mode: HostedStorageMode,
+    pub connections_enabled: bool,
+    pub components: Vec<HostedStorageComponent>,
+    pub tenant_boundaries: Vec<HostedStorageBoundary>,
+    pub worker_ownership: Vec<HostedStorageBoundary>,
+    pub migration_steps: Vec<HostedMigrationStep>,
+    pub non_goals: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum HostedStorageMode {
+    PlannedNoConnections,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct HostedStorageComponent {
+    pub id: &'static str,
+    pub target: &'static str,
+    pub owner: &'static str,
+    pub purpose: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct HostedStorageBoundary {
+    pub id: &'static str,
+    pub owner: &'static str,
+    pub rule: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct HostedMigrationStep {
+    pub id: &'static str,
+    pub status: &'static str,
+    pub exit_criteria: &'static str,
+}
+
 impl FileRunStore {
     pub fn open_default() -> Result<Self, RunStoreError> {
         Self::open(default_run_store_path())
@@ -130,6 +169,134 @@ pub fn default_run_store_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(DEFAULT_STORE_PATH))
 }
 
+pub fn hosted_storage_migration_plan() -> HostedStorageMigrationPlan {
+    HostedStorageMigrationPlan {
+        mode: HostedStorageMode::PlannedNoConnections,
+        connections_enabled: false,
+        components: vec![
+            HostedStorageComponent {
+                id: "postgres_runs",
+                target: "postgres",
+                owner: "api",
+                purpose: "Durably store run metadata, graph payload revisions, review status, and export metadata.",
+            },
+            HostedStorageComponent {
+                id: "postgres_evidence",
+                target: "postgres",
+                owner: "api",
+                purpose: "Store uploaded evidence, normalized provider evidence, citation anchors, and source policy metadata.",
+            },
+            HostedStorageComponent {
+                id: "postgres_usage_ledger",
+                target: "postgres",
+                owner: "billing_and_quota",
+                purpose: "Record provider/source usage, quota owner, billable units, cooldowns, and audit rows.",
+            },
+            HostedStorageComponent {
+                id: "redis_execution_queue",
+                target: "redis",
+                owner: "worker_pool",
+                purpose: "Hold claimable execution jobs, worker leases, retry timestamps, and cancellation markers.",
+            },
+            HostedStorageComponent {
+                id: "redis_cooldown_buckets",
+                target: "redis",
+                owner: "provider_router",
+                purpose: "Share short-lived provider cooldown and rate-limit state across API and workers.",
+            },
+            HostedStorageComponent {
+                id: "credential_vault",
+                target: "vault",
+                owner: "worker_pool",
+                purpose: "Resolve provider credentials inside worker-owned execution paths, never inside route handlers.",
+            },
+        ],
+        tenant_boundaries: vec![
+            HostedStorageBoundary {
+                id: "workspace_id_required",
+                owner: "api",
+                rule: "Every persisted run, evidence item, usage row, and queue job must carry a workspace id.",
+            },
+            HostedStorageBoundary {
+                id: "user_identity_required",
+                owner: "api",
+                rule: "Hosted writes require an authenticated actor id before persistence.",
+            },
+            HostedStorageBoundary {
+                id: "row_level_policy_required",
+                owner: "postgres",
+                rule: "Tenant-scoped tables must be protected by workspace-aware access policy.",
+            },
+            HostedStorageBoundary {
+                id: "audit_log_required",
+                owner: "api",
+                rule: "Credential, export, review-link, and billing-sensitive actions must write audit metadata.",
+            },
+        ],
+        worker_ownership: vec![
+            HostedStorageBoundary {
+                id: "worker_claims_redis_lease",
+                owner: "worker_pool",
+                rule: "Workers must claim jobs through leases before reading work orders.",
+            },
+            HostedStorageBoundary {
+                id: "worker_writes_status_events",
+                owner: "worker_pool",
+                rule: "Workers own execution status events after a lease is claimed.",
+            },
+            HostedStorageBoundary {
+                id: "routes_do_not_execute_jobs",
+                owner: "api",
+                rule: "Route handlers create jobs and read state; they do not call providers or mutate worker leases.",
+            },
+            HostedStorageBoundary {
+                id: "workers_read_vault_credentials",
+                owner: "worker_pool",
+                rule: "Only workers resolve provider credentials from a vault boundary.",
+            },
+            HostedStorageBoundary {
+                id: "partial_results_are_persisted",
+                owner: "worker_pool",
+                rule: "Workers preserve partial evidence and degraded-source state before retry or failure.",
+            },
+        ],
+        migration_steps: vec![
+            HostedMigrationStep {
+                id: "keep_local_alpha_store",
+                status: "current",
+                exit_criteria: "Local JSON and in-memory queue remain the Pro prototype boundary.",
+            },
+            HostedMigrationStep {
+                id: "define_postgres_schema",
+                status: "planned",
+                exit_criteria: "Runs, evidence, usage ledger, review links, and export metadata have tenant-scoped schemas.",
+            },
+            HostedMigrationStep {
+                id: "define_redis_queue",
+                status: "planned",
+                exit_criteria: "Queue keys, leases, retry timestamps, cancellation markers, and cooldown buckets are named.",
+            },
+            HostedMigrationStep {
+                id: "dual_write_non_provider_state",
+                status: "planned",
+                exit_criteria: "API can write run/job metadata to hosted stores without provider execution.",
+            },
+            HostedMigrationStep {
+                id: "enable_worker_lease_smoke",
+                status: "planned",
+                exit_criteria: "A worker can claim a dry-run job, write status events, and release the lease.",
+            },
+        ],
+        non_goals: vec![
+            "no_database_connection_in_this_slice".to_string(),
+            "no_redis_connection_in_this_slice".to_string(),
+            "no_schema_migration_in_this_slice".to_string(),
+            "no_provider_execution_in_this_slice".to_string(),
+            "no_credentials_or_billing_in_this_slice".to_string(),
+        ],
+    }
+}
+
 fn read_state(path: &Path) -> Result<StoredRunState, RunStoreError> {
     let raw = fs::read_to_string(path)?;
     let mut state = serde_json::from_str::<StoredRunState>(&raw)?;
@@ -178,7 +345,10 @@ impl From<serde_json::Error> for RunStoreError {
 
 #[cfg(test)]
 mod tests {
-    use super::{FileRunStore, RunStoreError, temp_store_path};
+    use super::{
+        FileRunStore, HostedStorageMode, RunStoreError, hosted_storage_migration_plan,
+        temp_store_path,
+    };
     use retrocause_pro_domain::CreateRunRequest;
     use std::fs;
 
@@ -239,6 +409,38 @@ mod tests {
         );
 
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn hosted_storage_plan_keeps_connections_disabled() {
+        let plan = hosted_storage_migration_plan();
+
+        assert_eq!(plan.mode, HostedStorageMode::PlannedNoConnections);
+        assert!(!plan.connections_enabled);
+        assert!(
+            plan.components
+                .iter()
+                .any(|component| component.id == "postgres_runs")
+        );
+        assert!(
+            plan.components
+                .iter()
+                .any(|component| component.id == "redis_execution_queue")
+        );
+        assert!(
+            plan.tenant_boundaries
+                .iter()
+                .any(|boundary| boundary.id == "workspace_id_required")
+        );
+        assert!(
+            plan.worker_ownership
+                .iter()
+                .any(|boundary| boundary.id == "workers_read_vault_credentials")
+        );
+        assert!(
+            plan.non_goals
+                .contains(&"no_database_connection_in_this_slice".to_string())
+        );
     }
 }
 

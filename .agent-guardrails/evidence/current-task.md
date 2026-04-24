@@ -1359,6 +1359,13 @@ This task makes queued preview jobs inspectable in the graph-first Pro web shell
   - Checked added Pro/doc diff lines for `api_key`, `secret`, `OPENROUTER`, `TAVILY`, `BRAVE`, and `sk-`.
   - Result: no matching added lines.
 
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `85/100 (pass-with-concerns)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the project state was synchronized to mark the storage-boundary contract as implemented and move the next Pro focus to adapter contract/dry-run work.
+  - Non-blocking warning: `pro/crates/run-store/src/lib.rs` changed as a state-related module. This was intentional because the run-store crate owns the current local store boundary and now owns the no-connection hosted storage migration contract.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET /api/storage-plan`; it does not change OSS APIs, open database/Redis connections, accept credentials, or execute provider calls.
+
 ### Risk / Tradeoff Notes
 
 - Security: no auth, secrets, credential fields, provider calls, billing hooks, worker execution, or sensitive-data storage were added. The UI exposes safeguards from the existing work-order payload so the no-execution boundary is visible.
@@ -1455,3 +1462,81 @@ This task adds the first non-executing hosted worker lifecycle/failure-state con
 - The lifecycle contract is a planned taxonomy, not an executable worker state machine.
 - There is still no durable queue, tenant/auth enforcement, billing/quota ledger, credential vault integration, live provider adapter, retry scheduler, or persisted worker lease.
 - Future hosted Pro still needs the local JSON/in-memory queue boundary migrated to Postgres plus Redis before live provider execution is safe.
+
+## Pro Product Core Slice 14 - Hosted Storage Boundary Contract
+
+### Scope
+
+This task adds a no-connection hosted storage migration contract for the Pro Rust product core. The run-store crate now owns the storage migration vocabulary, the API exposes it through a keyless read endpoint, and the graph-first web shell renders a compact storage-boundary panel. No database connections, Redis connections, migrations, provider credentials, live provider calls, auth, billing, real worker process, OSS runtime changes, dependency changes, or package publishing were added.
+
+### Files Updated
+
+- `pro/crates/run-store/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `HostedStorageMigrationPlan`, `HostedStorageMode`, `HostedStorageComponent`, `HostedStorageBoundary`, and `HostedMigrationStep`.
+- Added `hosted_storage_migration_plan()` with planned Postgres components for runs, evidence, and usage ledger.
+- Added planned Redis components for execution queue and cooldown buckets.
+- Added tenant boundaries for workspace id, actor identity, row-level policy, and audit metadata.
+- Added worker-ownership boundaries for Redis leases, status events, no route-handler execution, vault credential reads, and partial-result persistence.
+- Added `GET /api/storage-plan`.
+- Added a Pro web storage-boundary panel that renders target stores and connection-disabled state.
+- Updated Pro docs and project state so the next focus moves to hosted provider adapter contract and dry-run shape.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: task contract refreshed for hosted storage migration contract.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `16 passed`.
+  - Domain tests: `8 passed`.
+  - Provider-routing tests: `4 passed`.
+  - Queue tests: `6 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API storage-plan smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8809` with a temporary local run-store path.
+  - Called `GET /api/storage-plan`.
+  - Result: passed; `connections_enabled=false`, `postgres_runs` exists, `redis_execution_queue` exists, and worker vault ownership exists.
+
+- Pro browser storage-boundary smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8809` and `retrocause-pro-web.exe` on `127.0.0.1:3029`.
+  - Aborted external font requests in Playwright so the inline script could run without network font blocking.
+  - Verified the storage panel renders `Hosted storage boundary`, `connections off`, `postgres_runs`, and `redis_execution_queue`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Checked added Pro/doc diff lines for `api_key`, `secret`, `OPENROUTER`, `TAVILY`, `BRAVE`, and `sk-`.
+  - Result: no matching added lines.
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, provider credential fields, database connections, Redis connections, billing hooks, real workers, or sensitive-data storage were added. The new contract explicitly keeps future route handlers away from provider execution and credential reads.
+- Dependencies: no new crates, npm packages, lockfile changes, or version upgrades were introduced.
+- Performance: the storage-plan endpoint returns a static, small JSON contract and the browser renders a small subset of components/boundaries. It has no database, Redis, or provider load impact.
+- Understanding: the tradeoff is naming hosted persistence boundaries before implementing storage. This keeps future Postgres/Redis work honest about tenant scoping, worker leases, credentials, and partial-result persistence.
+- Continuity: reused the existing run-store crate as the storage-boundary owner, Axum JSON route style, `fetchJson`, and the execution-console card styling. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- The storage plan is a contract, not a live hosted data layer.
+- There is still no Postgres schema, Redis queue, tenant/auth enforcement, billing/quota ledger, credential vault integration, live provider adapter, retry scheduler, or persisted worker lease.
+- Future hosted Pro needs a dry-run adapter shape before any live provider execution is safe.

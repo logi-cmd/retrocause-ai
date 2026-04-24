@@ -184,6 +184,15 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "planned" }
                                 }
                             }
+                            div id="storage-boundary-panel" class="storage-panel" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "Hosted storage plan" }
+                                        p { "Store boundaries load from the Pro API; no database connections are open." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "planned" }
+                                }
+                            }
                         }
 
                         aside class="evidence-dock" aria-label="Evidence anchors" {
@@ -749,6 +758,56 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderStoragePlan(plan) {
+    const panel = byId("storage-boundary-panel");
+    if (!panel) return;
+    if (!plan) {
+      panel.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>Hosted storage plan</strong>
+            <p>Store boundaries load from the Pro API; no database connections are open.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">planned</span>
+        </article>
+      `;
+      return;
+    }
+
+    const components = (plan.components || []).slice(0, 5).map((component) => `
+      <li>
+        <strong>${escapeHtml(component.id)}</strong>
+        <span>${escapeHtml(component.target)} / ${escapeHtml(component.owner)}</span>
+        <small>${escapeHtml(component.purpose)}</small>
+      </li>
+    `).join("");
+    const boundaries = [...(plan.tenant_boundaries || []).slice(0, 2), ...(plan.worker_ownership || []).slice(0, 2)].map((boundary) => `
+      <li>
+        <strong>${escapeHtml(boundary.id)}</strong>
+        <span>${escapeHtml(boundary.owner)}</span>
+        <small>${escapeHtml(boundary.rule)}</small>
+      </li>
+    `).join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card storage-card">
+        <div class="work-order-header">
+          <strong>Hosted storage boundary</strong>
+          <span class="quota-state quota-state--deferred">${plan.connections_enabled ? "connections on" : "connections off"}</span>
+          <p>${escapeHtml(readable(plan.mode || "planned_no_connections"))}</p>
+        </div>
+        <section>
+          <p class="work-order-label">Target stores</p>
+          <ol class="work-order-list">${components || "<li>No storage components returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Boundaries</p>
+          <ul class="work-order-list">${boundaries || "<li>No boundaries returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   async function refreshExecutionJobs() {
     const jobs = await fetchJson("/api/execution-jobs");
     renderExecutionJobs(jobs);
@@ -850,6 +909,7 @@ fn client_script() -> &'static str {
   renderExecutionJobs([]);
   renderWorkOrder(null);
   renderExecutionLifecycle(null);
+  renderStoragePlan(null);
   fetchJson("/api/provider-status")
     .then(renderProviderStatus)
     .catch(() => {
@@ -859,6 +919,11 @@ fn client_script() -> &'static str {
     .then(renderExecutionLifecycle)
     .catch(() => {
       renderExecutionLifecycle(null);
+    });
+  fetchJson("/api/storage-plan")
+    .then(renderStoragePlan)
+    .catch(() => {
+      renderStoragePlan(null);
     });
   refreshExecutionJobs().catch(() => {
     setText("execution-queue-status", `Queue API offline: start retrocause-pro-api at ${apiBase}`);
@@ -1419,7 +1484,8 @@ p {
 }
 
 #execution-work-order-detail,
-#execution-lifecycle-panel {
+#execution-lifecycle-panel,
+#storage-boundary-panel {
   display: grid;
   gap: 0.65rem;
 }
@@ -1439,6 +1505,10 @@ p {
 
 .lifecycle-card {
   background: color-mix(in oklch, var(--panel-hard) 68%, var(--accent));
+}
+
+.storage-card {
+  background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.47 0.08 250));
 }
 
 .work-order-header {
@@ -1729,12 +1799,15 @@ mod tests {
         assert!(page.contains("execution-job-list"));
         assert!(page.contains("execution-work-order-detail"));
         assert!(page.contains("execution-lifecycle-panel"));
+        assert!(page.contains("storage-boundary-panel"));
         assert!(page.contains("/api/execution-jobs"));
         assert!(page.contains("/work-order"));
         assert!(page.contains("/api/execution-lifecycle"));
+        assert!(page.contains("/api/storage-plan"));
         assert!(page.contains("data-work-order-job-id"));
         assert!(page.contains("function renderWorkOrder"));
         assert!(page.contains("function renderExecutionLifecycle"));
+        assert!(page.contains("function renderStoragePlan"));
         assert!(page.contains("queue-preview-button"));
         assert!(page.contains("fetch(`${apiBase}${path}`"));
         assert!(page.contains("POST"));

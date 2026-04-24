@@ -90,6 +90,8 @@ Current behavior:
 
 This is intentionally an alpha local store. It is not encrypted storage, not a multi-tenant database, not a credential vault, and not the final hosted Pro persistence layer. The value is the boundary: future Postgres-backed storage should replace this crate's implementation without forcing the API routes to own storage details again.
 
+`crates/run-store` also carries a no-connection hosted storage migration plan. It names the intended Postgres run/evidence/usage tables, Redis execution/cooldown queues, tenant and actor boundaries, row-level policy expectations, audit metadata, and worker-owned lease/credential responsibilities before any hosted store is connected.
+
 ## Provider routing boundary
 
 `crates/provider-routing` is the first Pro provider/source routing boundary. It currently produces a route preview plan from the static keyless provider-status payload.
@@ -139,12 +141,14 @@ Initial responsibility:
 - `GET /api/execution-jobs/{job_id}`
 - `GET /api/execution-jobs/{job_id}/work-order`
 - `GET /api/execution-lifecycle`
+- `GET /api/storage-plan`
 - minimal local CORS headers for the separate Pro web port
 - local JSON run storage through `crates/run-store`, shared by list/detail/graph reads and surviving API restarts
+- no-connection hosted storage migration plan through `crates/run-store`
 - local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
 - future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The provider-status, provider-route preview, and execution-job endpoints are static/keyless in this slice: they model ownership, cooldown, routing semantics, and queue shape without exposing credential fields or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The provider-status, provider-route preview, execution-job, lifecycle, and storage-plan endpoints are static/keyless in this slice: they model ownership, cooldown, routing semantics, queue shape, worker states, and storage boundaries without exposing credential fields, opening database/Redis connections, or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -158,6 +162,7 @@ Initial responsibility:
 - create and list preview-only execution jobs through the local execution-job API
 - inspect queued job work orders through `GET /api/execution-jobs/{job_id}/work-order`, rendering route steps, routing warnings, selected lane, and execution safeguards while execution stays disabled
 - render the hosted-worker lifecycle/failure taxonomy from `GET /api/execution-lifecycle` so future execution states are visible before live adapters exist
+- render the hosted storage migration boundaries from `GET /api/storage-plan` so Postgres/Redis/tenant/worker ownership is visible before connections exist
 - keep a browser-local selected-node state and graph inspector for evidence/challenge links, including focused evidence/challenge review items
 - establish layout, palette, and information hierarchy for the knowledge-graph experience
 
@@ -288,3 +293,11 @@ The worker-lifecycle contract slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `GET /api/execution-lifecycle` proving the contract stays non-executing, includes worker/provider failure states, and keeps credential access behind future vault-owned workers
 - a browser smoke that starts the Pro API and web shell and verifies that the lifecycle panel renders hosted worker stages and failure states without enabling execution
+
+The storage-boundary contract slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `GET /api/storage-plan` proving the plan keeps connections disabled while naming Postgres, Redis, tenant, and worker-ownership boundaries
+- a browser smoke that starts the Pro API and web shell and verifies that the storage-boundary panel renders target stores and connection-disabled state

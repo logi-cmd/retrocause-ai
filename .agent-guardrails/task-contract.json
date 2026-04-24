@@ -1,10 +1,10 @@
 {
   "schemaVersion": 3,
-  "task": "Add a non-executing hosted worker lifecycle and failure-state contract for the Pro Rust product core: define lifecycle/failure state taxonomy in the queue crate, expose it through a keyless API endpoint, render a compact lifecycle panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, real workers, persistence, OSS runtime changes, or package dependencies.",
+  "task": "Add a non-executing hosted storage migration contract for the Pro Rust product core: define the Postgres/Redis/tenant/auth/worker-ownership migration plan in existing Rust crates, expose it through a keyless API endpoint, render a compact storage-boundary panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add database connections, Redis connections, migrations, provider credentials, live provider calls, auth, billing, real workers, OSS runtime changes, or package dependencies.",
   "preset": "generic",
-  "createdAt": "2026-04-24T11:48:05.630Z",
+  "createdAt": "2026-04-24T12:01:26.085Z",
   "allowedPaths": [
-    "pro/crates/queue/",
+    "pro/crates/run-store/",
     "pro/apps/api/",
     "pro/apps/web/",
     "docs/PROJECT_STATE.md",
@@ -66,10 +66,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "5d8c7c90-402c-4f17-8f11-b5e13f29584f",
-    "createdAt": "2026-04-24T11:48:05.629Z",
+    "sessionId": "1038dbb3-fb8a-426d-b764-d3a7e899d15a",
+    "createdAt": "2026-04-24T12:01:26.085Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add a non-executing hosted worker lifecycle and failure-state contract for the Pro Rust product core: define lifecycle/failure state taxonomy in the queue crate, expose it through a keyless API endpoint, render a compact lifecycle panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, real workers, persistence, OSS runtime changes, or package dependencies.",
+    "taskRequest": "Add a non-executing hosted storage migration contract for the Pro Rust product core: define the Postgres/Redis/tenant/auth/worker-ownership migration plan in existing Rust crates, expose it through a keyless API endpoint, render a compact storage-boundary panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add database connections, Redis connections, migrations, provider credentials, live provider calls, auth, billing, real workers, OSS runtime changes, or package dependencies.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],
