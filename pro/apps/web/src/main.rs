@@ -98,6 +98,15 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "derived" }
                                 }
                             }
+                            div id="review-comparison-panel" class="review-comparison-panel" {
+                                article class="review-card review-card--empty" {
+                                    div {
+                                        strong { "Review comparison" }
+                                        p { "Evidence and challenge deltas load from the Pro API; no historical store is queried yet." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "preview" }
+                                }
+                            }
                         }
 
                         div class="graph-viewport" {
@@ -788,6 +797,67 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderReviewComparison(comparison) {
+    const panel = byId("review-comparison-panel");
+    if (!panel) return;
+    if (!comparison) {
+      panel.innerHTML = `
+        <article class="review-card review-card--empty">
+          <div>
+            <strong>Review comparison</strong>
+            <p>Evidence and challenge deltas load from the Pro API; no historical store is queried yet.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">preview</span>
+        </article>
+      `;
+      return;
+    }
+
+    const evidenceItems = (comparison.evidence_deltas || []).slice(0, 4).map((delta) => `
+      <li>
+        <strong>${escapeHtml(delta.title)}</strong>
+        <span>${escapeHtml(readable(delta.delta))} / ${escapeHtml(readable(delta.stance))} / ${escapeHtml(readable(delta.freshness))}</span>
+        <small>${escapeHtml(delta.source)}: ${escapeHtml(delta.note)}</small>
+      </li>
+    `).join("");
+    const challengeItems = (comparison.challenge_deltas || []).slice(0, 4).map((delta) => `
+      <li>
+        <strong>${escapeHtml(delta.title)}</strong>
+        <span>${escapeHtml(readable(delta.delta))} / ${escapeHtml(readable(delta.status))}</span>
+        <small>${escapeHtml(delta.note)}</small>
+      </li>
+    `).join("");
+    const evidenceSummary = comparison.evidence_summary || {};
+    const challengeSummary = comparison.challenge_summary || {};
+    const safeguards = (comparison.safeguards || [])
+      .slice(0, 2)
+      .map((guard) => `<li>${escapeHtml(guard)}</li>`)
+      .join("");
+
+    panel.innerHTML = `
+      <article class="review-card">
+        <div class="work-order-header">
+          <strong>Review comparison</strong>
+          <span class="quota-state quota-state--deferred">${escapeHtml(readable(comparison.mode || "derived_previous_checkpoint"))}</span>
+          <p>${escapeHtml(comparison.run_id || "run")} vs ${escapeHtml(comparison.baseline_run_id || "baseline")}</p>
+          <small>Evidence +${evidenceSummary.added || 0} / ~${evidenceSummary.changed || 0} / -${evidenceSummary.removed || 0}; challenges +${challengeSummary.added || 0} / ~${challengeSummary.changed || 0} / -${challengeSummary.removed || 0}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Evidence deltas</p>
+          <ol class="work-order-list">${evidenceItems || "<li>No evidence deltas returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Challenge deltas</p>
+          <ol class="work-order-list">${challengeItems || "<li>No challenge deltas returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Comparison safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>Comparison is preview-only.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   function renderProviderStatus(snapshot) {
     providerStatusLoaded = Boolean(snapshot?.entries?.length);
     setText("provider-status-mode", readable(snapshot.mode || "local_alpha_no_credentials"));
@@ -1215,14 +1285,16 @@ fn client_script() -> &'static str {
 
   async function loadRun(runId) {
     if (!runId) return;
-    const [run, graphPayload, eventTimeline] = await Promise.all([
+    const [run, graphPayload, eventTimeline, reviewComparison] = await Promise.all([
       fetchJson(`/api/runs/${encodeURIComponent(runId)}`),
       fetchJson(`/api/runs/${encodeURIComponent(runId)}/graph`),
       fetchJson(`/api/runs/${encodeURIComponent(runId)}/events`),
+      fetchJson(`/api/runs/${encodeURIComponent(runId)}/review-comparison`),
     ]);
     run.graph = graphPayload.graph;
     renderRun(run);
     renderRunEvents(eventTimeline);
+    renderReviewComparison(reviewComparison);
     await refreshRuns(run.id);
     setStatus(`Loaded ${run.id}`);
   }
@@ -1338,6 +1410,7 @@ fn client_script() -> &'static str {
   renderRun(seed);
   renderWorkspaceAccess(null);
   renderRunEvents(null);
+  renderReviewComparison(null);
   renderProviderStatus(providerSeed);
   renderProviderAdapterContract(null);
   renderProviderAdapterDryRun(null);
@@ -1356,6 +1429,11 @@ fn client_script() -> &'static str {
     .then(renderRunEvents)
     .catch(() => {
       renderRunEvents(null);
+    });
+  fetchJson(`/api/runs/${encodeURIComponent(seed.id)}/review-comparison`)
+    .then(renderReviewComparison)
+    .catch(() => {
+      renderReviewComparison(null);
     });
   fetchJson("/api/provider-status")
     .then(renderProviderStatus)
@@ -1966,6 +2044,11 @@ p {
   gap: 0.65rem;
 }
 
+#review-comparison-panel {
+  display: grid;
+  gap: 0.65rem;
+}
+
 #execution-job-list {
   display: grid;
   gap: 0.65rem;
@@ -2005,6 +2088,14 @@ p {
   padding: 0.72rem;
   border-radius: 8px;
   background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.58 0.07 110));
+}
+
+.review-card {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.72rem;
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.58 0.06 250));
 }
 
 .lifecycle-card {
@@ -2315,6 +2406,10 @@ mod tests {
         assert!(page.contains("/api/runs/${encodeURIComponent(runId)}/events"));
         assert!(page.contains("function renderRunEvents"));
         assert!(page.contains("Run event timeline"));
+        assert!(page.contains("review-comparison-panel"));
+        assert!(page.contains("/api/runs/${encodeURIComponent(runId)}/review-comparison"));
+        assert!(page.contains("function renderReviewComparison"));
+        assert!(page.contains("Review comparison"));
         assert!(page.contains("provider-status-list"));
         assert!(page.contains("provider-adapter-panel"));
         assert!(page.contains("provider-adapter-dry-run-button"));

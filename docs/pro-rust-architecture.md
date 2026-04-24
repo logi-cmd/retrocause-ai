@@ -71,6 +71,7 @@ The first shared crate now defines:
 - provider/search quota ownership entries
 - workspace access context entries
 - run event timeline and status vocabulary entries
+- review-comparison payloads for evidence and challenge deltas
 - source cooldown state
 - verification steps
 - an owned `CreateRunRequest` builder for process-local alpha run creation
@@ -81,6 +82,8 @@ This keeps the API and web kickoff honest: they render the same shape instead of
 The workspace access context is deliberately non-enforcing in this slice. It names the demo workspace, preview actor, preview-allowed actions, actions that require real auth later, and safeguards such as no sessions, no cookie issuance, no token validation, no credential reads, and no billing/quota mutation. It is an inspectable contract, not a login system.
 
 The run event timeline is deliberately non-durable in this slice. It is generated from the current `ProRun` record and names event/status vocabulary before an event store exists. It does not open an event-store connection, run workers, call providers, enforce auth, or mutate run state.
+
+The review comparison payload is also deliberately derived in this slice. It compares the current run to a generated previous-checkpoint preview and reports evidence/challenge deltas so the graph-review workflow has a concrete shape before durable run history, tenant auth, or cross-run selectors exist.
 
 ## Run store boundary
 
@@ -142,6 +145,7 @@ Initial responsibility:
 - `GET /api/runs/{run_id}`
 - `GET /api/runs/{run_id}/graph`
 - `GET /api/runs/{run_id}/events`
+- `GET /api/runs/{run_id}/review-comparison`
 - `GET /api/workspace/access-context`
 - `GET /api/provider-status`
 - `GET /api/provider-adapter-contract`
@@ -162,7 +166,7 @@ Initial responsibility:
 - local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
 - future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The workspace access context, run-events, provider-status, provider-route preview, execution-job, lifecycle, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, run status vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, and storage boundaries without exposing credential fields, opening event-store/database/Redis connections, enforcing auth, or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The workspace access context, run-events, review-comparison, provider-status, provider-route preview, execution-job, lifecycle, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, run status vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, and storage boundaries without exposing credential fields, opening event-store/database/Redis connections, enforcing auth, or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -174,6 +178,7 @@ Initial responsibility:
 - reload run summaries, run detail, and graph payloads from the Pro API
 - render the non-enforcing workspace/auth context from `GET /api/workspace/access-context`
 - render a non-durable run event timeline from `GET /api/runs/{run_id}/events`
+- render a derived review-comparison panel from `GET /api/runs/{run_id}/review-comparison`, showing evidence/challenge deltas and preview safeguards
 - show provider/search quota ownership, credential policy, and cooldown status through the local provider-status payload
 - render the dry provider-adapter request/result/degradation contract from `GET /api/provider-adapter-contract`
 - run a keyless provider-adapter dry-run through `POST /api/provider-adapter/dry-run`, showing zero billable units, evidence-preview count, degradation states, and calls-disabled state
@@ -226,6 +231,8 @@ The current `GET /api/workspace/access-context` path exposes a static local prev
 
 The current `GET /api/runs/{run_id}/events` path derives a non-durable timeline from the run record. It is useful for UI and API vocabulary, but it is not an audit log, not a durable event stream, and not a worker status queue. Future hosted Pro should replace or supplement it with event-store rows once tenant/auth, worker leases, and storage boundaries exist.
 
+The current `GET /api/runs/{run_id}/review-comparison` path derives a previous-checkpoint preview from the requested run and reports evidence/challenge deltas. It is useful for shaping graph-review UI, but it is not a durable comparison against another tenant-scoped run. Future hosted Pro should replace the derived baseline with explicit run selection after auth and durable history exist.
+
 The current `GET /api/provider-adapter/candidates` and `POST /api/provider-adapter/gate-check` paths register and inspect a future OfoxAI model adapter candidate. They do not execute the candidate. Even if preview gates are marked observed, the gate check returns `execution_allowed=false` until real auth enforcement, credential vault access, quota ledger enforcement, and worker execution are implemented.
 
 ## Knowledge-graph UI direction
@@ -238,7 +245,7 @@ The Pro UI should feel like a graph command room, not a generic SaaS dashboard a
 - visible source states and challenge status
 - no gradient-heavy AI dashboard styling
 
-The kickoff web shell encodes that direction with a graph workspace that now supports browser-local node selection, an inspector for the active node's evidence/challenge links, focused evidence/challenge review items, provider quota status, and preview-only execution-job status. Advanced interaction such as persisted layout state, graph editing, multi-select, and review workflows remains later work.
+The kickoff web shell encodes that direction with a graph workspace that now supports browser-local node selection, an inspector for the active node's evidence/challenge links, focused evidence/challenge review items, provider quota status, derived review comparison, and preview-only execution-job status. Advanced interaction such as persisted layout state, graph editing, multi-select, and durable cross-run review workflows remains later work.
 
 The current web shell is still intentionally lightweight: server-rendered HTML plus a small browser script for local API calls and DOM refresh. It is enough to prove the Pro run loop without committing to the eventual interactive graph client stack.
 
@@ -367,3 +374,11 @@ The gated live-adapter candidate slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `GET /api/provider-adapter/candidates` and `POST /api/provider-adapter/gate-check` proving the OfoxAI candidate is registered but execution remains denied with explicit auth, vault, quota, and worker blockers
 - a browser smoke that starts the Pro API and web shell, runs the adapter dry-run, clicks `Check live gates`, and verifies that the live gate panel renders the OfoxAI candidate, denied execution, and blocking reasons
+
+The graph-review comparison slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `GET /api/runs/{run_id}/review-comparison` proving the comparison is derived, returns evidence/challenge added deltas, and keeps provider/credential access disabled
+- a browser smoke that starts the Pro API and web shell and verifies that the review-comparison panel renders derived checkpoint mode, evidence/challenge delta counts, and comparison safeguards

@@ -1,10 +1,10 @@
 {
   "schemaVersion": 3,
-  "task": "Add the first gated live-provider adapter candidate for the Pro Rust product core: define candidate and gate-check payloads in the provider-routing crate, expose keyless API endpoints that report the candidate and denied gate state, render a compact gate-check panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add provider credentials, credential vaults, live provider/search calls, auth enforcement, billing, database/Redis connections, workers, OSS runtime changes, or package dependencies.",
+  "task": "Add a graph-review comparison preview for the Pro Rust product core: define shared review comparison payloads for evidence and challenge deltas across two runs, expose a keyless per-run comparison API endpoint, render a compact review-comparison panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add live provider calls, auth enforcement, billing, database/Redis/event-store connections, workers, OSS runtime changes, or package dependencies.",
   "preset": "generic",
-  "createdAt": "2026-04-24T13:28:14.857Z",
+  "createdAt": "2026-04-24T13:40:42.996Z",
   "allowedPaths": [
-    "pro/crates/provider-routing/",
+    "pro/crates/domain/",
     "pro/apps/api/",
     "pro/apps/web/",
     "docs/PROJECT_STATE.md",
@@ -66,10 +66,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "2eaca9dd-8e4a-44f2-aa3d-2c516e2edbd6",
-    "createdAt": "2026-04-24T13:28:14.857Z",
+    "sessionId": "890bd723-53a3-4ee6-b36d-109d1e70d251",
+    "createdAt": "2026-04-24T13:40:42.995Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add the first gated live-provider adapter candidate for the Pro Rust product core: define candidate and gate-check payloads in the provider-routing crate, expose keyless API endpoints that report the candidate and denied gate state, render a compact gate-check panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add provider credentials, credential vaults, live provider/search calls, auth enforcement, billing, database/Redis connections, workers, OSS runtime changes, or package dependencies.",
+    "taskRequest": "Add a graph-review comparison preview for the Pro Rust product core: define shared review comparison payloads for evidence and challenge deltas across two runs, expose a keyless per-run comparison API endpoint, render a compact review-comparison panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add live provider calls, auth enforcement, billing, database/Redis/event-store connections, workers, OSS runtime changes, or package dependencies.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],

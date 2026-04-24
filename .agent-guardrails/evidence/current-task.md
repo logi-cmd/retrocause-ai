@@ -1943,3 +1943,83 @@ This task adds the first gated live-provider adapter candidate for the Pro Rust 
 - The OfoxAI adapter candidate is not a live adapter.
 - The gate check is preview-only and should not be treated as real security, quota enforcement, provider connectivity, or worker readiness.
 - Future hosted Pro still needs tenant/auth enforcement, credential vault integration, a quota ledger, worker execution, durable event storage, retry scheduling, and provider SDK integration before any live calls are safe.
+
+## Pro Product Core Slice 20 - Graph Review Comparison Preview
+
+### Scope
+
+This task adds a keyless graph-review comparison preview for the Pro Rust product core. The shared domain crate now defines evidence/challenge delta payloads, the API exposes a per-run comparison endpoint, and the graph-first web shell renders a compact review-comparison panel. No live provider calls, auth enforcement, billing, database/Redis/event-store connections, workers, OSS runtime changes, dependency changes, or package publishing were added.
+
+### Files Updated
+
+- `pro/crates/domain/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `RunReviewComparison`, evidence/challenge delta payloads, delta summaries, and comparison/delta enums.
+- Added `run_review_comparison()` so the current run can be compared against a derived previous-checkpoint preview without querying historical storage.
+- Added `GET /api/runs/{run_id}/review-comparison`.
+- Added a Pro web review-comparison panel that renders derived checkpoint mode, evidence/challenge delta counts, visible delta items, and comparison safeguards.
+- Updated Pro project state and architecture docs so maintainers can see that this is a derived preview, not a durable cross-run comparison system.
+
+### Commands Run
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all`
+  - Result: passed.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed after formatting.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `23 passed`.
+  - Domain tests: `13 passed`.
+  - Provider-routing tests: `10 passed`.
+  - Queue tests: `6 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API review-comparison smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8819` with a temporary local run-store path.
+  - Called `GET /api/runs/run_semiconductor_controls_001/review-comparison`.
+  - Result: passed; mode was `derived_previous_checkpoint`, baseline was `run_semiconductor_controls_001_previous_checkpoint`, evidence added count was `1`, challenge added count was `1`, and safeguard `no_provider_calls_or_credential_reads` was present.
+
+- Pro browser review-comparison smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8822` and `retrocause-pro-web.exe` on `127.0.0.1:3037`.
+  - Aborted external font requests in Playwright so inline scripts could run without network font blocking.
+  - Result: passed; the review-comparison panel rendered `Review comparison`, `derived previous checkpoint`, `Evidence +1`, `challenges +1`, `comparison_preview_derived_from_current_run`, and `no_historical_run_store_query_in_this_slice`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - A key-shaped scan for common provider-token prefixes and API-key assignment patterns found no actual key-shaped tokens in the non-doc diff.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the project state was synchronized to mark the review-comparison preview as implemented and move the next Pro focus to durable/auth-backed cross-run comparison.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET /api/runs/{run_id}/review-comparison`; it does not change OSS APIs, enforce auth, accept credentials, mutate billing/quota, or execute provider calls.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice does not authenticate or authorize requests, and it does not pretend to protect cross-run access. The comparison is derived from the requested local run and does not read provider credentials, accept secrets, call providers, mutate billing/quota, or query another tenant's history.
+- Dependencies: no new crates, npm packages, lockfile changes, or version upgrades were introduced.
+- Performance: the comparison is deterministic and in-process. It builds small maps over one run's evidence and challenge arrays, adds no provider/database/Redis/event-store/worker load, and should stay negligible for the current local Pro payload size.
+- Understanding: the deliberate tradeoff is shaping the review-delta UI before durable history exists. The baseline is a generated previous-checkpoint preview, so maintainers should not treat this as a true historical diff.
+- Continuity: reused the shared domain crate, existing `ProRun` evidence/challenge types, Axum per-run endpoint style, web `fetchJson` helper, and compact card styling. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- The comparison is not backed by durable run history and does not yet let users select another real run.
+- The endpoint is keyless and non-enforcing; future hosted Pro must add real tenant/auth boundaries before exposing true cross-run comparisons.
+- Future hosted Pro still needs tenant auth, durable run history, credential vault integration, quota ledger enforcement, worker execution, event storage, retry scheduling, and provider SDK integration before live adapter work is safe.

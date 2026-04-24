@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProRun {
@@ -151,6 +151,48 @@ pub struct RunEventTimeline {
     pub events: Vec<RunEvent>,
     pub status_vocabulary: Vec<RunStatusVocabularyEntry>,
     pub safeguards: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RunReviewComparison {
+    pub run_id: String,
+    pub baseline_run_id: String,
+    pub workspace_id: String,
+    pub mode: ReviewComparisonMode,
+    pub generated_at: String,
+    pub evidence_summary: ReviewDeltaSummary,
+    pub challenge_summary: ReviewDeltaSummary,
+    pub evidence_deltas: Vec<ReviewEvidenceDelta>,
+    pub challenge_deltas: Vec<ReviewChallengeDelta>,
+    pub safeguards: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReviewDeltaSummary {
+    pub added: usize,
+    pub changed: usize,
+    pub removed: usize,
+    pub unchanged: usize,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReviewEvidenceDelta {
+    pub evidence_id: String,
+    pub title: String,
+    pub source: String,
+    pub delta: ReviewDeltaKind,
+    pub stance: EvidenceStance,
+    pub freshness: EvidenceFreshness,
+    pub note: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReviewChallengeDelta {
+    pub challenge_id: String,
+    pub title: String,
+    pub delta: ReviewDeltaKind,
+    pub status: ChallengeStatus,
+    pub note: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -362,6 +404,21 @@ pub enum RunEventKind {
 pub enum RunEventSource {
     DerivedFromRunRecord,
     FutureDurableEventStore,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewComparisonMode {
+    DerivedPreviousCheckpoint,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewDeltaKind {
+    Added,
+    Changed,
+    Removed,
+    Unchanged,
 }
 
 pub fn create_run_from_request(sequence: u64, request: CreateRunRequest) -> Result<ProRun, String> {
@@ -1137,6 +1194,34 @@ pub fn run_status_vocabulary() -> Vec<RunStatusVocabularyEntry> {
     ]
 }
 
+pub fn run_review_comparison(run: &ProRun) -> RunReviewComparison {
+    let baseline = review_baseline_for_run(run);
+    run_review_comparison_between(run, &baseline)
+}
+
+pub fn run_review_comparison_between(run: &ProRun, baseline: &ProRun) -> RunReviewComparison {
+    let evidence_deltas = evidence_deltas(run, baseline);
+    let challenge_deltas = challenge_deltas(run, baseline);
+
+    RunReviewComparison {
+        run_id: run.id.clone(),
+        baseline_run_id: baseline.id.clone(),
+        workspace_id: run.workspace_id.clone(),
+        mode: ReviewComparisonMode::DerivedPreviousCheckpoint,
+        generated_at: format!("derived-review-comparison:{}", run.updated_at),
+        evidence_summary: summarize_evidence_deltas(&evidence_deltas),
+        challenge_summary: summarize_challenge_deltas(&challenge_deltas),
+        evidence_deltas,
+        challenge_deltas,
+        safeguards: vec![
+            s("comparison_preview_derived_from_current_run"),
+            s("no_historical_run_store_query_in_this_slice"),
+            s("no_cross_workspace_access_or_auth_enforcement"),
+            s("no_provider_calls_or_credential_reads"),
+        ],
+    }
+}
+
 pub fn sample_run_by_id(run_id: &str) -> Option<ProRun> {
     let run = sample_run();
     (run.id == run_id).then_some(run)
@@ -1259,6 +1344,191 @@ fn generated_title(question: &str) -> String {
     }
 }
 
+fn review_baseline_for_run(run: &ProRun) -> ProRun {
+    let mut baseline = run.clone();
+    baseline.id = format!("{}_previous_checkpoint", run.id);
+    baseline.updated_at = format!("derived-before:{}", run.updated_at);
+    baseline.status = match run.status {
+        RunStatus::ReadyForReview => RunStatus::NeedsFollowup,
+        RunStatus::NeedsFollowup => RunStatus::PartialLive,
+        status => status,
+    };
+    baseline.evidence.pop();
+    baseline.challenge_checks.pop();
+    baseline
+}
+
+fn evidence_deltas(run: &ProRun, baseline: &ProRun) -> Vec<ReviewEvidenceDelta> {
+    let baseline_by_id = baseline
+        .evidence
+        .iter()
+        .map(|evidence| (evidence.id.as_str(), evidence))
+        .collect::<HashMap<_, _>>();
+    let current_by_id = run
+        .evidence
+        .iter()
+        .map(|evidence| (evidence.id.as_str(), evidence))
+        .collect::<HashMap<_, _>>();
+
+    let mut deltas = run
+        .evidence
+        .iter()
+        .map(|evidence| match baseline_by_id.get(evidence.id.as_str()) {
+            Some(previous) if same_evidence(evidence, previous) => evidence_delta(
+                evidence,
+                ReviewDeltaKind::Unchanged,
+                "Already present in the derived previous checkpoint.",
+            ),
+            Some(_) => evidence_delta(
+                evidence,
+                ReviewDeltaKind::Changed,
+                "Evidence metadata or excerpt changed since the derived previous checkpoint.",
+            ),
+            None => evidence_delta(
+                evidence,
+                ReviewDeltaKind::Added,
+                "New evidence anchor visible in the current run preview.",
+            ),
+        })
+        .collect::<Vec<_>>();
+
+    deltas.extend(
+        baseline
+            .evidence
+            .iter()
+            .filter(|evidence| !current_by_id.contains_key(evidence.id.as_str()))
+            .map(|evidence| {
+                evidence_delta(
+                    evidence,
+                    ReviewDeltaKind::Removed,
+                    "Evidence anchor existed in the derived previous checkpoint but is absent now.",
+                )
+            }),
+    );
+    deltas
+}
+
+fn challenge_deltas(run: &ProRun, baseline: &ProRun) -> Vec<ReviewChallengeDelta> {
+    let baseline_by_id = baseline
+        .challenge_checks
+        .iter()
+        .map(|challenge| (challenge.id.as_str(), challenge))
+        .collect::<HashMap<_, _>>();
+    let current_by_id = run
+        .challenge_checks
+        .iter()
+        .map(|challenge| (challenge.id.as_str(), challenge))
+        .collect::<HashMap<_, _>>();
+
+    let mut deltas = run
+        .challenge_checks
+        .iter()
+        .map(
+            |challenge| match baseline_by_id.get(challenge.id.as_str()) {
+                Some(previous) if same_challenge(challenge, previous) => challenge_delta(
+                    challenge,
+                    ReviewDeltaKind::Unchanged,
+                    "Challenge check was already present in the derived previous checkpoint.",
+                ),
+                Some(_) => challenge_delta(
+                    challenge,
+                    ReviewDeltaKind::Changed,
+                    "Challenge check status or note changed since the derived previous checkpoint.",
+                ),
+                None => challenge_delta(
+                    challenge,
+                    ReviewDeltaKind::Added,
+                    "New challenge check visible in the current run preview.",
+                ),
+            },
+        )
+        .collect::<Vec<_>>();
+
+    deltas.extend(
+        baseline
+            .challenge_checks
+            .iter()
+            .filter(|challenge| !current_by_id.contains_key(challenge.id.as_str()))
+            .map(|challenge| {
+                challenge_delta(
+                    challenge,
+                    ReviewDeltaKind::Removed,
+                    "Challenge check existed in the derived previous checkpoint but is absent now.",
+                )
+            }),
+    );
+    deltas
+}
+
+fn evidence_delta(
+    evidence: &EvidenceAnchor,
+    delta: ReviewDeltaKind,
+    note: &str,
+) -> ReviewEvidenceDelta {
+    ReviewEvidenceDelta {
+        evidence_id: evidence.id.clone(),
+        title: evidence.title.clone(),
+        source: evidence.source.clone(),
+        delta,
+        stance: evidence.stance,
+        freshness: evidence.freshness,
+        note: note.to_string(),
+    }
+}
+
+fn challenge_delta(
+    challenge: &ChallengeCheck,
+    delta: ReviewDeltaKind,
+    note: &str,
+) -> ReviewChallengeDelta {
+    ReviewChallengeDelta {
+        challenge_id: challenge.id.clone(),
+        title: challenge.title.clone(),
+        delta,
+        status: challenge.status,
+        note: note.to_string(),
+    }
+}
+
+fn same_evidence(left: &EvidenceAnchor, right: &EvidenceAnchor) -> bool {
+    left.title == right.title
+        && left.source == right.source
+        && left.stance == right.stance
+        && left.freshness == right.freshness
+        && left.excerpt == right.excerpt
+}
+
+fn same_challenge(left: &ChallengeCheck, right: &ChallengeCheck) -> bool {
+    left.title == right.title && left.status == right.status && left.note == right.note
+}
+
+fn summarize_evidence_deltas(deltas: &[ReviewEvidenceDelta]) -> ReviewDeltaSummary {
+    summarize_deltas(deltas.iter().map(|delta| delta.delta))
+}
+
+fn summarize_challenge_deltas(deltas: &[ReviewChallengeDelta]) -> ReviewDeltaSummary {
+    summarize_deltas(deltas.iter().map(|delta| delta.delta))
+}
+
+fn summarize_deltas(kinds: impl Iterator<Item = ReviewDeltaKind>) -> ReviewDeltaSummary {
+    let mut summary = ReviewDeltaSummary {
+        added: 0,
+        changed: 0,
+        removed: 0,
+        unchanged: 0,
+    };
+
+    for kind in kinds {
+        match kind {
+            ReviewDeltaKind::Added => summary.added += 1,
+            ReviewDeltaKind::Changed => summary.changed += 1,
+            ReviewDeltaKind::Removed => summary.removed += 1,
+            ReviewDeltaKind::Unchanged => summary.unchanged += 1,
+        }
+    }
+    summary
+}
+
 fn push_retrieval_and_partial_events(events: &mut Vec<RunEvent>, run: &ProRun) {
     push_run_event(
         events,
@@ -1340,9 +1610,10 @@ fn status_vocabulary_entry(
 #[cfg(test)]
 mod tests {
     use super::{
-        CooldownKind, CreateRunRequest, ProviderReadiness, RunEventKind, RunEventSource, RunStatus,
-        WorkspaceEnforcementMode, WorkspacePermissionStatus, create_run_from_request,
-        provider_status_snapshot, run_event_timeline, run_status_vocabulary, sample_run,
+        CooldownKind, CreateRunRequest, ProviderReadiness, ReviewComparisonMode, ReviewDeltaKind,
+        RunEventKind, RunEventSource, RunStatus, WorkspaceEnforcementMode,
+        WorkspacePermissionStatus, create_run_from_request, provider_status_snapshot,
+        run_event_timeline, run_review_comparison, run_status_vocabulary, sample_run,
         sample_run_by_id, sample_run_summaries, validate_run_references, workspace_access_context,
     };
     use std::collections::HashSet;
@@ -1537,5 +1808,62 @@ mod tests {
             RunEventSource::DerivedFromRunRecord
         );
         assert_eq!(run_status_vocabulary().len(), 7);
+    }
+
+    #[test]
+    fn run_review_comparison_summarizes_evidence_and_challenge_deltas() {
+        let comparison = run_review_comparison(&sample_run());
+
+        assert_eq!(comparison.run_id, "run_semiconductor_controls_001");
+        assert_eq!(
+            comparison.baseline_run_id,
+            "run_semiconductor_controls_001_previous_checkpoint"
+        );
+        assert_eq!(
+            comparison.mode,
+            ReviewComparisonMode::DerivedPreviousCheckpoint
+        );
+        assert_eq!(comparison.evidence_summary.added, 1);
+        assert_eq!(comparison.challenge_summary.added, 1);
+        assert!(comparison.evidence_summary.unchanged > 0);
+        assert!(
+            comparison
+                .evidence_deltas
+                .iter()
+                .any(|delta| delta.evidence_id == "ev_market_move"
+                    && delta.delta == ReviewDeltaKind::Added)
+        );
+        assert!(
+            comparison
+                .challenge_deltas
+                .iter()
+                .any(|delta| delta.challenge_id == "cc_countermove"
+                    && delta.delta == ReviewDeltaKind::Added)
+        );
+        assert!(
+            comparison
+                .safeguards
+                .contains(&"no_provider_calls_or_credential_reads".to_string())
+        );
+    }
+
+    #[test]
+    fn queued_run_review_comparison_keeps_preview_deltas_local() {
+        let run = create_run_from_request(
+            9,
+            CreateRunRequest {
+                workspace_id: Some("workspace_alpha".to_string()),
+                title: None,
+                question: "Why did activation fall?".to_string(),
+            },
+        )
+        .expect("valid question should create a run");
+
+        let comparison = run_review_comparison(&run);
+
+        assert_eq!(comparison.workspace_id, "workspace_alpha");
+        assert_eq!(comparison.evidence_summary.added, 1);
+        assert_eq!(comparison.challenge_summary.added, 1);
+        assert_eq!(comparison.evidence_deltas[0].delta, ReviewDeltaKind::Added);
     }
 }

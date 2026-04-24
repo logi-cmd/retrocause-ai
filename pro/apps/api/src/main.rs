@@ -8,9 +8,9 @@ use axum::{
     routing::{get, post},
 };
 use retrocause_pro_domain::{
-    CreateRunRequest, KnowledgeGraph, ProRun, ProviderStatusSnapshot, RunEventTimeline, RunStatus,
-    RunSummary, WorkspaceAccessContext, provider_status_snapshot, run_event_timeline, sample_run,
-    workspace_access_context,
+    CreateRunRequest, KnowledgeGraph, ProRun, ProviderStatusSnapshot, RunEventTimeline,
+    RunReviewComparison, RunStatus, RunSummary, WorkspaceAccessContext, provider_status_snapshot,
+    run_event_timeline, run_review_comparison, sample_run, workspace_access_context,
 };
 use retrocause_pro_provider_routing::{
     ProviderAdapterCandidateCatalog, ProviderAdapterContract, ProviderAdapterDryRunRequest,
@@ -99,6 +99,10 @@ fn router() -> Router {
         .route("/api/runs/{run_id}", get(get_run))
         .route("/api/runs/{run_id}/graph", get(get_run_graph))
         .route("/api/runs/{run_id}/events", get(get_run_events))
+        .route(
+            "/api/runs/{run_id}/review-comparison",
+            get(get_run_review_comparison),
+        )
         .route(
             "/api/execution-jobs",
             get(list_execution_jobs)
@@ -245,6 +249,17 @@ async fn get_run_events(
         .get_run(&run_id)
         .ok_or_else(|| not_found(run_id))?;
     Ok(Json(run_event_timeline(&run)))
+}
+
+async fn get_run_review_comparison(
+    State(state): State<AppState>,
+    Path(run_id): Path<String>,
+) -> Result<Json<RunReviewComparison>, ApiError> {
+    let run = state
+        .run_store
+        .get_run(&run_id)
+        .ok_or_else(|| not_found(run_id))?;
+    Ok(Json(run_review_comparison(&run)))
 }
 
 async fn list_execution_jobs(State(state): State<AppState>) -> Json<Vec<ExecutionJobSummary>> {
@@ -691,6 +706,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn review_comparison_payload_is_derived_from_requested_run() {
+        let payload = get_run_review_comparison(
+            State(AppState::seeded()),
+            Path("run_semiconductor_controls_001".to_string()),
+        )
+        .await
+        .expect("known sample run")
+        .0;
+
+        assert_eq!(payload.run_id, "run_semiconductor_controls_001");
+        assert_eq!(
+            payload.baseline_run_id,
+            "run_semiconductor_controls_001_previous_checkpoint"
+        );
+        assert_eq!(payload.evidence_summary.added, 1);
+        assert_eq!(payload.challenge_summary.added, 1);
+        assert!(!payload.evidence_deltas.is_empty());
+        assert!(
+            payload
+                .safeguards
+                .contains(&"no_provider_calls_or_credential_reads".to_string())
+        );
+    }
+
+    #[tokio::test]
     async fn unknown_run_returns_404_payload() {
         let response = get_run(State(AppState::seeded()), Path("missing".to_string()))
             .await
@@ -732,13 +772,20 @@ mod tests {
         assert_eq!(graph.run_id, created.id);
         assert_eq!(graph.graph.nodes.len(), 3);
 
-        let events = get_run_events(State(state), Path(created.id.clone()))
+        let events = get_run_events(State(state.clone()), Path(created.id.clone()))
             .await
             .expect("created run events should be readable")
             .0;
         assert_eq!(events.run_id, created.id);
         assert_eq!(events.current_status, RunStatus::Queued);
         assert_eq!(events.events.len(), 1);
+
+        let comparison = get_run_review_comparison(State(state), Path(created.id.clone()))
+            .await
+            .expect("created run comparison should be readable")
+            .0;
+        assert_eq!(comparison.run_id, created.id);
+        assert_eq!(comparison.evidence_summary.added, 1);
     }
 
     #[tokio::test]
