@@ -26,6 +26,7 @@ pro/
     web/
   crates/
     domain/
+    provider-routing/
     run-store/
 ```
 
@@ -88,6 +89,20 @@ Current behavior:
 
 This is intentionally an alpha local store. It is not encrypted storage, not a multi-tenant database, not a credential vault, and not the final hosted Pro persistence layer. The value is the boundary: future Postgres-backed storage should replace this crate's implementation without forcing the API routes to own storage details again.
 
+## Provider routing boundary
+
+`crates/provider-routing` is the first Pro provider/source routing boundary. It currently produces a route preview plan from the static keyless provider-status payload.
+
+Current behavior:
+
+- input: workspace id, query, optional scenario, optional source policy
+- output: preview-only route plan with lane decisions, cooldown hints, selected local lane, and warnings
+- execution: always disabled in this slice
+- selected local fallback: uploaded-evidence lane when the source policy allows it
+- explicit blocked/deferred lanes: managed Pro model pool, workspace search, BYOK-later search, and market-search cooldown
+
+This is intentionally not a provider executor. It does not read provider keys, call models/search APIs, enqueue jobs, bill usage, or store credentials. The value is the decision vocabulary: future executors can consume the same lane and decision semantics instead of inventing hidden routing behavior inside provider adapters.
+
 ## Near-term service split
 
 ### `apps/api`
@@ -101,11 +116,13 @@ Initial responsibility:
 - `GET /api/runs/{run_id}`
 - `GET /api/runs/{run_id}/graph`
 - `GET /api/provider-status`
+- `GET /api/provider-route/preview`
+- `POST /api/provider-route/preview`
 - minimal local CORS headers for the separate Pro web port
 - local JSON run storage through `crates/run-store`, shared by list/detail/graph reads and surviving API restarts
 - future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The provider-status endpoint is also static/keyless in this slice: it models ownership and cooldown semantics without exposing credential fields or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The provider-status and provider-route preview endpoints are static/keyless in this slice: they model ownership, cooldown, and routing semantics without exposing credential fields or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -122,11 +139,10 @@ Initial responsibility:
 ## Future crates after the kickoff
 
 - `crates/queue`
-- `crates/provider-routing`
 - `crates/export`
 - `crates/evidence-store`
 
-Only `crates/run-store` exists today. The other crates are intentionally not created yet; each should appear only when it removes real duplication or isolates a concrete boundary.
+`crates/run-store` and `crates/provider-routing` exist today. The other crates are intentionally not created yet; each should appear only when it removes real duplication or isolates a concrete boundary.
 
 ## Operational architecture direction
 
@@ -198,3 +214,10 @@ The run-store slice adds:
 - `cargo test --manifest-path pro/Cargo.toml`
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API restart smoke with `RETROCAUSE_PRO_RUN_STORE_PATH` proving a created run can be read after the API process restarts
+
+The provider-routing slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `POST /api/provider-route/preview` proving the response stays `preview_only`, does not allow execution, includes five lane decisions, and selects only the local uploaded-evidence lane

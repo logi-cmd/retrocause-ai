@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
-  "task": "Replace the Pro API's process-local run HashMap with the first durable Rust run-store boundary: add a small pro/crates/run-store crate with a file-backed JSON run store, derive the needed domain deserialization, wire the API list/create/detail/graph routes through the store, use a local env-configurable store path, and synchronize Pro docs/evidence. Do not add provider calls, credentials, auth, billing, or OSS runtime changes.",
+  "task": "Add the next Pro provider/search routing skeleton: create a small pro/crates/provider-routing crate that turns the existing keyless provider-status/quota payload into a non-executing routing preview plan, expose a local API preview endpoint, and synchronize Pro docs/evidence. Do not add credentials, live provider calls, auth, billing, queue workers, or OSS runtime changes.",
   "preset": "generic",
-  "createdAt": "2026-04-24T10:36:36.446Z",
+  "createdAt": "2026-04-24T10:47:33.949Z",
   "allowedPaths": [
     "pro/",
     "docs/PROJECT_STATE.md",
@@ -64,10 +64,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "a4863c16-d796-4e26-8318-3c11a1d4c880",
-    "createdAt": "2026-04-24T10:36:36.445Z",
+    "sessionId": "da02af4f-fd8e-41a5-a18c-dbda85600280",
+    "createdAt": "2026-04-24T10:47:33.949Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Replace the Pro API's process-local run HashMap with the first durable Rust run-store boundary: add a small pro/crates/run-store crate with a file-backed JSON run store, derive the needed domain deserialization, wire the API list/create/detail/graph routes through the store, use a local env-configurable store path, and synchronize Pro docs/evidence. Do not add provider calls, credentials, auth, billing, or OSS runtime changes.",
+    "taskRequest": "Add the next Pro provider/search routing skeleton: create a small pro/crates/provider-routing crate that turns the existing keyless provider-status/quota payload into a non-executing routing preview plan, expose a local API preview endpoint, and synchronize Pro docs/evidence. Do not add credentials, live provider calls, auth, billing, queue workers, or OSS runtime changes.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],

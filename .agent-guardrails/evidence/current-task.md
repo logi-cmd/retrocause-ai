@@ -892,3 +892,86 @@ This task replaces the Pro API's direct process-local `HashMap` storage with the
 - The JSON file store is local-only, single-process oriented, and not crash-atomic.
 - There is still no tenant boundary, auth, ACL, encryption, migration layer, or hosted database.
 - Future hosted Pro should move this boundary to Postgres and keep JSON only as a local/dev fallback.
+
+## 2026-04-24 Pro Product Core Slice 7
+
+This task adds the first provider/search routing skeleton for Pro. It produces inspectable routing preview plans from the existing keyless provider-status/quota payload, without executing provider calls.
+
+### Files Updated
+
+- `pro/Cargo.toml`
+- `pro/Cargo.lock`
+- `pro/apps/api/Cargo.toml`
+- `pro/apps/api/src/main.rs`
+- `pro/crates/provider-routing/Cargo.toml`
+- `pro/crates/provider-routing/src/lib.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `retrocause-pro-provider-routing`, a small routing-boundary crate.
+- Added `RoutingPreviewRequest` and `RoutingPreviewPlan` with scenario, source policy, lane decisions, cooldown hints, selected lane, and warnings.
+- Added preview-only routing behavior that never allows execution and never calls live providers.
+- Added `GET /api/provider-route/preview` as a hint endpoint and `POST /api/provider-route/preview` for local routing preview requests.
+- Updated Pro docs so provider/search routing preview is marked as implemented, while real execution remains future work.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: contract refreshed for the provider/search routing skeleton slice.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - First result: failed because new Rust code needed standard `rustfmt` wrapping.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all`
+  - Result: applied standard formatting.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `10 passed`.
+  - Domain tests: `8 passed`.
+  - Provider-routing tests: `4 passed`.
+  - Run-store tests: `3 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API routing-preview smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8798` with a temporary local run-store path.
+  - Called `POST /api/provider-route/preview` with a market-style query.
+  - Result: `mode=preview_only; execution=False; selected=uploaded_evidence_lane; steps=5; warnings=2`.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Final result: passed.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Checked the API/provider-routing diff for `api_key`, `secret`, `OPENROUTER`, `TAVILY`, `BRAVE`, and `sk-`.
+  - Result: no matching added code in the routing/API diff.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `85/100 (pass-with-concerns)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. The project state was intentionally synchronized to mark routing preview as implemented and to move the next-step queue forward.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET/POST /api/provider-route/preview`; it does not change the OSS API or execute provider calls.
+  - Non-blocking warning: `pro/Cargo.toml`, `pro/apps/api/Cargo.toml`, and `pro/crates/provider-routing/Cargo.toml` are config changes. This is intentional and scoped to adding the new workspace crate plus API dependency; there is no package publishing or deployment change.
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, API keys, credential fields, provider calls, queue workers, billing, or hosted execution were added. The endpoint returns routing preview metadata only.
+- Dependencies: no external dependency versions were added; the new provider-routing crate uses existing workspace dependencies. `pro/Cargo.lock` changed because the new crate joined the workspace.
+- Performance: routing preview is in-memory and bounded by the five static provider-status lanes. It adds no network calls.
+- Understanding: the tradeoff is modeling routing decisions and warnings before implementation of any executor, so future provider adapters can share transparent lane semantics instead of hiding routing logic.
+- Continuity: this reuses the existing provider-status payload, Axum route style, and Pro workspace crate pattern. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- The route preview does not execute, enqueue, bill, or enforce real provider quotas.
+- There is still no tenant/auth boundary, provider credential vault, queue, cooldown persistence, or live search/model adapter.
+- The web shell does not yet render route-preview plans; this slice exposes the API and shared routing vocabulary first.

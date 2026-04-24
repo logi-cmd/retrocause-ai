@@ -11,6 +11,9 @@ use retrocause_pro_domain::{
     CreateRunRequest, KnowledgeGraph, ProRun, ProviderStatusSnapshot, RunStatus, RunSummary,
     provider_status_snapshot, sample_run,
 };
+use retrocause_pro_provider_routing::{
+    RoutingPreviewError, RoutingPreviewPlan, RoutingPreviewRequest, build_routing_preview,
+};
 use retrocause_pro_run_store::{FileRunStore, RunStoreError};
 use serde::Serialize;
 
@@ -57,6 +60,12 @@ fn router() -> Router {
         .route("/api/graph/seed", get(seed_graph))
         .route("/api/provider-status", get(provider_status))
         .route(
+            "/api/provider-route/preview",
+            get(provider_route_hint)
+                .post(provider_route_preview)
+                .options(cors_preflight),
+        )
+        .route(
             "/api/runs",
             get(list_runs).post(create_run).options(cors_preflight),
         )
@@ -94,6 +103,26 @@ async fn seed_graph(State(state): State<AppState>) -> Json<ProRun> {
 
 async fn provider_status() -> Json<ProviderStatusSnapshot> {
     Json(provider_status_snapshot())
+}
+
+async fn provider_route_hint() -> Json<RoutingPreviewPlan> {
+    Json(
+        build_routing_preview(RoutingPreviewRequest {
+            workspace_id: None,
+            query: "Preview local keyless provider routing.".to_string(),
+            scenario: None,
+            source_policy: None,
+        })
+        .expect("static provider routing preview should be valid"),
+    )
+}
+
+async fn provider_route_preview(
+    Json(request): Json<RoutingPreviewRequest>,
+) -> Result<Json<RoutingPreviewPlan>, ApiError> {
+    build_routing_preview(request)
+        .map(Json)
+        .map_err(routing_preview_error)
 }
 
 async fn list_runs(State(state): State<AppState>) -> Json<Vec<RunSummary>> {
@@ -164,6 +193,12 @@ fn run_store_error(error: RunStoreError) -> ApiError {
     match error {
         RunStoreError::InvalidRun(error) => bad_request(error),
         error => internal_error(error.to_string()),
+    }
+}
+
+fn routing_preview_error(error: RoutingPreviewError) -> ApiError {
+    match error {
+        RoutingPreviewError::QueryRequired => bad_request(error.to_string()),
     }
 }
 
@@ -278,6 +313,41 @@ mod tests {
             let combined = format!("{} {} {}", entry.id, entry.label, entry.note).to_lowercase();
             !combined.contains("api_key") && !combined.contains("secret")
         }));
+    }
+
+    #[tokio::test]
+    async fn provider_route_preview_exposes_non_executing_plan() {
+        let plan = provider_route_preview(Json(RoutingPreviewRequest {
+            workspace_id: Some("workspace_test".to_string()),
+            query: "Why did chip stocks move?".to_string(),
+            scenario: None,
+            source_policy: None,
+        }))
+        .await
+        .expect("valid preview request")
+        .0;
+
+        assert_eq!(plan.workspace_id, "workspace_test");
+        assert!(!plan.execution_allowed);
+        assert_eq!(
+            plan.selected_lane_id.as_deref(),
+            Some("uploaded_evidence_lane")
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_route_preview_rejects_blank_query() {
+        let response = provider_route_preview(Json(RoutingPreviewRequest {
+            workspace_id: None,
+            query: "   ".to_string(),
+            scenario: None,
+            source_policy: None,
+        }))
+        .await
+        .expect_err("blank query should return bad request")
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
