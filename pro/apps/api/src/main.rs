@@ -14,6 +14,9 @@ use retrocause_pro_domain::{
 use retrocause_pro_provider_routing::{
     RoutingPreviewError, RoutingPreviewPlan, RoutingPreviewRequest, build_routing_preview,
 };
+use retrocause_pro_queue::{
+    ExecutionJob, ExecutionJobSummary, ExecutionQueue, ExecutionQueueError,
+};
 use retrocause_pro_run_store::{FileRunStore, RunStoreError};
 use serde::Serialize;
 
@@ -43,12 +46,14 @@ type ApiError = (StatusCode, Json<ErrorPayload>);
 #[derive(Clone)]
 struct AppState {
     run_store: FileRunStore,
+    execution_queue: ExecutionQueue,
 }
 
 impl AppState {
     fn open_default() -> Result<Self, RunStoreError> {
         Ok(Self {
             run_store: FileRunStore::open_default()?,
+            execution_queue: ExecutionQueue::new(),
         })
     }
 }
@@ -71,6 +76,13 @@ fn router() -> Router {
         )
         .route("/api/runs/{run_id}", get(get_run))
         .route("/api/runs/{run_id}/graph", get(get_run_graph))
+        .route(
+            "/api/execution-jobs",
+            get(list_execution_jobs)
+                .post(create_execution_job)
+                .options(cors_preflight),
+        )
+        .route("/api/execution-jobs/{job_id}", get(get_execution_job))
         .layer(middleware::from_fn(add_cors_headers))
         .with_state(AppState::open_default().expect("open pro run store"))
 }
@@ -169,6 +181,33 @@ async fn get_run_graph(
     }))
 }
 
+async fn list_execution_jobs(State(state): State<AppState>) -> Json<Vec<ExecutionJobSummary>> {
+    Json(state.execution_queue.list_summaries())
+}
+
+async fn create_execution_job(
+    State(state): State<AppState>,
+    Json(request): Json<RoutingPreviewRequest>,
+) -> Result<(StatusCode, Json<ExecutionJob>), ApiError> {
+    let job = state
+        .execution_queue
+        .enqueue_preview(request)
+        .map_err(execution_queue_error)?;
+
+    Ok((StatusCode::CREATED, Json(job)))
+}
+
+async fn get_execution_job(
+    State(state): State<AppState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<ExecutionJob>, ApiError> {
+    state
+        .execution_queue
+        .get_job(&job_id)
+        .map(Json)
+        .ok_or_else(|| job_not_found(job_id))
+}
+
 fn bad_request(error: String) -> ApiError {
     (
         StatusCode::BAD_REQUEST,
@@ -202,12 +241,29 @@ fn routing_preview_error(error: RoutingPreviewError) -> ApiError {
     }
 }
 
+fn execution_queue_error(error: ExecutionQueueError) -> ApiError {
+    match error {
+        ExecutionQueueError::RoutingPreview(error) => routing_preview_error(error),
+        ExecutionQueueError::LockPoisoned => internal_error(error.to_string()),
+    }
+}
+
 fn not_found(run_id: String) -> ApiError {
     (
         StatusCode::NOT_FOUND,
         Json(ErrorPayload {
             error: "run_not_found".to_string(),
             run_id: Some(run_id),
+        }),
+    )
+}
+
+fn job_not_found(job_id: String) -> ApiError {
+    (
+        StatusCode::NOT_FOUND,
+        Json(ErrorPayload {
+            error: format!("execution_job_not_found:{job_id}"),
+            run_id: None,
         }),
     )
 }
@@ -264,6 +320,7 @@ mod tests {
             Self {
                 run_store: FileRunStore::open(temp_store_path())
                     .expect("test run store should open"),
+                execution_queue: ExecutionQueue::new(),
             }
         }
     }
@@ -422,6 +479,69 @@ mod tests {
         .into_response();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn execution_jobs_store_preview_only_routing_plan() {
+        let state = AppState::seeded();
+
+        let (status, Json(created)) = create_execution_job(
+            State(state.clone()),
+            Json(RoutingPreviewRequest {
+                workspace_id: Some("workspace_queue".to_string()),
+                query: "Why did a run need queueing?".to_string(),
+                scenario: None,
+                source_policy: None,
+            }),
+        )
+        .await
+        .expect("valid request should create preview job");
+
+        assert_eq!(status, StatusCode::CREATED);
+        assert_eq!(created.id, "job_local_000000");
+        assert!(!created.execution_allowed);
+        assert_eq!(
+            created.selected_lane_id.as_deref(),
+            Some("uploaded_evidence_lane")
+        );
+
+        let detail = get_execution_job(State(state.clone()), Path(created.id.clone()))
+            .await
+            .expect("created job should be readable")
+            .0;
+        assert_eq!(detail.query, "Why did a run need queueing?");
+
+        let summaries = list_execution_jobs(State(state)).await.0;
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].id, created.id);
+    }
+
+    #[tokio::test]
+    async fn execution_job_rejects_blank_query() {
+        let response = create_execution_job(
+            State(AppState::seeded()),
+            Json(RoutingPreviewRequest {
+                workspace_id: None,
+                query: "  ".to_string(),
+                scenario: None,
+                source_policy: None,
+            }),
+        )
+        .await
+        .expect_err("blank query should return bad request")
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn unknown_execution_job_returns_404_payload() {
+        let response = get_execution_job(State(AppState::seeded()), Path("missing".to_string()))
+            .await
+            .expect_err("missing job should return not found")
+            .into_response();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     fn temp_store_path() -> PathBuf {

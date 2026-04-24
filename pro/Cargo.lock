@@ -314,6 +314,7 @@ dependencies = [
  "axum",
  "retrocause-pro-domain",
  "retrocause-pro-provider-routing",
+ "retrocause-pro-queue",
  "retrocause-pro-run-store",
  "serde",
  "tokio",
@@ -331,6 +332,14 @@ name = "retrocause-pro-provider-routing"
 version = "0.1.0"
 dependencies = [
  "retrocause-pro-domain",
+ "serde",
+]
+
+[[package]]
+name = "retrocause-pro-queue"
+version = "0.1.0"
+dependencies = [
+ "retrocause-pro-provider-routing",
  "serde",
 ]
 

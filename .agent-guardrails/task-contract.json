@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
-  "task": "Add the next Pro provider/search routing skeleton: create a small pro/crates/provider-routing crate that turns the existing keyless provider-status/quota payload into a non-executing routing preview plan, expose a local API preview endpoint, and synchronize Pro docs/evidence. Do not add credentials, live provider calls, auth, billing, queue workers, or OSS runtime changes.",
+  "task": "Add the first Pro queued execution boundary behind provider-routing preview: create a small pro/crates/queue crate that stores local preview-only execution jobs in memory, wire API endpoints to enqueue/list/get jobs from routing preview requests, keep execution disabled/no provider calls/no credentials/no billing/no OSS runtime changes, and synchronize Pro docs/evidence.",
   "preset": "generic",
-  "createdAt": "2026-04-24T10:47:33.949Z",
+  "createdAt": "2026-04-24T10:57:48.487Z",
   "allowedPaths": [
     "pro/",
     "docs/PROJECT_STATE.md",
@@ -64,10 +64,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "da02af4f-fd8e-41a5-a18c-dbda85600280",
-    "createdAt": "2026-04-24T10:47:33.949Z",
+    "sessionId": "f09e5930-e439-436f-b5e7-0af494d5cd1b",
+    "createdAt": "2026-04-24T10:57:48.485Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add the next Pro provider/search routing skeleton: create a small pro/crates/provider-routing crate that turns the existing keyless provider-status/quota payload into a non-executing routing preview plan, expose a local API preview endpoint, and synchronize Pro docs/evidence. Do not add credentials, live provider calls, auth, billing, queue workers, or OSS runtime changes.",
+    "taskRequest": "Add the first Pro queued execution boundary behind provider-routing preview: create a small pro/crates/queue crate that stores local preview-only execution jobs in memory, wire API endpoints to enqueue/list/get jobs from routing preview requests, keep execution disabled/no provider calls/no credentials/no billing/no OSS runtime changes, and synchronize Pro docs/evidence.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],

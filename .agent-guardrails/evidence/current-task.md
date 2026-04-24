@@ -975,3 +975,90 @@ This task adds the first provider/search routing skeleton for Pro. It produces i
 - The route preview does not execute, enqueue, bill, or enforce real provider quotas.
 - There is still no tenant/auth boundary, provider credential vault, queue, cooldown persistence, or live search/model adapter.
 - The web shell does not yet render route-preview plans; this slice exposes the API and shared routing vocabulary first.
+
+## 2026-04-24 Pro Product Core Slice 8
+
+This task adds the first queued execution boundary behind the Pro provider-routing preview. It stays local and preview-only: no provider calls, credentials, billing, auth, tenant enforcement, worker execution, or OSS runtime changes were added.
+
+### Files Updated
+
+- `pro/Cargo.toml`
+- `pro/Cargo.lock`
+- `pro/apps/api/Cargo.toml`
+- `pro/apps/api/src/main.rs`
+- `pro/crates/queue/Cargo.toml`
+- `pro/crates/queue/src/lib.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `retrocause-pro-queue`, a small in-memory queue-boundary crate.
+- Added `ExecutionQueue`, `ExecutionJob`, `ExecutionJobSummary`, and `ExecutionJobStatus::PreviewOnly`.
+- Queue jobs are created from `RoutingPreviewRequest`, reuse the provider-routing preview plan, and explicitly keep `execution_allowed=false`.
+- Added Pro API endpoints:
+  - `POST /api/execution-jobs`
+  - `GET /api/execution-jobs`
+  - `GET /api/execution-jobs/{job_id}`
+- Updated Pro docs so the queue boundary is documented as process-local preview state, not durable hosted execution.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: task contract refreshed for the queued execution boundary slice.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - First result: failed because `pro/crates/queue/src/lib.rs` needed standard `rustfmt` wrapping.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all`
+  - Result: applied standard formatting.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Final result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `13 passed`.
+  - Domain tests: `8 passed`.
+  - Provider-routing tests: `4 passed`.
+  - Queue tests: `4 passed`.
+  - Run-store tests: `3 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API execution-job smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8799` with a temporary local run-store path.
+  - Called `POST /api/execution-jobs`, `GET /api/execution-jobs`, and `GET /api/execution-jobs/{job_id}`.
+  - Result: `job=job_local_000000; status=preview_only; execution=False; selected=uploaded_evidence_lane; listed=1`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Checked added Pro diff lines for `api_key`, `secret`, `OPENROUTER`, `TAVILY`, `BRAVE`, and `sk-`.
+  - Result: no matching added Pro code lines.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `85/100 (pass-with-concerns)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. The project state was intentionally synchronized to mark the preview-only queue boundary as implemented and move the next-step focus to showing queue status in the Pro web shell.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET/POST /api/execution-jobs` and `GET /api/execution-jobs/{job_id}` endpoints; it does not change OSS APIs or execute provider calls.
+  - Non-blocking warning: `pro/Cargo.toml`, `pro/apps/api/Cargo.toml`, and `pro/crates/queue/Cargo.toml` are config changes. This is intentional and scoped to adding the new local workspace crate plus API dependency; there is no package publishing, deployment, credential, or billing change.
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, API keys, credential fields, provider calls, billing hooks, tenant permissions, or sensitive-data storage were added. The queue is a local preview boundary only.
+- Dependencies: no new external crate versions were added. `pro/Cargo.lock` changed only because the local `retrocause-pro-queue` workspace crate joined the Pro workspace and the API depends on it.
+- Performance: queue operations are in-memory `RwLock` reads/writes over small local job vectors. This is fine for local alpha preview state, but it is not a hosted queue implementation.
+- Understanding: the main tradeoff is creating the queue state boundary now while deliberately avoiding workers. API routes no longer need to couple route-plan creation directly to eventual execution state, but the implementation remains small and inspectable.
+- Continuity: reused `RoutingPreviewRequest`, `RoutingPreviewPlan`, existing Axum route style, and the Pro workspace crate pattern. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- Queue jobs are process-local and disappear when the Pro API exits.
+- There is still no Redis/Postgres-backed queue, worker process, tenant/auth boundary, credential vault, live provider executor, or quota enforcement.
+- The graph-first Pro web shell does not yet render execution-job status; this is the next intended UI slice.

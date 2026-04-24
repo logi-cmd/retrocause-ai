@@ -12,7 +12,7 @@ The Rust rewrite lives under `pro/` inside this repository so the product and ar
 
 1. Establish a clean Rust workspace boundary.
 2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, usage ledger entries, provider quota ownership, and cooldown state.
-3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, and keyless provider/search quota status.
+3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, keyless provider/search quota status, routing previews, and preview-only execution jobs.
 4. Render a graph-first web shell from the same shared Rust payload and wire it to the local API create/read flow plus provider-status view.
 5. Keep Pro separate from the OSS Python/FastAPI + Next.js runtime.
 
@@ -27,6 +27,7 @@ pro/
   crates/
     domain/
     provider-routing/
+    queue/
     run-store/
 ```
 
@@ -103,6 +104,19 @@ Current behavior:
 
 This is intentionally not a provider executor. It does not read provider keys, call models/search APIs, enqueue jobs, bill usage, or store credentials. The value is the decision vocabulary: future executors can consume the same lane and decision semantics instead of inventing hidden routing behavior inside provider adapters.
 
+## Queue boundary
+
+`crates/queue` is the first Pro execution-queue boundary. It currently provides an in-memory `ExecutionQueue` that turns a routing-preview request into a preview-only execution job.
+
+Current behavior:
+
+- input: the same workspace id, query, scenario, and source policy accepted by provider-routing preview
+- output: execution job payload with id, workspace id, query, preview-only status, selected lane, and the full route plan
+- storage: process-local memory only
+- execution: always disabled in this slice
+
+This is intentionally not a worker system. It does not read provider keys, call models/search APIs, persist queue state, bill usage, enforce tenant quotas, or schedule background work. The value is the API and state boundary: future Redis/Postgres-backed queue workers should replace the in-memory implementation without making API routes own job sequencing or route-plan coupling.
+
 ## Near-term service split
 
 ### `apps/api`
@@ -118,11 +132,15 @@ Initial responsibility:
 - `GET /api/provider-status`
 - `GET /api/provider-route/preview`
 - `POST /api/provider-route/preview`
+- `GET /api/execution-jobs`
+- `POST /api/execution-jobs`
+- `GET /api/execution-jobs/{job_id}`
 - minimal local CORS headers for the separate Pro web port
 - local JSON run storage through `crates/run-store`, shared by list/detail/graph reads and surviving API restarts
+- local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
 - future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The provider-status and provider-route preview endpoints are static/keyless in this slice: they model ownership, cooldown, and routing semantics without exposing credential fields or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The provider-status, provider-route preview, and execution-job endpoints are static/keyless in this slice: they model ownership, cooldown, routing semantics, and queue shape without exposing credential fields or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -138,11 +156,10 @@ Initial responsibility:
 
 ## Future crates after the kickoff
 
-- `crates/queue`
 - `crates/export`
 - `crates/evidence-store`
 
-`crates/run-store` and `crates/provider-routing` exist today. The other crates are intentionally not created yet; each should appear only when it removes real duplication or isolates a concrete boundary.
+`crates/run-store`, `crates/provider-routing`, and `crates/queue` exist today. The other crates are intentionally not created yet; each should appear only when it removes real duplication or isolates a concrete boundary.
 
 ## Operational architecture direction
 
@@ -171,7 +188,7 @@ Initial responsibility:
 
 Those semantics should remain explicit in both API payloads and the graph workspace UI.
 
-The current `POST /api/runs` path uses `queued` runs and managed/user-provided quota labels without calling model or search providers. The current `GET /api/provider-status` path exposes static ownership lanes for managed Pro quota, workspace-managed search quota, BYOK-later search, uploaded-evidence-only input, and an example market-search cooldown bucket. Live provider credentials, BYOK storage, workspace quotas, and real cooldown enforcement remain future work.
+The current `POST /api/runs` path uses `queued` runs and managed/user-provided quota labels without calling model or search providers. The current `GET /api/provider-status` path exposes static ownership lanes for managed Pro quota, workspace-managed search quota, BYOK-later search, uploaded-evidence-only input, and an example market-search cooldown bucket. The current `POST /api/execution-jobs` path records a preview-only queue job from the routing plan but still does not execute providers. Live provider credentials, BYOK storage, workspace quotas, real cooldown enforcement, and real worker execution remain future work.
 
 ## Knowledge-graph UI direction
 
@@ -221,3 +238,10 @@ The provider-routing slice adds:
 - `cargo test --manifest-path pro/Cargo.toml`
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `POST /api/provider-route/preview` proving the response stays `preview_only`, does not allow execution, includes five lane decisions, and selects only the local uploaded-evidence lane
+
+The queue-boundary slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `POST /api/execution-jobs`, `GET /api/execution-jobs`, and `GET /api/execution-jobs/{job_id}` proving created jobs stay preview-only, do not allow execution, and expose the selected local routing lane
