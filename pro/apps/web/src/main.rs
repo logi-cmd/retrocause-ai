@@ -170,9 +170,12 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
 
                         aside class="evidence-dock" aria-label="Evidence anchors" {
                             p class="eyebrow" { "Evidence anchors" }
+                            p id="review-focus-status" class="console-status" {
+                                "Use inspector links to focus evidence and challenge checks."
+                            }
                             div id="evidence-list" {
                                 @for evidence in run.evidence.iter().take(3) {
-                                    article class="evidence-chip" {
+                                    article class="evidence-chip" data-evidence-id=(evidence.id.as_str()) {
                                         div {
                                             strong { (evidence.title.as_str()) }
                                             p { (evidence.excerpt.as_str()) }
@@ -183,7 +186,9 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                             }
                             div id="challenge-strip" class="challenge-strip" aria-label="Challenge checks" {
                                 @for challenge in &run.challenge_checks {
-                                    span { (challenge_status_label(challenge.status)) ": " (challenge.title.as_str()) }
+                                    span data-challenge-id=(challenge.id.as_str()) {
+                                        (challenge_status_label(challenge.status)) ": " (challenge.title.as_str())
+                                    }
                                 }
                             }
                         }
@@ -281,7 +286,14 @@ fn render_node_inspector(run: &ProRun, node: &GraphNode) -> Markup {
                 ul id="inspector-evidence-list" {
                     @for evidence_id in &node.evidence_ids {
                         li {
-                            (lookup_evidence_title(run, evidence_id).unwrap_or(evidence_id.as_str()))
+                            button
+                                class="focus-link"
+                                type="button"
+                                data-review-kind="evidence"
+                                data-review-id=(evidence_id.as_str())
+                            {
+                                (lookup_evidence_title(run, evidence_id).unwrap_or(evidence_id.as_str()))
+                            }
                         }
                     }
                 }
@@ -291,7 +303,14 @@ fn render_node_inspector(run: &ProRun, node: &GraphNode) -> Markup {
                 ul id="inspector-challenge-list" {
                     @for challenge_id in &node.challenge_ids {
                         li {
-                            (lookup_challenge_title(run, challenge_id).unwrap_or(challenge_id.as_str()))
+                            button
+                                class="focus-link"
+                                type="button"
+                                data-review-kind="challenge"
+                                data-review-id=(challenge_id.as_str())
+                            {
+                                (lookup_challenge_title(run, challenge_id).unwrap_or(challenge_id.as_str()))
+                            }
                         }
                     }
                 }
@@ -469,14 +488,34 @@ fn client_script() -> &'static str {
         <p id="inspector-node-summary">${escapeHtml(node.summary)}</p>
         <div class="inspector-links">
           <p>Evidence</p>
-          <ul id="inspector-evidence-list">${(node.evidence_ids || []).map((id) => `<li>${escapeHtml(evidence.get(id) || id)}</li>`).join("")}</ul>
+          <ul id="inspector-evidence-list">${(node.evidence_ids || []).map((id) => `
+            <li><button class="focus-link" type="button" data-review-kind="evidence" data-review-id="${escapeHtml(id)}">${escapeHtml(evidence.get(id) || id)}</button></li>
+          `).join("")}</ul>
         </div>
         <div class="inspector-links">
           <p>Challenges</p>
-          <ul id="inspector-challenge-list">${(node.challenge_ids || []).map((id) => `<li>${escapeHtml(challenges.get(id) || id)}</li>`).join("")}</ul>
+          <ul id="inspector-challenge-list">${(node.challenge_ids || []).map((id) => `
+            <li><button class="focus-link" type="button" data-review-kind="challenge" data-review-id="${escapeHtml(id)}">${escapeHtml(challenges.get(id) || id)}</button></li>
+          `).join("")}</ul>
         </div>
       </article>
     `;
+  }
+
+  function focusReviewItem(kind, id) {
+    const attr = kind === "challenge" ? "data-challenge-id" : "data-evidence-id";
+    document
+      .querySelectorAll(".evidence-chip.is-focused, .challenge-strip span.is-focused")
+      .forEach((item) => item.classList.remove("is-focused"));
+    const candidates = Array.from(document.querySelectorAll(`[${attr}]`));
+    const target = candidates.find((item) => item.getAttribute(attr) === id);
+    if (!target) {
+      setText("review-focus-status", `${readable(kind)} ${id} is not visible in the current dock.`);
+      return;
+    }
+    target.classList.add("is-focused");
+    target.scrollIntoView({ block: "nearest", inline: "nearest" });
+    setText("review-focus-status", `Focused ${readable(kind)}: ${target.textContent.trim()}`);
   }
 
   function renderRun(run) {
@@ -523,7 +562,7 @@ fn client_script() -> &'static str {
     const evidence = byId("evidence-list");
     if (evidence) {
       evidence.innerHTML = (run.evidence || []).slice(0, 3).map((item) => `
-        <article class="evidence-chip">
+        <article class="evidence-chip" data-evidence-id="${escapeHtml(item.id)}">
           <div><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.excerpt)}</p></div>
           <span>${escapeHtml(readable(item.stance))} / ${escapeHtml(readable(item.freshness))}</span>
         </article>
@@ -533,7 +572,7 @@ fn client_script() -> &'static str {
     const challenges = byId("challenge-strip");
     if (challenges) {
       challenges.innerHTML = (run.challenge_checks || []).map((challenge) => `
-        <span>${escapeHtml(readable(challenge.status))}: ${escapeHtml(challenge.title)}</span>
+        <span data-challenge-id="${escapeHtml(challenge.id)}">${escapeHtml(readable(challenge.status))}: ${escapeHtml(challenge.title)}</span>
       `).join("");
     }
 
@@ -664,6 +703,11 @@ fn client_script() -> &'static str {
   });
   byId("queue-preview-button")?.addEventListener("click", () => {
     queuePreviewJob().catch((error) => setText("execution-queue-status", `Queue error: ${error.message}`));
+  });
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-review-kind][data-review-id]");
+    if (!button) return;
+    focusReviewItem(button.dataset.reviewKind, button.dataset.reviewId);
   });
 
   renderRun(seed);
@@ -1152,6 +1196,17 @@ p {
   font-size: 0.78rem;
 }
 
+.focus-link {
+  border: 1px solid color-mix(in oklch, var(--text) 10%, transparent);
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--panel-hard) 65%, black);
+  color: color-mix(in oklch, var(--text) 86%, var(--muted));
+  cursor: pointer;
+  font: inherit;
+  padding: 0.34rem 0.48rem;
+  text-align: left;
+}
+
 .focus-docket {
   left: 1rem;
   bottom: 6.1rem;
@@ -1279,6 +1334,18 @@ p {
 .challenge-strip {
   display: grid;
   gap: 0.42rem;
+}
+
+.challenge-strip span {
+  border-radius: 8px;
+  padding: 0.36rem 0.42rem;
+}
+
+.evidence-chip.is-focused,
+.challenge-strip span.is-focused {
+  outline: 2px solid color-mix(in oklch, var(--accent) 86%, white);
+  outline-offset: 3px;
+  background: color-mix(in oklch, var(--panel-hard) 88%, var(--accent));
 }
 
 .focus-docket li {
@@ -1438,7 +1505,11 @@ mod tests {
         assert!(page.contains("graph-viewport"));
         assert!(page.contains("node-inspector"));
         assert!(page.contains("data-node-id"));
+        assert!(page.contains("data-evidence-id"));
+        assert!(page.contains("data-challenge-id"));
+        assert!(page.contains("data-review-kind"));
         assert!(page.contains("function selectNode"));
+        assert!(page.contains("function focusReviewItem"));
         assert!(page.contains("run-create-form"));
         assert!(page.contains("provider-status-list"));
         assert!(page.contains("/api/provider-status"));

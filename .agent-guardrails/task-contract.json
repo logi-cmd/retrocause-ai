@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
-  "task": "Render Pro preview-only execution job status in the graph-first Rust web shell: reuse the existing browser fetchJson pattern to create a preview-only execution job from the current run question, list jobs from /api/execution-jobs, show status/selected lane/execution-disabled notes, and synchronize Pro docs/evidence. Do not add credentials, live provider calls, auth, billing, workers, persistence, or OSS runtime changes.",
+  "task": "Deepen Pro graph review interactions in the Rust web shell: make inspector evidence and challenge links focus the corresponding evidence/challenge items in the graph workspace, keep the interaction browser-local, and synchronize Pro docs/evidence. Do not add backend APIs, credentials, live provider calls, auth, billing, workers, persistence, or OSS runtime changes.",
   "preset": "generic",
-  "createdAt": "2026-04-24T11:08:40.021Z",
+  "createdAt": "2026-04-24T11:18:59.562Z",
   "allowedPaths": [
     "pro/apps/web/",
     "docs/PROJECT_STATE.md",
@@ -64,10 +64,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "415895c0-6a5b-47a6-9f3c-1b31ef4593d7",
-    "createdAt": "2026-04-24T11:08:40.020Z",
+    "sessionId": "ec013e1c-71a4-4ca0-a784-eb9de0557457",
+    "createdAt": "2026-04-24T11:18:59.561Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Render Pro preview-only execution job status in the graph-first Rust web shell: reuse the existing browser fetchJson pattern to create a preview-only execution job from the current run question, list jobs from /api/execution-jobs, show status/selected lane/execution-disabled notes, and synchronize Pro docs/evidence. Do not add credentials, live provider calls, auth, billing, workers, persistence, or OSS runtime changes.",
+    "taskRequest": "Deepen Pro graph review interactions in the Rust web shell: make inspector evidence and challenge links focus the corresponding evidence/challenge items in the graph workspace, keep the interaction browser-local, and synchronize Pro docs/evidence. Do not add backend APIs, credentials, live provider calls, auth, billing, workers, persistence, or OSS runtime changes.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],

@@ -1120,6 +1120,11 @@ This task renders preview-only execution job status in the graph-first Pro web s
 - `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
   - Result: passed with no blocking errors.
   - Score: `95/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. The project state was intentionally synchronized to mark graph-review focus as implemented and move the next-step focus to worker/executor contract planning.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `95/100 (safe-to-deploy)`.
   - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. The project state was intentionally synchronized to mark queue status as visible in the Pro web shell and move the next-step focus to graph review interaction plus the first worker/executor contract.
 
 ### Risk / Tradeoff Notes
@@ -1135,3 +1140,70 @@ This task renders preview-only execution job status in the graph-first Pro web s
 - Queue jobs are still process-local and disappear when the Pro API exits.
 - The web shell lists queue state but does not yet stream job progress, render route-step detail, or link a job back into a completed run.
 - There is still no durable worker/executor contract, tenant/auth boundary, credential vault, quota enforcement, or live provider adapter.
+
+## 2026-04-24 Pro Product Core Slice 10
+
+This task deepens browser-local graph review interactions in the Rust Pro web shell. Inspector evidence/challenge links now focus corresponding review items in the workspace. No backend APIs, credentials, provider calls, auth, billing, workers, persistence, or OSS runtime changes were added.
+
+### Files Updated
+
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Converted inspector evidence and challenge entries into focus buttons.
+- Added `data-evidence-id`, `data-challenge-id`, and `data-review-*` hooks for browser-local review focus.
+- Added `focusReviewItem()` in the web shell script to highlight the matching evidence chip or challenge row and update a visible focus status line.
+- Added focused styling for evidence/challenge items.
+- Updated Pro docs so graph review focus is recorded as part of the current web-shell capability.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: task contract refreshed for the graph-review focus slice.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `13 passed`.
+  - Domain tests: `8 passed`.
+  - Provider-routing tests: `4 passed`.
+  - Queue tests: `4 passed`.
+  - Run-store tests: `3 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro browser graph-review focus smoke
+  - Started `retrocause-pro-web.exe` on `127.0.0.1:3024`.
+  - Clicked the first inspector evidence link and verified `.evidence-chip.is-focused`.
+  - Clicked the first inspector challenge link and verified `#challenge-strip span.is-focused`.
+  - Result: focused evidence was `Official export-control language`; focused challenge was `needs primary source: Does the rule actually cover the affected SKUs?`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Checked added Pro web/doc diff lines for `api_key`, `secret`, `OPENROUTER`, `TAVILY`, `BRAVE`, and `sk-`.
+  - Result: no matching added lines.
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, credential fields, provider calls, billing hooks, sensitive-data storage, or backend surfaces changed. This is browser-local UI state only.
+- Dependencies: no new crates, packages, lockfile changes, or version upgrades were introduced.
+- Performance: focus uses a small DOM query over currently rendered evidence/challenge items. It is acceptable for the current alpha graph shell; larger future graphs should introduce scoped indexes or a richer graph client runtime.
+- Understanding: the tradeoff is using simple DOM focus state rather than introducing a review workflow model before the run/executor contract exists.
+- Continuity: reused the existing inspector, evidence dock, challenge strip, and vanilla browser script. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- Focus state is browser-local and not persisted across runs, reloads, or tabs.
+- Only currently rendered evidence items can be focused; if future docks virtualize or paginate evidence, focus should scroll/load the target explicitly.
+- Edge-level review, multi-select, and persisted review decisions remain future work.
