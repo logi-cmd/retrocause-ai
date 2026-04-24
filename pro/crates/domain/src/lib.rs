@@ -116,6 +116,32 @@ pub struct ProviderQuotaStatus {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkspaceAccessContext {
+    pub workspace_id: String,
+    pub auth_mode: WorkspaceAuthMode,
+    pub enforcement_mode: WorkspaceEnforcementMode,
+    pub actor: WorkspaceActor,
+    pub permissions: Vec<WorkspacePermission>,
+    pub safeguards: Vec<String>,
+    pub sensitive_data_rules: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkspaceActor {
+    pub actor_id: String,
+    pub display_name: String,
+    pub role: WorkspaceRole,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkspacePermission {
+    pub id: String,
+    pub label: String,
+    pub scope: String,
+    pub status: WorkspacePermissionStatus,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CooldownState {
     pub state: CooldownKind,
     pub retry_after_seconds: Option<u32>,
@@ -258,6 +284,31 @@ pub enum CooldownKind {
     Clear,
     CoolingDown,
     NotApplicable,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceAuthMode {
+    LocalPreviewOnly,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceEnforcementMode {
+    NotEnforcedPreview,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceRole {
+    PreviewOperator,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspacePermissionStatus {
+    PreviewAllowed,
+    RequiresAuthLater,
 }
 
 pub fn create_run_from_request(sequence: u64, request: CreateRunRequest) -> Result<ProRun, String> {
@@ -809,6 +860,69 @@ pub fn provider_status_snapshot() -> ProviderStatusSnapshot {
     }
 }
 
+pub fn workspace_access_context() -> WorkspaceAccessContext {
+    WorkspaceAccessContext {
+        workspace_id: s("workspace_demo"),
+        auth_mode: WorkspaceAuthMode::LocalPreviewOnly,
+        enforcement_mode: WorkspaceEnforcementMode::NotEnforcedPreview,
+        actor: WorkspaceActor {
+            actor_id: s("local_preview_operator"),
+            display_name: s("Local preview operator"),
+            role: WorkspaceRole::PreviewOperator,
+        },
+        permissions: vec![
+            WorkspacePermission {
+                id: s("create_preview_run"),
+                label: s("Create preview runs"),
+                scope: s("workspace_demo"),
+                status: WorkspacePermissionStatus::PreviewAllowed,
+            },
+            WorkspacePermission {
+                id: s("inspect_knowledge_graph"),
+                label: s("Inspect graph and evidence"),
+                scope: s("workspace_demo"),
+                status: WorkspacePermissionStatus::PreviewAllowed,
+            },
+            WorkspacePermission {
+                id: s("enqueue_preview_job"),
+                label: s("Queue preview-only jobs"),
+                scope: s("workspace_demo"),
+                status: WorkspacePermissionStatus::PreviewAllowed,
+            },
+            WorkspacePermission {
+                id: s("execute_provider_calls"),
+                label: s("Execute provider calls"),
+                scope: s("provider_lanes"),
+                status: WorkspacePermissionStatus::RequiresAuthLater,
+            },
+            WorkspacePermission {
+                id: s("manage_workspace_credentials"),
+                label: s("Manage workspace credentials"),
+                scope: s("credential_vault"),
+                status: WorkspacePermissionStatus::RequiresAuthLater,
+            },
+            WorkspacePermission {
+                id: s("view_billing_and_quota"),
+                label: s("View billing and quota ledger"),
+                scope: s("billing"),
+                status: WorkspacePermissionStatus::RequiresAuthLater,
+            },
+        ],
+        safeguards: vec![
+            s("auth_enforcement_disabled_preview_only"),
+            s("no_sessions_or_cookies_issued"),
+            s("no_jwt_validation_in_this_slice"),
+            s("no_provider_credentials_read"),
+            s("no_billing_or_quota_mutation"),
+        ],
+        sensitive_data_rules: vec![
+            s("requests_must_not_carry_provider_keys"),
+            s("future_credentials_live_in_vault_owned_by_worker_boundary"),
+            s("workspace_id_is_demo_tenant_not_acl"),
+        ],
+    }
+}
+
 pub fn sample_run_by_id(run_id: &str) -> Option<ProRun> {
     let run = sample_run();
     (run.id == run_id).then_some(run)
@@ -934,9 +1048,9 @@ fn generated_title(question: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        CooldownKind, CreateRunRequest, ProviderReadiness, RunStatus, create_run_from_request,
-        provider_status_snapshot, sample_run, sample_run_by_id, sample_run_summaries,
-        validate_run_references,
+        CooldownKind, CreateRunRequest, ProviderReadiness, RunStatus, WorkspaceEnforcementMode,
+        WorkspacePermissionStatus, create_run_from_request, provider_status_snapshot, sample_run,
+        sample_run_by_id, sample_run_summaries, validate_run_references, workspace_access_context,
     };
     use std::collections::HashSet;
 
@@ -1045,5 +1159,40 @@ mod tests {
             let combined = format!("{} {} {}", entry.id, entry.label, entry.note).to_lowercase();
             !combined.contains("api_key") && !combined.contains("secret")
         }));
+    }
+
+    #[test]
+    fn workspace_access_context_is_preview_only_and_non_enforcing() {
+        let context = workspace_access_context();
+
+        assert_eq!(context.workspace_id, "workspace_demo");
+        assert_eq!(
+            context.enforcement_mode,
+            WorkspaceEnforcementMode::NotEnforcedPreview
+        );
+        assert!(
+            context
+                .permissions
+                .iter()
+                .any(|permission| permission.id == "create_preview_run"
+                    && permission.status == WorkspacePermissionStatus::PreviewAllowed)
+        );
+        assert!(
+            context
+                .permissions
+                .iter()
+                .any(|permission| permission.id == "execute_provider_calls"
+                    && permission.status == WorkspacePermissionStatus::RequiresAuthLater)
+        );
+        assert!(
+            context
+                .safeguards
+                .contains(&"no_provider_credentials_read".to_string())
+        );
+        assert!(
+            context
+                .sensitive_data_rules
+                .contains(&"workspace_id_is_demo_tenant_not_acl".to_string())
+        );
     }
 }

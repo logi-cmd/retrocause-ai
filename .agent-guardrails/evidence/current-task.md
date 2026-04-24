@@ -1703,3 +1703,80 @@ This task adds a non-executing provider adapter dry-run shape for the Pro Rust p
 - The dry-run is not a live provider adapter and does not prove provider connectivity, model output quality, or search-result quality.
 - There is still no workspace/auth boundary, credential vault integration, billing/quota ledger, durable status events, real worker process, retry scheduler, or live source/provider call path.
 - Future hosted Pro must add explicit auth and quota gates before any live adapter can execute provider calls.
+
+## Pro Product Core Slice 17 - Workspace/Auth Boundary Preview
+
+### Scope
+
+This task adds the first non-enforcing workspace/auth boundary preview for the Pro Rust product core. The shared domain crate now owns the workspace access context payload, the API exposes it through a keyless read endpoint, and the graph-first web shell renders the preview actor, preview permissions, future gated permissions, and auth safeguards. No real auth, sessions, cookies, JWT validation, credential storage, billing, database/Redis connections, provider calls, OSS runtime changes, dependency changes, or package publishing were added.
+
+### Files Updated
+
+- `pro/crates/domain/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `WorkspaceAccessContext`, `WorkspaceActor`, `WorkspacePermission`, and workspace/auth permission enums.
+- Added `workspace_access_context()` with demo workspace id, local preview actor, preview-allowed permissions, future gated permissions, safeguards, and sensitive-data rules.
+- Added `GET /api/workspace/access-context`.
+- Added a Pro web workspace access panel that renders preview auth mode, non-enforcement mode, preview permissions, future gated permissions, and safeguards.
+- Updated Pro docs and project state so the next focus moves to durable event/status vocabulary and future live-provider work behind explicit gates.
+
+### Commands Run
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `19 passed`.
+  - Domain tests: `9 passed`.
+  - Provider-routing tests: `7 passed`.
+  - Queue tests: `6 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API workspace-access smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8813` with a temporary local run-store path.
+  - Called `GET /api/workspace/access-context`.
+  - Result: passed; `workspace_id=workspace_demo`, `auth_mode=local_preview_only`, `enforcement_mode=not_enforced_preview`, six permissions were returned, provider execution is gated as `requires_auth_later`, and session/tenant safeguards are present.
+
+- Pro browser workspace-access smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8814` and `retrocause-pro-web.exe` on `127.0.0.1:3032`.
+  - Aborted external font requests in Playwright so inline scripts could run without network font blocking.
+  - Result: passed; the workspace access panel rendered `Workspace access preview`, `not enforced preview`, `Local preview operator`, `Create preview runs`, `Execute provider calls`, and `no_sessions_or_cookies_issued`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - A key-shaped scan for common provider-token prefixes and API-key assignment patterns found no actual key-shaped tokens in the diff.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors after committing the workspace/auth slice.
+  - Score: `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the project state was synchronized to mark the workspace/auth preview as implemented and move the next Pro focus to durable event/status vocabulary.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET /api/workspace/access-context`; it does not change OSS APIs, enforce auth, accept credentials, mutate billing/quota, or execute provider calls.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice explicitly does not authenticate or authorize requests. It does not issue sessions or cookies, validate tokens, read or store secrets, accept provider credentials, mutate billing/quota, or protect hosted resources. The value is the visible boundary vocabulary and the safeguards that prevent future provider execution from being mistaken as safe before auth exists.
+- Dependencies: no new crates, npm packages, lockfile changes, or version upgrades were introduced.
+- Performance: the endpoint returns one static in-process JSON payload and the browser renders a small card. It has no database, Redis, provider, worker, billing, or credential-vault load impact.
+- Understanding: the tradeoff is putting auth vocabulary in the shared domain before real auth exists. That makes future tenant/actor/permission replacement explicit while avoiding fake protection in the current local preview.
+- Continuity: reused the shared domain crate for cross-service payloads, Axum JSON route style, web `fetchJson` helper, and existing compact card styling. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- The access context is not security enforcement. It is only a local preview contract.
+- There is still no tenant resolver, actor identity provider, session store, JWT validation, credential vault, billing/quota ledger, durable status events, real worker process, retry scheduler, or live source/provider call path.
+- Future hosted Pro must implement real auth/tenant enforcement before enabling provider execution or shared hosted data.

@@ -80,6 +80,15 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                 }
                                 p id="run-action-status" class="console-status" { "API: " (api_base) }
                             }
+                            div id="workspace-access-panel" class="workspace-access-panel" {
+                                article class="access-card access-card--empty" {
+                                    div {
+                                        strong { "Workspace access preview" }
+                                        p { "Access context loads from the Pro API; auth enforcement is not enabled yet." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "preview" }
+                                }
+                            }
                         }
 
                         div class="graph-viewport" {
@@ -629,6 +638,61 @@ fn client_script() -> &'static str {
 
   }
 
+  function renderWorkspaceAccess(context) {
+    const panel = byId("workspace-access-panel");
+    if (!panel) return;
+    if (!context) {
+      panel.innerHTML = `
+        <article class="access-card access-card--empty">
+          <div>
+            <strong>Workspace access preview</strong>
+            <p>Access context loads from the Pro API; auth enforcement is not enabled yet.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">preview</span>
+        </article>
+      `;
+      return;
+    }
+
+    const allowed = (context.permissions || [])
+      .filter((permission) => permission.status === "preview_allowed")
+      .slice(0, 3)
+      .map((permission) => `<li>${escapeHtml(permission.label)}</li>`)
+      .join("");
+    const gated = (context.permissions || [])
+      .filter((permission) => permission.status !== "preview_allowed")
+      .slice(0, 3)
+      .map((permission) => `<li>${escapeHtml(permission.label)}</li>`)
+      .join("");
+    const safeguards = (context.safeguards || [])
+      .slice(0, 3)
+      .map((safeguard) => `<li>${escapeHtml(safeguard)}</li>`)
+      .join("");
+
+    panel.innerHTML = `
+      <article class="access-card">
+        <div class="work-order-header">
+          <strong>Workspace access preview</strong>
+          <span class="quota-state quota-state--deferred">${escapeHtml(readable(context.enforcement_mode || "not_enforced_preview"))}</span>
+          <p>${escapeHtml(context.workspace_id || "workspace")} / ${escapeHtml(readable(context.auth_mode || "local_preview_only"))}</p>
+          <small>${escapeHtml(context.actor?.display_name || "local operator")} / ${escapeHtml(readable(context.actor?.role || "preview_operator"))}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Preview allowed</p>
+          <ul class="work-order-list">${allowed || "<li>No preview permissions returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Requires real auth later</p>
+          <ul class="work-order-list">${gated || "<li>No gated permissions returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>No safeguards returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   function renderProviderStatus(snapshot) {
     setText("provider-status-mode", readable(snapshot.mode || "local_alpha_no_credentials"));
     const list = byId("provider-status-list");
@@ -1057,6 +1121,7 @@ fn client_script() -> &'static str {
   });
 
   renderRun(seed);
+  renderWorkspaceAccess(null);
   renderProviderStatus(providerSeed);
   renderProviderAdapterContract(null);
   renderProviderAdapterDryRun(null);
@@ -1064,6 +1129,11 @@ fn client_script() -> &'static str {
   renderWorkOrder(null);
   renderExecutionLifecycle(null);
   renderStoragePlan(null);
+  fetchJson("/api/workspace/access-context")
+    .then(renderWorkspaceAccess)
+    .catch(() => {
+      renderWorkspaceAccess(null);
+    });
   fetchJson("/api/provider-status")
     .then(renderProviderStatus)
     .catch(() => {
@@ -1650,6 +1720,11 @@ p {
   gap: 0.65rem;
 }
 
+#workspace-access-panel {
+  display: grid;
+  gap: 0.65rem;
+}
+
 #execution-job-list {
   display: grid;
   gap: 0.65rem;
@@ -1673,6 +1748,14 @@ p {
   padding: 0.72rem;
   border-radius: 8px;
   background: color-mix(in oklch, var(--panel-hard) 72%, black);
+}
+
+.access-card {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.72rem;
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.52 0.07 175));
 }
 
 .lifecycle-card {
@@ -1772,6 +1855,7 @@ p {
 
 .evidence-chip p,
 .evidence-chip span,
+.access-card small,
 .quota-meter small,
 .queue-meter small,
 .work-order-header small,
@@ -1975,6 +2059,9 @@ mod tests {
         assert!(page.contains("function selectNode"));
         assert!(page.contains("function focusReviewItem"));
         assert!(page.contains("run-create-form"));
+        assert!(page.contains("workspace-access-panel"));
+        assert!(page.contains("/api/workspace/access-context"));
+        assert!(page.contains("function renderWorkspaceAccess"));
         assert!(page.contains("provider-status-list"));
         assert!(page.contains("provider-adapter-panel"));
         assert!(page.contains("provider-adapter-dry-run-button"));

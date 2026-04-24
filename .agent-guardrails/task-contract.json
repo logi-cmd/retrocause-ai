@@ -1,10 +1,10 @@
 {
   "schemaVersion": 3,
-  "task": "Add a non-executing provider adapter dry-run shape for the Pro Rust product core: define dry-run request/result payloads in the provider-routing crate, expose a keyless POST API endpoint, add a compact dry-run action/result in the graph-first web shell, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, workers, database/Redis connections, OSS runtime changes, or package dependencies.",
+  "task": "Add the first non-enforcing workspace/auth boundary preview for the Pro Rust product core: define shared workspace access context payloads, expose a keyless API endpoint that describes tenant, actor, permissions, auth mode, and enforcement-disabled safeguards, render a compact workspace/auth panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add real auth, sessions, cookies, JWT validation, credential storage, billing, database/Redis connections, provider calls, OSS runtime changes, or package dependencies.",
   "preset": "generic",
-  "createdAt": "2026-04-24T12:18:50.341Z",
+  "createdAt": "2026-04-24T12:38:06.781Z",
   "allowedPaths": [
-    "pro/crates/provider-routing/",
+    "pro/crates/domain/",
     "pro/apps/api/",
     "pro/apps/web/",
     "docs/PROJECT_STATE.md",
@@ -66,10 +66,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "3878b81b-4c87-462a-987a-8f69e76f389a",
-    "createdAt": "2026-04-24T12:18:50.339Z",
+    "sessionId": "b79a71bd-66c2-4d7e-9970-e880bc75a3e9",
+    "createdAt": "2026-04-24T12:38:06.780Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add a non-executing provider adapter dry-run shape for the Pro Rust product core: define dry-run request/result payloads in the provider-routing crate, expose a keyless POST API endpoint, add a compact dry-run action/result in the graph-first web shell, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, workers, database/Redis connections, OSS runtime changes, or package dependencies.",
+    "taskRequest": "Add the first non-enforcing workspace/auth boundary preview for the Pro Rust product core: define shared workspace access context payloads, expose a keyless API endpoint that describes tenant, actor, permissions, auth mode, and enforcement-disabled safeguards, render a compact workspace/auth panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add real auth, sessions, cookies, JWT validation, credential storage, billing, database/Redis connections, provider calls, OSS runtime changes, or package dependencies.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],

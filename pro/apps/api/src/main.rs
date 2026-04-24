@@ -9,7 +9,7 @@ use axum::{
 };
 use retrocause_pro_domain::{
     CreateRunRequest, KnowledgeGraph, ProRun, ProviderStatusSnapshot, RunStatus, RunSummary,
-    provider_status_snapshot, sample_run,
+    WorkspaceAccessContext, provider_status_snapshot, sample_run, workspace_access_context,
 };
 use retrocause_pro_provider_routing::{
     ProviderAdapterContract, ProviderAdapterDryRunRequest, ProviderAdapterDryRunResult,
@@ -68,6 +68,7 @@ fn router() -> Router {
         .route("/", get(index))
         .route("/healthz", get(health))
         .route("/api/graph/seed", get(seed_graph))
+        .route("/api/workspace/access-context", get(workspace_access))
         .route("/api/provider-status", get(provider_status))
         .route(
             "/api/provider-route/preview",
@@ -127,6 +128,10 @@ async fn seed_graph(State(state): State<AppState>) -> Json<ProRun> {
             .get_run("run_semiconductor_controls_001")
             .unwrap_or_else(sample_run),
     )
+}
+
+async fn workspace_access() -> Json<WorkspaceAccessContext> {
+    Json(workspace_access_context())
 }
 
 async fn provider_status() -> Json<ProviderStatusSnapshot> {
@@ -416,6 +421,24 @@ mod tests {
         assert!(payload.entries.iter().all(|entry| {
             let combined = format!("{} {} {}", entry.id, entry.label, entry.note).to_lowercase();
             !combined.contains("api_key") && !combined.contains("secret")
+        }));
+    }
+
+    #[tokio::test]
+    async fn workspace_access_exposes_non_enforcing_preview_context() {
+        let payload = workspace_access().await.0;
+
+        assert_eq!(payload.workspace_id, "workspace_demo");
+        assert!(!payload.safeguards.is_empty());
+        assert!(
+            payload
+                .safeguards
+                .contains(&"no_sessions_or_cookies_issued".to_string())
+        );
+        assert!(payload.permissions.iter().any(|permission| {
+            permission.id == "execute_provider_calls"
+                && permission.status
+                    == retrocause_pro_domain::WorkspacePermissionStatus::RequiresAuthLater
         }));
     }
 
