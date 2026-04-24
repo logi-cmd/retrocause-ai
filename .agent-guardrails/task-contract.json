@@ -1,10 +1,10 @@
 {
   "schemaVersion": 3,
-  "task": "Add a quota-ledger and billing boundary preview for the Pro Rust product core: define shared keyless quota ledger/billing boundary payloads, expose a read-only API endpoint, render a compact quota-ledger panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add payment provider integration, billing mutation, live provider calls, credential handling, auth enforcement, database/Redis/event-store connections, workers, OSS runtime changes, or package dependencies.",
+  "task": "Add a worker-lease and retry-scheduler boundary preview for the Pro Rust product core: define shared non-executing worker lease, retry, and idempotency boundary payloads, expose a read-only API endpoint, render a compact worker-lease/retry panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add real workers, provider execution, queue persistence, Redis/database/event-store connections, credential access, auth enforcement, quota/billing mutation, OSS runtime changes, package dependencies, or live provider calls.",
   "preset": "generic",
-  "createdAt": "2026-04-24T14:17:22.134Z",
+  "createdAt": "2026-04-24T14:33:02.706Z",
   "allowedPaths": [
-    "pro/crates/domain/",
+    "pro/crates/queue/",
     "pro/apps/api/",
     "pro/apps/web/",
     "docs/PROJECT_STATE.md",
@@ -66,10 +66,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "c68091af-bce9-405f-b3e5-08eb4ee8021e",
-    "createdAt": "2026-04-24T14:17:22.133Z",
+    "sessionId": "84bcac67-c173-4a28-9446-40a5085f4165",
+    "createdAt": "2026-04-24T14:33:02.705Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add a quota-ledger and billing boundary preview for the Pro Rust product core: define shared keyless quota ledger/billing boundary payloads, expose a read-only API endpoint, render a compact quota-ledger panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add payment provider integration, billing mutation, live provider calls, credential handling, auth enforcement, database/Redis/event-store connections, workers, OSS runtime changes, or package dependencies.",
+    "taskRequest": "Add a worker-lease and retry-scheduler boundary preview for the Pro Rust product core: define shared non-executing worker lease, retry, and idempotency boundary payloads, expose a read-only API endpoint, render a compact worker-lease/retry panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add real workers, provider execution, queue persistence, Redis/database/event-store connections, credential access, auth enforcement, quota/billing mutation, OSS runtime changes, package dependencies, or live provider calls.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],

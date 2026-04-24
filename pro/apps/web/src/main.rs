@@ -259,6 +259,15 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "planned" }
                                 }
                             }
+                            div id="worker-lease-panel" class="lease-panel" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "Worker lease boundary" }
+                                        p { "Lease and retry rules load from the Pro API; no workers or retries run." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "planned" }
+                                }
+                            }
                             div id="storage-boundary-panel" class="storage-panel" {
                                 article class="queue-meter queue-meter--empty" {
                                     div {
@@ -1226,6 +1235,64 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderWorkerLeaseBoundary(boundary) {
+    const panel = byId("worker-lease-panel");
+    if (!panel) return;
+    if (!boundary) {
+      panel.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>Worker lease boundary</strong>
+            <p>Lease and retry rules load from the Pro API; no workers or retries run.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">planned</span>
+        </article>
+      `;
+      return;
+    }
+
+    const leaseRules = (boundary.lease_rules || []).slice(0, 4).map((rule) => `
+      <li>
+        <strong>${escapeHtml(rule.id)}</strong>
+        <span>${escapeHtml(rule.actor)} / ${escapeHtml(readable(rule.status))}</span>
+        <small>${escapeHtml(rule.requirement)}</small>
+      </li>
+    `).join("");
+    const retryRules = (boundary.retry_rules || []).slice(0, 4).map((rule) => `
+      <li>
+        <strong>${escapeHtml(rule.id)}</strong>
+        <span>${escapeHtml(rule.failure_state)} / ${escapeHtml(readable(rule.retry_policy))} / ${rule.max_attempts} attempts</span>
+        <small>${rule.preserves_partial_results ? "preserves partial results" : "no partial preservation"} / ${escapeHtml(readable(rule.status))}</small>
+      </li>
+    `).join("");
+    const safeguards = (boundary.safeguards || [])
+      .slice(0, 4)
+      .map((guard) => `<li>${escapeHtml(guard)}</li>`)
+      .join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card lease-card">
+        <div class="work-order-header">
+          <strong>Worker lease boundary</strong>
+          <span class="quota-state quota-state--deferred">${boundary.execution_allowed ? "execution on" : "execution off"}</span>
+          <p>${escapeHtml(readable(boundary.mode || "planned_no_workers"))} / lease store: ${boundary.lease_store_connected ? "connected" : "off"} / retry scheduler: ${boundary.retry_scheduler_enabled ? "on" : "off"}</p>
+        </div>
+        <section>
+          <p class="work-order-label">Lease rules</p>
+          <ol class="work-order-list">${leaseRules || "<li>No lease rules returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Retry scheduler</p>
+          <ul class="work-order-list">${retryRules || "<li>No retry rules returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Worker safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>No worker safeguards returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   function renderStoragePlan(plan) {
     const panel = byId("storage-boundary-panel");
     if (!panel) return;
@@ -1553,6 +1620,7 @@ fn client_script() -> &'static str {
   renderExecutionJobs([]);
   renderWorkOrder(null);
   renderExecutionLifecycle(null);
+  renderWorkerLeaseBoundary(null);
   renderStoragePlan(null);
   renderCredentialVaultBoundary(null);
   renderQuotaLedgerBoundary(null);
@@ -1590,6 +1658,11 @@ fn client_script() -> &'static str {
     .then(renderExecutionLifecycle)
     .catch(() => {
       renderExecutionLifecycle(null);
+    });
+  fetchJson("/api/worker-lease-boundary")
+    .then(renderWorkerLeaseBoundary)
+    .catch(() => {
+      renderWorkerLeaseBoundary(null);
     });
   fetchJson("/api/storage-plan")
     .then(renderStoragePlan)
@@ -2202,6 +2275,7 @@ p {
 
 #execution-work-order-detail,
 #execution-lifecycle-panel,
+#worker-lease-panel,
 #storage-boundary-panel,
 #credential-vault-panel,
 #quota-ledger-panel {
@@ -2248,6 +2322,10 @@ p {
 
 .lifecycle-card {
   background: color-mix(in oklch, var(--panel-hard) 68%, var(--accent));
+}
+
+.lease-card {
+  background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.55 0.08 35));
 }
 
 .storage-card {
@@ -2581,18 +2659,21 @@ mod tests {
         assert!(page.contains("execution-job-list"));
         assert!(page.contains("execution-work-order-detail"));
         assert!(page.contains("execution-lifecycle-panel"));
+        assert!(page.contains("worker-lease-panel"));
         assert!(page.contains("storage-boundary-panel"));
         assert!(page.contains("credential-vault-panel"));
         assert!(page.contains("quota-ledger-panel"));
         assert!(page.contains("/api/execution-jobs"));
         assert!(page.contains("/work-order"));
         assert!(page.contains("/api/execution-lifecycle"));
+        assert!(page.contains("/api/worker-lease-boundary"));
         assert!(page.contains("/api/storage-plan"));
         assert!(page.contains("/api/credential-vault-boundary"));
         assert!(page.contains("/api/quota-ledger-boundary"));
         assert!(page.contains("data-work-order-job-id"));
         assert!(page.contains("function renderWorkOrder"));
         assert!(page.contains("function renderExecutionLifecycle"));
+        assert!(page.contains("function renderWorkerLeaseBoundary"));
         assert!(page.contains("function renderStoragePlan"));
         assert!(page.contains("function renderCredentialVaultBoundary"));
         assert!(page.contains("function renderQuotaLedgerBoundary"));

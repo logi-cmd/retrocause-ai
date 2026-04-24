@@ -66,6 +66,43 @@ pub struct ExecutionLifecycleSpec {
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct WorkerLeaseBoundary {
+    pub mode: WorkerLeaseMode,
+    pub lease_store_connected: bool,
+    pub retry_scheduler_enabled: bool,
+    pub execution_allowed: bool,
+    pub lease_rules: Vec<WorkerLeaseRule>,
+    pub retry_rules: Vec<RetrySchedulerRule>,
+    pub idempotency_rules: Vec<WorkerIdempotencyRule>,
+    pub safeguards: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct WorkerLeaseRule {
+    pub id: &'static str,
+    pub actor: &'static str,
+    pub status: WorkerLeaseRuleStatus,
+    pub requirement: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct RetrySchedulerRule {
+    pub id: &'static str,
+    pub failure_state: &'static str,
+    pub retry_policy: &'static str,
+    pub max_attempts: u8,
+    pub preserves_partial_results: bool,
+    pub status: RetrySchedulerStatus,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct WorkerIdempotencyRule {
+    pub id: &'static str,
+    pub key_scope: &'static str,
+    pub requirement: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct ExecutionLifecycleStage {
     pub id: &'static str,
     pub label: &'static str,
@@ -102,6 +139,26 @@ pub enum ExecutionWorkOrderMode {
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionLifecycleMode {
     HostedWorkerPlanned,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerLeaseMode {
+    PlannedNoWorkers,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerLeaseRuleStatus {
+    FutureRequired,
+    NotConnected,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RetrySchedulerStatus {
+    FutureRequired,
+    PreviewOnly,
 }
 
 #[derive(Debug)]
@@ -289,6 +346,85 @@ pub fn execution_lifecycle_spec() -> ExecutionLifecycleSpec {
     }
 }
 
+pub fn worker_lease_boundary() -> WorkerLeaseBoundary {
+    WorkerLeaseBoundary {
+        mode: WorkerLeaseMode::PlannedNoWorkers,
+        lease_store_connected: false,
+        retry_scheduler_enabled: false,
+        execution_allowed: false,
+        lease_rules: vec![
+            WorkerLeaseRule {
+                id: "claim_requires_durable_job",
+                actor: "worker_pool_later",
+                status: WorkerLeaseRuleStatus::FutureRequired,
+                requirement: "A worker may claim only a durable queued job with tenant, quota, and route context.",
+            },
+            WorkerLeaseRule {
+                id: "lease_requires_auth_and_vault_scope",
+                actor: "worker_pool_later",
+                status: WorkerLeaseRuleStatus::FutureRequired,
+                requirement: "The worker lease must be tenant-scoped and may receive vault handles, never raw secrets.",
+            },
+            WorkerLeaseRule {
+                id: "routes_cannot_claim_work",
+                actor: "api_routes",
+                status: WorkerLeaseRuleStatus::NotConnected,
+                requirement: "API routes can expose preview work orders but must not claim leases or execute jobs.",
+            },
+        ],
+        retry_rules: vec![
+            RetrySchedulerRule {
+                id: "provider_rate_limited_retry",
+                failure_state: "provider_rate_limited",
+                retry_policy: "retry_after_or_failover_lane",
+                max_attempts: 3,
+                preserves_partial_results: true,
+                status: RetrySchedulerStatus::FutureRequired,
+            },
+            RetrySchedulerRule {
+                id: "provider_timeout_retry",
+                failure_state: "provider_timeout",
+                retry_policy: "bounded_exponential_backoff",
+                max_attempts: 2,
+                preserves_partial_results: true,
+                status: RetrySchedulerStatus::FutureRequired,
+            },
+            RetrySchedulerRule {
+                id: "worker_interrupted_requeue",
+                failure_state: "worker_interrupted",
+                retry_policy: "requeue_after_lease_expiry",
+                max_attempts: 1,
+                preserves_partial_results: true,
+                status: RetrySchedulerStatus::PreviewOnly,
+            },
+        ],
+        idempotency_rules: vec![
+            WorkerIdempotencyRule {
+                id: "job_claim_key",
+                key_scope: "workspace_id:job_id:lease_generation",
+                requirement: "Duplicate claims must not execute the same provider call twice.",
+            },
+            WorkerIdempotencyRule {
+                id: "provider_call_key",
+                key_scope: "workspace_id:job_id:provider_lane_id:attempt",
+                requirement: "Retries must reuse attempt keys so partial evidence and usage rows can be reconciled.",
+            },
+            WorkerIdempotencyRule {
+                id: "result_commit_key",
+                key_scope: "workspace_id:run_id:graph_revision",
+                requirement: "Final graph writes must be compare-and-swap style, not route-owned mutation.",
+            },
+        ],
+        safeguards: vec![
+            "no_worker_process_started".to_string(),
+            "no_lease_store_connection_in_this_slice".to_string(),
+            "no_retry_scheduler_enabled".to_string(),
+            "no_provider_execution_or_secret_access".to_string(),
+            "no_quota_or_billing_mutation".to_string(),
+        ],
+    }
+}
+
 impl ExecutionQueue {
     pub fn new() -> Self {
         Self::default()
@@ -405,7 +541,8 @@ impl std::error::Error for ExecutionQueueError {}
 mod tests {
     use super::{
         ExecutionJobStatus, ExecutionLifecycleMode, ExecutionQueue, ExecutionQueueError,
-        ExecutionWorkOrderMode, execution_lifecycle_spec,
+        ExecutionWorkOrderMode, WorkerLeaseMode, WorkerLeaseRuleStatus, execution_lifecycle_spec,
+        worker_lease_boundary,
     };
     use retrocause_pro_provider_routing::{RoutingPreviewRequest, RoutingScenario, SourcePolicy};
 
@@ -511,6 +648,41 @@ mod tests {
         assert!(
             spec.transition_guards
                 .contains(&"routes_never_receive_raw_provider_secrets".to_string())
+        );
+    }
+
+    #[test]
+    fn worker_lease_boundary_keeps_workers_and_retries_disabled() {
+        let boundary = worker_lease_boundary();
+
+        assert_eq!(boundary.mode, WorkerLeaseMode::PlannedNoWorkers);
+        assert!(!boundary.lease_store_connected);
+        assert!(!boundary.retry_scheduler_enabled);
+        assert!(!boundary.execution_allowed);
+        assert!(boundary.lease_rules.iter().any(|rule| {
+            rule.id == "routes_cannot_claim_work"
+                && rule.status == WorkerLeaseRuleStatus::NotConnected
+        }));
+        assert!(boundary.retry_rules.iter().any(|rule| {
+            rule.id == "provider_rate_limited_retry"
+                && rule.max_attempts == 3
+                && rule.preserves_partial_results
+        }));
+        assert!(
+            boundary
+                .idempotency_rules
+                .iter()
+                .any(|rule| rule.id == "provider_call_key")
+        );
+        assert!(
+            boundary
+                .safeguards
+                .contains(&"no_worker_process_started".to_string())
+        );
+        assert!(
+            boundary
+                .safeguards
+                .contains(&"no_provider_execution_or_secret_access".to_string())
         );
     }
 

@@ -133,10 +133,11 @@ Current behavior:
 - output: execution job payload with id, workspace id, query, preview-only status, selected lane, and the full route plan
 - worker contract: a non-executing work-order payload with route steps, routing warnings, selected lane, and explicit safeguards
 - lifecycle contract: a non-executing hosted-worker stage/failure taxonomy that names future queue, worker, provider, partial-result, and terminal states before adapters exist
+- worker lease/retry contract: a non-executing lease, retry, and idempotency boundary that names claim rules, retry policies, duplicate-call prevention, and partial-result preservation before workers exist
 - storage: process-local memory only
 - execution: always disabled in this slice
 
-This is intentionally not a worker system. It does not read provider keys, call models/search APIs, persist queue state, bill usage, enforce tenant quotas, or schedule background work. The value is the API, state, and work-order boundary: future Redis/Postgres-backed queue workers should replace the in-memory implementation without making API routes own job sequencing, route-plan coupling, or safety gate semantics.
+This is intentionally not a worker system. It does not read provider keys, call models/search APIs, persist queue state, bill usage, enforce tenant quotas, claim leases, or schedule background work. The value is the API, state, work-order, worker-lease, and retry boundary: future Redis/Postgres-backed queue workers should replace the in-memory implementation without making API routes own job sequencing, route-plan coupling, retry loops, idempotency semantics, or safety gate behavior.
 
 ## Near-term service split
 
@@ -167,6 +168,7 @@ Initial responsibility:
 - `GET /api/execution-jobs/{job_id}`
 - `GET /api/execution-jobs/{job_id}/work-order`
 - `GET /api/execution-lifecycle`
+- `GET /api/worker-lease-boundary`
 - `GET /api/storage-plan`
 - minimal local CORS headers for the separate Pro web port
 - local JSON run storage through `crates/run-store`, shared by list/detail/graph reads and surviving API restarts
@@ -174,7 +176,7 @@ Initial responsibility:
 - local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
 - future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The workspace access context, credential-vault boundary, quota-ledger boundary, run-events, review-comparison, provider-status, provider-route preview, execution-job, lifecycle, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, run status vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, opening event-store/database/Redis connections, enforcing auth, or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The workspace access context, credential-vault boundary, quota-ledger boundary, run-events, review-comparison, provider-status, provider-route preview, execution-job, lifecycle, worker-lease, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, run status vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, retry/idempotency semantics, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, opening event-store/database/Redis connections, enforcing auth, claiming worker leases, scheduling retries, or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -197,6 +199,7 @@ Initial responsibility:
 - create and list preview-only execution jobs through the local execution-job API
 - inspect queued job work orders through `GET /api/execution-jobs/{job_id}/work-order`, rendering route steps, routing warnings, selected lane, and execution safeguards while execution stays disabled
 - render the hosted-worker lifecycle/failure taxonomy from `GET /api/execution-lifecycle` so future execution states are visible before live adapters exist
+- render the worker-lease/retry boundary from `GET /api/worker-lease-boundary`, showing lease rules, retry policies, idempotency keys, and safeguards while workers and retry scheduling stay disabled
 - render the hosted storage migration boundaries from `GET /api/storage-plan` so Postgres/Redis/tenant/worker ownership is visible before connections exist
 - keep a browser-local selected-node state and graph inspector for evidence/challenge links, including focused evidence/challenge review items
 - establish layout, palette, and information hierarchy for the knowledge-graph experience
@@ -242,6 +245,8 @@ The current `GET /api/workspace/access-context` path exposes a static local prev
 The current `GET /api/credential-vault-boundary` path exposes planned credential classes, access rules, rotation rules, and safeguards. It does not accept credential input, read or store secrets, open a vault connection, return values, or enable workers. Future hosted Pro should replace it with metadata-only vault status after auth, quota ledger, and worker leases exist.
 
 The current `GET /api/quota-ledger-boundary` path exposes planned quota lanes, metering rules, rate-limit rules, and billing safeguards. It does not write ledger rows, reserve quota, connect a payment provider, emit billable usage, enforce limits, or enable provider execution. Future hosted Pro should replace it with tenant-scoped quota reservations and billing policy checks after auth, vault, event-store, and worker leases exist.
+
+The current `GET /api/worker-lease-boundary` path exposes planned worker-lease, retry, and idempotency rules. It does not start workers, claim leases, connect a lease store, schedule retries, read credentials, mutate quota/billing, or call providers. Future hosted Pro should replace it with durable lease claims, bounded retry scheduling, duplicate-call prevention, and partial-result reconciliation after tenant auth, quota reservations, vault access, and event-store writes exist.
 
 The current `GET /api/runs/{run_id}/events` path derives a non-durable timeline from the run record. It is useful for UI and API vocabulary, but it is not an audit log, not a durable event stream, and not a worker status queue. Future hosted Pro should replace or supplement it with event-store rows once tenant/auth, worker leases, and storage boundaries exist.
 
@@ -412,3 +417,11 @@ The quota-ledger/billing boundary slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `GET /api/quota-ledger-boundary` proving ledger mutation and payment-provider connections stay off while quota lanes, metering rules, and safeguards are visible
 - a browser smoke that starts the Pro API and web shell and verifies that the quota-ledger panel renders planned-no-mutation mode, ledger mutation off, payment provider off, quota lanes, and billing safeguards
+
+The worker-lease/retry boundary slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `GET /api/worker-lease-boundary` proving worker leases, lease-store connections, retry scheduling, and execution stay disabled while lease/retry/idempotency rules are visible
+- a browser smoke that starts the Pro API and web shell and verifies that the worker-lease panel renders planned-no-workers mode, lease store off, retry scheduler off, retry policies, and worker safeguards

@@ -23,7 +23,7 @@ use retrocause_pro_provider_routing::{
 };
 use retrocause_pro_queue::{
     ExecutionJob, ExecutionJobSummary, ExecutionLifecycleSpec, ExecutionQueue, ExecutionQueueError,
-    ExecutionWorkOrder, execution_lifecycle_spec,
+    ExecutionWorkOrder, WorkerLeaseBoundary, execution_lifecycle_spec, worker_lease_boundary,
 };
 use retrocause_pro_run_store::{
     FileRunStore, HostedStorageMigrationPlan, RunStoreError, hosted_storage_migration_plan,
@@ -119,6 +119,7 @@ fn router() -> Router {
             get(get_execution_work_order),
         )
         .route("/api/execution-lifecycle", get(execution_lifecycle))
+        .route("/api/worker-lease-boundary", get(worker_lease))
         .route("/api/storage-plan", get(storage_plan))
         .layer(middleware::from_fn(add_cors_headers))
         .with_state(AppState::open_default().expect("open pro run store"))
@@ -314,6 +315,10 @@ async fn get_execution_work_order(
 
 async fn execution_lifecycle() -> Json<ExecutionLifecycleSpec> {
     Json(execution_lifecycle_spec())
+}
+
+async fn worker_lease() -> Json<WorkerLeaseBoundary> {
+    Json(worker_lease_boundary())
 }
 
 async fn storage_plan() -> Json<HostedStorageMigrationPlan> {
@@ -567,6 +572,33 @@ mod tests {
             payload
                 .transition_guards
                 .contains(&"worker_reads_credentials_from_vault_only".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn worker_lease_exposes_non_executing_retry_boundary() {
+        let payload = worker_lease().await.0;
+
+        assert!(!payload.lease_store_connected);
+        assert!(!payload.retry_scheduler_enabled);
+        assert!(!payload.execution_allowed);
+        assert!(
+            payload
+                .lease_rules
+                .iter()
+                .any(|rule| rule.id == "routes_cannot_claim_work")
+        );
+        assert!(
+            payload
+                .retry_rules
+                .iter()
+                .any(|rule| rule.id == "provider_rate_limited_retry"
+                    && rule.preserves_partial_results)
+        );
+        assert!(
+            payload
+                .safeguards
+                .contains(&"no_worker_process_started".to_string())
         );
     }
 

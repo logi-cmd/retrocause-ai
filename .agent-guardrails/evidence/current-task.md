@@ -2181,3 +2181,82 @@ This task adds a preview-only quota-ledger and billing boundary for the Pro Rust
 - This is not a quota ledger, billing engine, rate limiter, or payment integration.
 - There is still no real tenant auth, quota reservation, usage write path, billing policy, payment provider connection, credential vault, scoped worker lease, durable event storage, retry scheduler, or live source/provider call path.
 - Future hosted Pro must implement quota reservations and billing checks behind tenant auth, vault access, event storage, and worker leases before any live adapter can execute billable provider calls.
+
+## Pro Product Core Slice 23 - Worker Lease/Retry Scheduler Boundary Preview
+
+### Scope
+
+This task adds a preview-only worker-lease and retry-scheduler boundary for the Pro Rust product core. The queue crate now defines lease rules, retry policies, idempotency rules, and safeguards; the API exposes a read-only boundary endpoint; and the graph-first web shell renders a compact worker-lease panel. No real workers, provider execution, queue persistence, Redis/database/event-store connections, credential access, auth enforcement, quota/billing mutation, OSS runtime changes, dependency changes, package publishing, retry loop, or live provider calls were added.
+
+### Files Updated
+
+- `pro/crates/queue/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `WorkerLeaseBoundary`, lease rules, retry scheduler rules, idempotency rules, and worker/retry status enums.
+- Added `worker_lease_boundary()` returning `planned_no_workers`, `lease_store_connected=false`, `retry_scheduler_enabled=false`, and `execution_allowed=false`.
+- Added `GET /api/worker-lease-boundary`.
+- Added a Pro web worker-lease panel that renders lease rules, retry policies, and safeguards without enabling worker claims or retry scheduling.
+- Updated Pro project state and architecture docs so maintainers can see this is a no-worker boundary contract, not a queue worker implementation.
+
+### Commands Run
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - First result: failed because Rustfmt wanted to reflow several queue-crate lines.
+  - Fix: ran `cargo fmt --manifest-path pro/Cargo.toml --all`.
+  - Final result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed after formatting.
+  - API tests: `26 passed`.
+  - Domain tests: `15 passed`.
+  - Provider-routing tests: `10 passed`.
+  - Queue tests: `7 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API worker-lease smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8827` with a temporary local run-store path.
+  - Called `GET /api/worker-lease-boundary`.
+  - Result: passed; mode was `planned_no_workers`, lease store was disconnected, retry scheduler was disabled, execution was disabled, three retry rules were returned, and safeguard `no_worker_process_started` was present.
+
+- Pro browser worker-lease smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8828` and `retrocause-pro-web.exe` on `127.0.0.1:3040`.
+  - Aborted external font requests in Playwright so inline scripts could run without network font blocking.
+  - Result: passed; the worker-lease panel rendered `Worker lease boundary`, `planned no workers`, `lease store: off`, `retry scheduler: off`, `provider_rate_limited_retry`, and `no_worker_process_started`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - A key-shaped scan for common provider-token prefixes and API-key assignment patterns found no actual key-shaped tokens in the non-doc diff.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the project state was synchronized to mark the worker-lease/retry boundary preview as implemented and move the next Pro focus toward result-commit/event-store boundaries.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET /api/worker-lease-boundary`; it does not change OSS APIs, start workers, connect a lease store, schedule retries, accept credentials, enforce auth, mutate quota/billing, or execute provider calls.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice explicitly does not start workers or execute provider calls. It does not accept, read, store, log, or return provider secrets, payment credentials, auth tokens, or sensitive user credentials. It does not enforce permissions or protect hosted resources.
+- Dependencies: no new crates, npm packages, lockfile changes, or version upgrades were introduced.
+- Performance: the endpoint returns one static in-process payload and the browser renders one compact panel. It adds no provider, database, Redis, event-store, worker, retry-scheduler, credential-vault, quota-ledger, or payment-provider load.
+- Understanding: the deliberate tradeoff is naming lease, retry, and idempotency semantics before implementing workers. This gives live-adapter work a visible execution gate without pretending the current local Pro shell can claim jobs, retry provider calls, or reconcile partial results.
+- Continuity: reused the existing queue crate, existing lifecycle/work-order contract pattern, Axum read-only endpoint style, web `fetchJson` helper, and compact boundary-card styling. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- This is not a worker runtime, retry scheduler, durable lease store, idempotent provider executor, or event-backed result committer.
+- There is still no real tenant auth, queue persistence, lease ownership, retry loop, event-store write path, credential vault, quota reservation, billing policy, payment provider connection, or live source/provider call path.
+- Future hosted Pro must implement durable worker leases, bounded retry scheduling, idempotent provider calls, partial-result reconciliation, and event-store commits before any live adapter can execute safely.
