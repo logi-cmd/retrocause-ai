@@ -1,10 +1,11 @@
 {
   "schemaVersion": 3,
-  "task": "Deepen Pro graph review interactions in the Rust web shell: make inspector evidence and challenge links focus the corresponding evidence/challenge items in the graph workspace, keep the interaction browser-local, and synchronize Pro docs/evidence. Do not add backend APIs, credentials, live provider calls, auth, billing, workers, persistence, or OSS runtime changes.",
+  "task": "Define the first Pro worker/executor contract behind preview-only queue jobs: add a non-executing work-order payload derived from queued routing-preview jobs, expose a local API read endpoint for the work order, keep all safeguards explicit, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, workers, persistence, or OSS runtime changes.",
   "preset": "generic",
-  "createdAt": "2026-04-24T11:18:59.562Z",
+  "createdAt": "2026-04-24T11:25:46.582Z",
   "allowedPaths": [
-    "pro/apps/web/",
+    "pro/crates/queue/",
+    "pro/apps/api/",
     "docs/PROJECT_STATE.md",
     "docs/pro-rust-architecture.md",
     ".agent-guardrails/"
@@ -64,10 +65,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "ec013e1c-71a4-4ca0-a784-eb9de0557457",
-    "createdAt": "2026-04-24T11:18:59.561Z",
+    "sessionId": "518e3106-f601-4e47-a2cc-78f4fde25278",
+    "createdAt": "2026-04-24T11:25:46.581Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Deepen Pro graph review interactions in the Rust web shell: make inspector evidence and challenge links focus the corresponding evidence/challenge items in the graph workspace, keep the interaction browser-local, and synchronize Pro docs/evidence. Do not add backend APIs, credentials, live provider calls, auth, billing, workers, persistence, or OSS runtime changes.",
+    "taskRequest": "Define the first Pro worker/executor contract behind preview-only queue jobs: add a non-executing work-order payload derived from queued routing-preview jobs, expose a local API read endpoint for the work order, keep all safeguards explicit, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, workers, persistence, or OSS runtime changes.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],

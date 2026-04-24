@@ -15,7 +15,7 @@ use retrocause_pro_provider_routing::{
     RoutingPreviewError, RoutingPreviewPlan, RoutingPreviewRequest, build_routing_preview,
 };
 use retrocause_pro_queue::{
-    ExecutionJob, ExecutionJobSummary, ExecutionQueue, ExecutionQueueError,
+    ExecutionJob, ExecutionJobSummary, ExecutionQueue, ExecutionQueueError, ExecutionWorkOrder,
 };
 use retrocause_pro_run_store::{FileRunStore, RunStoreError};
 use serde::Serialize;
@@ -83,6 +83,10 @@ fn router() -> Router {
                 .options(cors_preflight),
         )
         .route("/api/execution-jobs/{job_id}", get(get_execution_job))
+        .route(
+            "/api/execution-jobs/{job_id}/work-order",
+            get(get_execution_work_order),
+        )
         .layer(middleware::from_fn(add_cors_headers))
         .with_state(AppState::open_default().expect("open pro run store"))
 }
@@ -204,6 +208,17 @@ async fn get_execution_job(
     state
         .execution_queue
         .get_job(&job_id)
+        .map(Json)
+        .ok_or_else(|| job_not_found(job_id))
+}
+
+async fn get_execution_work_order(
+    State(state): State<AppState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<ExecutionWorkOrder>, ApiError> {
+    state
+        .execution_queue
+        .get_work_order(&job_id)
         .map(Json)
         .ok_or_else(|| job_not_found(job_id))
 }
@@ -514,6 +529,40 @@ mod tests {
         let summaries = list_execution_jobs(State(state)).await.0;
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].id, created.id);
+    }
+
+    #[tokio::test]
+    async fn execution_job_work_order_exposes_safeguarded_contract() {
+        let state = AppState::seeded();
+
+        let (_, Json(created)) = create_execution_job(
+            State(state.clone()),
+            Json(RoutingPreviewRequest {
+                workspace_id: Some("workspace_executor".to_string()),
+                query: "Why should workers wait?".to_string(),
+                scenario: None,
+                source_policy: None,
+            }),
+        )
+        .await
+        .expect("valid request should create preview job");
+
+        let work_order = get_execution_work_order(State(state), Path(created.id.clone()))
+            .await
+            .expect("created job should expose work order")
+            .0;
+
+        assert_eq!(work_order.job_id, created.id);
+        assert!(!work_order.execution_allowed);
+        assert_eq!(
+            work_order.selected_lane_id.as_deref(),
+            Some("uploaded_evidence_lane")
+        );
+        assert!(
+            work_order
+                .safeguards
+                .contains(&"provider_execution_disabled".to_string())
+        );
     }
 
     #[tokio::test]

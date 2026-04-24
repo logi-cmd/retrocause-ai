@@ -112,10 +112,11 @@ Current behavior:
 
 - input: the same workspace id, query, scenario, and source policy accepted by provider-routing preview
 - output: execution job payload with id, workspace id, query, preview-only status, selected lane, and the full route plan
+- worker contract: a non-executing work-order payload with route steps, routing warnings, selected lane, and explicit safeguards
 - storage: process-local memory only
 - execution: always disabled in this slice
 
-This is intentionally not a worker system. It does not read provider keys, call models/search APIs, persist queue state, bill usage, enforce tenant quotas, or schedule background work. The value is the API and state boundary: future Redis/Postgres-backed queue workers should replace the in-memory implementation without making API routes own job sequencing or route-plan coupling.
+This is intentionally not a worker system. It does not read provider keys, call models/search APIs, persist queue state, bill usage, enforce tenant quotas, or schedule background work. The value is the API, state, and work-order boundary: future Redis/Postgres-backed queue workers should replace the in-memory implementation without making API routes own job sequencing, route-plan coupling, or safety gate semantics.
 
 ## Near-term service split
 
@@ -135,6 +136,7 @@ Initial responsibility:
 - `GET /api/execution-jobs`
 - `POST /api/execution-jobs`
 - `GET /api/execution-jobs/{job_id}`
+- `GET /api/execution-jobs/{job_id}/work-order`
 - minimal local CORS headers for the separate Pro web port
 - local JSON run storage through `crates/run-store`, shared by list/detail/graph reads and surviving API restarts
 - local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
@@ -189,7 +191,7 @@ Initial responsibility:
 
 Those semantics should remain explicit in both API payloads and the graph workspace UI.
 
-The current `POST /api/runs` path uses `queued` runs and managed/user-provided quota labels without calling model or search providers. The current `GET /api/provider-status` path exposes static ownership lanes for managed Pro quota, workspace-managed search quota, BYOK-later search, uploaded-evidence-only input, and an example market-search cooldown bucket. The current `POST /api/execution-jobs` path records a preview-only queue job from the routing plan but still does not execute providers. Live provider credentials, BYOK storage, workspace quotas, real cooldown enforcement, and real worker execution remain future work.
+The current `POST /api/runs` path uses `queued` runs and managed/user-provided quota labels without calling model or search providers. The current `GET /api/provider-status` path exposes static ownership lanes for managed Pro quota, workspace-managed search quota, BYOK-later search, uploaded-evidence-only input, and an example market-search cooldown bucket. The current `POST /api/execution-jobs` path records a preview-only queue job from the routing plan, and `GET /api/execution-jobs/{job_id}/work-order` exposes the non-executing work-order contract a future worker should consume. Live provider credentials, BYOK storage, workspace quotas, real cooldown enforcement, and real worker execution remain future work.
 
 ## Knowledge-graph UI direction
 
@@ -260,3 +262,10 @@ The graph-review focus slice adds:
 - `cargo test --manifest-path pro/Cargo.toml`
 - `cargo build --manifest-path pro/Cargo.toml`
 - a browser smoke that clicks an inspector evidence link and verifies that the corresponding evidence item receives browser-local focus state
+
+The executor-contract slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `GET /api/execution-jobs/{job_id}/work-order` proving the work order remains preview-only, includes route steps, and carries explicit safeguards

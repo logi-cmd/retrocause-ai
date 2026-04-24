@@ -1,5 +1,6 @@
 use retrocause_pro_provider_routing::{
-    RoutingPreviewError, RoutingPreviewPlan, RoutingPreviewRequest, build_routing_preview,
+    RoutingPreviewError, RoutingPreviewPlan, RoutingPreviewRequest, RoutingStep,
+    build_routing_preview,
 };
 use serde::Serialize;
 use std::sync::{Arc, RwLock};
@@ -42,9 +43,28 @@ pub struct ExecutionJobSummary {
     pub updated_at_epoch_seconds: u64,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct ExecutionWorkOrder {
+    pub job_id: String,
+    pub workspace_id: String,
+    pub query: String,
+    pub mode: ExecutionWorkOrderMode,
+    pub execution_allowed: bool,
+    pub selected_lane_id: Option<String>,
+    pub route_steps: Vec<RoutingStep>,
+    pub routing_warnings: Vec<String>,
+    pub safeguards: Vec<String>,
+}
+
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionJobStatus {
+    PreviewOnly,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionWorkOrderMode {
     PreviewOnly,
 }
 
@@ -108,6 +128,10 @@ impl ExecutionQueue {
             .find(|job| job.id == job_id)
             .cloned()
     }
+
+    pub fn get_work_order(&self, job_id: &str) -> Option<ExecutionWorkOrder> {
+        self.get_job(job_id).map(|job| job.work_order())
+    }
 }
 
 impl ExecutionJob {
@@ -121,6 +145,25 @@ impl ExecutionJob {
             selected_lane_id: self.selected_lane_id.clone(),
             created_at_epoch_seconds: self.created_at_epoch_seconds,
             updated_at_epoch_seconds: self.updated_at_epoch_seconds,
+        }
+    }
+
+    pub fn work_order(&self) -> ExecutionWorkOrder {
+        ExecutionWorkOrder {
+            job_id: self.id.clone(),
+            workspace_id: self.workspace_id.clone(),
+            query: self.query.clone(),
+            mode: ExecutionWorkOrderMode::PreviewOnly,
+            execution_allowed: false,
+            selected_lane_id: self.selected_lane_id.clone(),
+            route_steps: self.route_plan.steps.clone(),
+            routing_warnings: self.route_plan.warnings.clone(),
+            safeguards: vec![
+                "provider_execution_disabled".to_string(),
+                "credential_access_forbidden".to_string(),
+                "billing_disabled".to_string(),
+                "worker_not_started".to_string(),
+            ],
         }
     }
 }
@@ -145,7 +188,7 @@ impl std::error::Error for ExecutionQueueError {}
 
 #[cfg(test)]
 mod tests {
-    use super::{ExecutionJobStatus, ExecutionQueue, ExecutionQueueError};
+    use super::{ExecutionJobStatus, ExecutionQueue, ExecutionQueueError, ExecutionWorkOrderMode};
     use retrocause_pro_provider_routing::{RoutingPreviewRequest, RoutingScenario, SourcePolicy};
 
     #[test]
@@ -202,6 +245,33 @@ mod tests {
             .get_job(&created.id)
             .expect("created job should be readable");
         assert_eq!(loaded.query, "Find this queued preview");
+    }
+
+    #[test]
+    fn work_order_keeps_execution_disabled_and_safeguarded() {
+        let queue = ExecutionQueue::new();
+        let created = queue
+            .enqueue_preview(request("Preview the executor contract"))
+            .expect("job should be created");
+
+        let work_order = queue
+            .get_work_order(&created.id)
+            .expect("created job should expose work order");
+
+        assert_eq!(work_order.job_id, created.id);
+        assert_eq!(work_order.mode, ExecutionWorkOrderMode::PreviewOnly);
+        assert!(!work_order.execution_allowed);
+        assert!(!work_order.route_steps.is_empty());
+        assert!(
+            work_order
+                .safeguards
+                .contains(&"provider_execution_disabled".to_string())
+        );
+        assert!(
+            work_order
+                .safeguards
+                .contains(&"credential_access_forbidden".to_string())
+        );
     }
 
     #[test]

@@ -1207,3 +1207,87 @@ This task deepens browser-local graph review interactions in the Rust Pro web sh
 - Focus state is browser-local and not persisted across runs, reloads, or tabs.
 - Only currently rendered evidence items can be focused; if future docks virtualize or paginate evidence, focus should scroll/load the target explicitly.
 - Edge-level review, multi-select, and persisted review decisions remain future work.
+
+## 2026-04-24 Pro Product Core Slice 11
+
+This task defines the first worker/executor contract behind preview-only queue jobs. It adds a non-executing work-order payload derived from queued routing-preview jobs and exposes it through the local Pro API. No provider credentials, provider calls, auth, billing, worker process, persistence, or OSS runtime changes were added.
+
+### Files Updated
+
+- `pro/crates/queue/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `ExecutionWorkOrder` and `ExecutionWorkOrderMode::PreviewOnly`.
+- Added `ExecutionJob::work_order()` and `ExecutionQueue::get_work_order()`.
+- Work orders include job id, workspace id, query, selected lane, route steps, routing warnings, and safeguards.
+- Safeguards explicitly include:
+  - `provider_execution_disabled`
+  - `credential_access_forbidden`
+  - `billing_disabled`
+  - `worker_not_started`
+- Added `GET /api/execution-jobs/{job_id}/work-order`.
+- Updated Pro docs so the work-order contract is documented as non-executing preview infrastructure.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: task contract refreshed for the executor-contract slice.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - First result: failed because `pro/crates/queue/src/lib.rs` needed standard `rustfmt` import wrapping.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `14 passed`.
+  - Domain tests: `8 passed`.
+  - Provider-routing tests: `4 passed`.
+  - Queue tests: `5 passed`.
+  - Run-store tests: `3 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all`
+  - Result: applied standard formatting.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Final result: passed.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API work-order smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8803` with a temporary local run-store path.
+  - Created a preview execution job, then called `GET /api/execution-jobs/{job_id}/work-order`.
+  - Result: `job=job_local_000000; mode=preview_only; execution=False; steps=5; safeguard=True; selected=uploaded_evidence_lane`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Checked added Pro/doc diff lines for `api_key`, `secret`, `OPENROUTER`, `TAVILY`, `BRAVE`, and `sk-`.
+  - Result: no matching added lines.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. The state doc was intentionally synchronized to mark the non-executing work-order contract as implemented and move the next-step focus to route-step visibility and hosted worker lifecycle planning.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET /api/execution-jobs/{job_id}/work-order`; it does not change OSS APIs or execute provider calls.
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, credential fields, provider calls, billing hooks, worker execution, or sensitive-data storage were added. Work-order safeguards explicitly preserve the no-execution boundary.
+- Dependencies: no new crates, packages, lockfile changes, or version upgrades were introduced.
+- Performance: work-order generation clones the small route plan already stored on the in-memory job. This is fine for preview-alpha state; durable hosted execution should generate work orders from persisted job records.
+- Understanding: the tradeoff is defining the worker-facing contract before creating a worker. This keeps future executor work honest about safeguards and route-step inputs without pretending live execution exists.
+- Continuity: reused `ExecutionJob`, `RoutingPreviewPlan`, existing queue crate, and Axum route style. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- Work orders are read-only preview payloads; there is still no worker process or execution lifecycle.
+- Work orders disappear with the process-local queue.
+- Future hosted Pro still needs tenant/auth checks, durable job storage, quota enforcement, credential vault integration, cooldown persistence, worker retries, and live provider adapters.
