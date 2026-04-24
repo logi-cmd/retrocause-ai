@@ -70,6 +70,7 @@ The first shared crate now defines:
 - usage ledger entries
 - provider/search quota ownership entries
 - workspace access context entries
+- run event timeline and status vocabulary entries
 - source cooldown state
 - verification steps
 - an owned `CreateRunRequest` builder for process-local alpha run creation
@@ -78,6 +79,8 @@ The first shared crate now defines:
 This keeps the API and web kickoff honest: they render the same shape instead of drifting into two separate demos.
 
 The workspace access context is deliberately non-enforcing in this slice. It names the demo workspace, preview actor, preview-allowed actions, actions that require real auth later, and safeguards such as no sessions, no cookie issuance, no token validation, no credential reads, and no billing/quota mutation. It is an inspectable contract, not a login system.
+
+The run event timeline is deliberately non-durable in this slice. It is generated from the current `ProRun` record and names event/status vocabulary before an event store exists. It does not open an event-store connection, run workers, call providers, enforce auth, or mutate run state.
 
 ## Run store boundary
 
@@ -138,6 +141,7 @@ Initial responsibility:
 - `POST /api/runs`
 - `GET /api/runs/{run_id}`
 - `GET /api/runs/{run_id}/graph`
+- `GET /api/runs/{run_id}/events`
 - `GET /api/workspace/access-context`
 - `GET /api/provider-status`
 - `GET /api/provider-adapter-contract`
@@ -156,7 +160,7 @@ Initial responsibility:
 - local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
 - future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The workspace access context, provider-status, provider-route preview, execution-job, lifecycle, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, and storage boundaries without exposing credential fields, opening database/Redis connections, enforcing auth, or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The workspace access context, run-events, provider-status, provider-route preview, execution-job, lifecycle, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, run status vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, and storage boundaries without exposing credential fields, opening event-store/database/Redis connections, enforcing auth, or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -167,6 +171,7 @@ Initial responsibility:
 - create new in-memory runs through `POST /api/runs`
 - reload run summaries, run detail, and graph payloads from the Pro API
 - render the non-enforcing workspace/auth context from `GET /api/workspace/access-context`
+- render a non-durable run event timeline from `GET /api/runs/{run_id}/events`
 - show provider/search quota ownership, credential policy, and cooldown status through the local provider-status payload
 - render the dry provider-adapter request/result/degradation contract from `GET /api/provider-adapter-contract`
 - run a keyless provider-adapter dry-run through `POST /api/provider-adapter/dry-run`, showing zero billable units, evidence-preview count, degradation states, and calls-disabled state
@@ -214,6 +219,8 @@ Those semantics should remain explicit in both API payloads and the graph worksp
 The current `POST /api/runs` path uses `queued` runs and managed/user-provided quota labels without calling model or search providers. The current `GET /api/provider-status` path exposes static ownership lanes for managed Pro quota, workspace-managed search quota, BYOK-later search, uploaded-evidence-only input, and an example market-search cooldown bucket. The current `POST /api/execution-jobs` path records a preview-only queue job from the routing plan, and `GET /api/execution-jobs/{job_id}/work-order` exposes the non-executing work-order contract a future worker should consume. Live provider credentials, BYOK storage, workspace quotas, real cooldown enforcement, and real worker execution remain future work.
 
 The current `GET /api/workspace/access-context` path exposes a static local preview actor and permission vocabulary. It does not authenticate, authorize, issue sessions, validate tokens, store credentials, mutate billing/quota, or protect hosted resources. Future auth work should replace this preview context with real tenant and actor resolution before any provider execution is enabled.
+
+The current `GET /api/runs/{run_id}/events` path derives a non-durable timeline from the run record. It is useful for UI and API vocabulary, but it is not an audit log, not a durable event stream, and not a worker status queue. Future hosted Pro should replace or supplement it with event-store rows once tenant/auth, worker leases, and storage boundaries exist.
 
 ## Knowledge-graph UI direction
 
@@ -338,3 +345,11 @@ The workspace/auth boundary preview slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `GET /api/workspace/access-context` proving the context stays non-enforcing, shows preview and gated permissions, and names auth safeguards
 - a browser smoke that starts the Pro API and web shell and verifies that the workspace access panel renders the preview actor, preview permissions, gated provider execution, and safeguards
+
+The run event/status vocabulary slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `GET /api/runs/{run_id}/events` proving the timeline is derived from the run record, non-durable, and includes status vocabulary plus event-store safeguards
+- a browser smoke that starts the Pro API and web shell and verifies that the run event timeline renders current status, non-durable mode, recent events, status vocabulary, and timeline safeguards

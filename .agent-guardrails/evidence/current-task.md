@@ -1780,3 +1780,83 @@ This task adds the first non-enforcing workspace/auth boundary preview for the P
 - The access context is not security enforcement. It is only a local preview contract.
 - There is still no tenant resolver, actor identity provider, session store, JWT validation, credential vault, billing/quota ledger, durable status events, real worker process, retry scheduler, or live source/provider call path.
 - Future hosted Pro must implement real auth/tenant enforcement before enabling provider execution or shared hosted data.
+
+## Pro Product Core Slice 18 - Run Event/Status Vocabulary
+
+### Scope
+
+This task adds a non-durable run event/status vocabulary for the Pro Rust product core. The shared domain crate now derives a run event timeline from a `ProRun`, the API exposes it through a keyless per-run endpoint, and the graph-first web shell renders a compact event timeline. No database, Redis, event-store connection, background worker, provider call, auth enforcement, billing, OSS runtime change, dependency change, or package publishing was added.
+
+### Files Updated
+
+- `pro/crates/domain/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `RunEventTimeline`, `RunEvent`, `RunStatusVocabularyEntry`, `RunEventKind`, and `RunEventSource`.
+- Added `run_event_timeline()` and `run_status_vocabulary()` so a current `ProRun` can produce a non-durable timeline, recent events, reviewability status vocabulary, and safeguards.
+- Added `GET /api/runs/{run_id}/events`.
+- Added a Pro web run-event panel that renders current status, non-durable mode, recent events, status vocabulary, and event-store safeguards.
+- Updated Pro docs and project state so the next focus moves to the first live-provider adapter candidate behind explicit auth, quota, dry-run, and status-event gates.
+
+### Commands Run
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all`
+  - Result: passed.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `20 passed`.
+  - Domain tests: `11 passed`.
+  - Provider-routing tests: `7 passed`.
+  - Queue tests: `6 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API run-events smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8815` with a temporary local run-store path.
+  - Called `GET /api/runs/run_semiconductor_controls_001/events`.
+  - Result: passed; `run_id=run_semiconductor_controls_001`, `durable=false`, four derived events, seven status-vocabulary entries, `review_ready` event present, `partial_live` vocabulary present, and event-store safeguard present.
+
+- Pro browser run-events smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8816` and `retrocause-pro-web.exe` on `127.0.0.1:3033`.
+  - Aborted external font requests in Playwright so inline scripts could run without network font blocking.
+  - Result: passed; the event panel rendered `Run event timeline`, `non durable`, `ready for review`, `Ready for review`, `Partial live`, and `no_event_store_connection_in_this_slice`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - A key-shaped scan for common provider-token prefixes and API-key assignment patterns found no actual key-shaped tokens in the diff.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the project state was synchronized to mark the run event/status vocabulary as implemented and move the next Pro focus to live-provider adapter work behind gates.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET /api/runs/{run_id}/events`; it does not change OSS APIs, connect an event store, enforce auth, mutate billing/quota, or execute provider calls.
+
+### Risk / Tradeoff Notes
+
+- Security: the event endpoint reads only an existing run record and derives a timeline. It does not authenticate requests, enforce authorization, issue sessions, read provider credentials, accept secrets, mutate billing/quota, or protect hosted resources.
+- Dependencies: no new crates, npm packages, lockfile changes, or version upgrades were introduced.
+- Performance: the timeline is generated in process from one run payload and returns a small JSON response. It adds no event-store, database, Redis, worker, provider, or billing load.
+- Understanding: the deliberate tradeoff is naming event/status semantics before durable storage exists. That gives the UI and API a concrete vocabulary for run history without pretending this is an audit log or worker queue.
+- Continuity: reused the shared domain crate, existing `RunStatus`, Axum JSON route style, local file-backed run-store reads, web `fetchJson` helper, and compact card styling. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- The event timeline is not durable and should not be treated as an audit log.
+- There is still no event store, tenant resolver, real auth, credential vault, billing/quota ledger, persisted worker lease, retry scheduler, or live source/provider call path.
+- Future hosted Pro should replace or supplement this derived timeline with event-store rows after auth, storage, and worker boundaries are real.

@@ -89,6 +89,15 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "preview" }
                                 }
                             }
+                            div id="run-event-panel" class="run-event-panel" {
+                                article class="event-card event-card--empty" {
+                                    div {
+                                        strong { "Run event timeline" }
+                                        p { "Event status vocabulary loads from the Pro API; no durable event store is connected." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "derived" }
+                                }
+                            }
                         }
 
                         div class="graph-viewport" {
@@ -693,6 +702,61 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderRunEvents(timeline) {
+    const panel = byId("run-event-panel");
+    if (!panel) return;
+    if (!timeline) {
+      panel.innerHTML = `
+        <article class="event-card event-card--empty">
+          <div>
+            <strong>Run event timeline</strong>
+            <p>Event status vocabulary loads from the Pro API; no durable event store is connected.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">derived</span>
+        </article>
+      `;
+      return;
+    }
+
+    const events = (timeline.events || []).slice(-4).map((event) => `
+      <li>
+        <strong>${escapeHtml(event.title)}</strong>
+        <span>${escapeHtml(readable(event.status))} / ${escapeHtml(readable(event.kind))}</span>
+        <small>${escapeHtml(event.detail || "Derived from the current run record.")}</small>
+      </li>
+    `).join("");
+    const vocabulary = (timeline.status_vocabulary || []).slice(0, 4).map((entry) => `
+      <li>
+        <strong>${escapeHtml(entry.label)}</strong>
+        <span>${entry.reviewable ? "reviewable" : "not reviewable"}${entry.requires_worker ? " / worker later" : ""}</span>
+      </li>
+    `).join("");
+    const safeguards = (timeline.safeguards || []).slice(0, 2).map((guard) => `<li>${escapeHtml(guard)}</li>`).join("");
+
+    panel.innerHTML = `
+      <article class="event-card">
+        <div class="work-order-header">
+          <strong>Run event timeline</strong>
+          <span class="quota-state quota-state--deferred">${timeline.durable ? "durable" : "non durable"}</span>
+          <p>${escapeHtml(readable(timeline.current_status || "queued"))} / ${escapeHtml(timeline.generated_at || "derived")}</p>
+          <small>${escapeHtml(timeline.run_id || "run")} / ${escapeHtml(timeline.workspace_id || "workspace")}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Recent events</p>
+          <ol class="work-order-list">${events || "<li>No events returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Status vocabulary</p>
+          <ul class="work-order-list">${vocabulary || "<li>No status vocabulary returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Timeline safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>Timeline is derived only.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   function renderProviderStatus(snapshot) {
     setText("provider-status-mode", readable(snapshot.mode || "local_alpha_no_credentials"));
     const list = byId("provider-status-list");
@@ -1027,12 +1091,14 @@ fn client_script() -> &'static str {
 
   async function loadRun(runId) {
     if (!runId) return;
-    const [run, graphPayload] = await Promise.all([
+    const [run, graphPayload, eventTimeline] = await Promise.all([
       fetchJson(`/api/runs/${encodeURIComponent(runId)}`),
       fetchJson(`/api/runs/${encodeURIComponent(runId)}/graph`),
+      fetchJson(`/api/runs/${encodeURIComponent(runId)}/events`),
     ]);
     run.graph = graphPayload.graph;
     renderRun(run);
+    renderRunEvents(eventTimeline);
     await refreshRuns(run.id);
     setStatus(`Loaded ${run.id}`);
   }
@@ -1122,6 +1188,7 @@ fn client_script() -> &'static str {
 
   renderRun(seed);
   renderWorkspaceAccess(null);
+  renderRunEvents(null);
   renderProviderStatus(providerSeed);
   renderProviderAdapterContract(null);
   renderProviderAdapterDryRun(null);
@@ -1133,6 +1200,11 @@ fn client_script() -> &'static str {
     .then(renderWorkspaceAccess)
     .catch(() => {
       renderWorkspaceAccess(null);
+    });
+  fetchJson(`/api/runs/${encodeURIComponent(seed.id)}/events`)
+    .then(renderRunEvents)
+    .catch(() => {
+      renderRunEvents(null);
     });
   fetchJson("/api/provider-status")
     .then(renderProviderStatus)
@@ -1400,6 +1472,8 @@ body {
   top: 5.5rem;
   left: 0.9rem;
   max-width: min(420px, calc(100% - 1.8rem));
+  max-height: calc(100vh - 7rem);
+  overflow: auto;
   padding: 0.95rem 1rem;
   display: grid;
   gap: 0.55rem;
@@ -1725,6 +1799,11 @@ p {
   gap: 0.65rem;
 }
 
+#run-event-panel {
+  display: grid;
+  gap: 0.65rem;
+}
+
 #execution-job-list {
   display: grid;
   gap: 0.65rem;
@@ -1756,6 +1835,14 @@ p {
   padding: 0.72rem;
   border-radius: 8px;
   background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.52 0.07 175));
+}
+
+.event-card {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.72rem;
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.58 0.07 110));
 }
 
 .lifecycle-card {
@@ -2062,6 +2149,10 @@ mod tests {
         assert!(page.contains("workspace-access-panel"));
         assert!(page.contains("/api/workspace/access-context"));
         assert!(page.contains("function renderWorkspaceAccess"));
+        assert!(page.contains("run-event-panel"));
+        assert!(page.contains("/api/runs/${encodeURIComponent(runId)}/events"));
+        assert!(page.contains("function renderRunEvents"));
+        assert!(page.contains("Run event timeline"));
         assert!(page.contains("provider-status-list"));
         assert!(page.contains("provider-adapter-panel"));
         assert!(page.contains("provider-adapter-dry-run-button"));

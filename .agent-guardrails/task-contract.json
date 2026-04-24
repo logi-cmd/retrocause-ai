@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
-  "task": "Add the first non-enforcing workspace/auth boundary preview for the Pro Rust product core: define shared workspace access context payloads, expose a keyless API endpoint that describes tenant, actor, permissions, auth mode, and enforcement-disabled safeguards, render a compact workspace/auth panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add real auth, sessions, cookies, JWT validation, credential storage, billing, database/Redis connections, provider calls, OSS runtime changes, or package dependencies.",
+  "task": "Add a non-durable run event/status vocabulary for the Pro Rust product core: define shared run event timeline payloads in the domain crate, expose a keyless per-run events API endpoint generated from the current run record, render a compact run event timeline in the graph-first web shell, and synchronize Pro docs/evidence. Do not add database/Redis/event-store connections, background workers, live provider calls, auth enforcement, billing, OSS runtime changes, or package dependencies.",
   "preset": "generic",
-  "createdAt": "2026-04-24T12:38:06.781Z",
+  "createdAt": "2026-04-24T12:50:47.595Z",
   "allowedPaths": [
     "pro/crates/domain/",
     "pro/apps/api/",
@@ -66,10 +66,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "b79a71bd-66c2-4d7e-9970-e880bc75a3e9",
-    "createdAt": "2026-04-24T12:38:06.780Z",
+    "sessionId": "5b4b0d1d-b06e-42e9-b188-254e0d154bf1",
+    "createdAt": "2026-04-24T12:50:47.592Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add the first non-enforcing workspace/auth boundary preview for the Pro Rust product core: define shared workspace access context payloads, expose a keyless API endpoint that describes tenant, actor, permissions, auth mode, and enforcement-disabled safeguards, render a compact workspace/auth panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add real auth, sessions, cookies, JWT validation, credential storage, billing, database/Redis connections, provider calls, OSS runtime changes, or package dependencies.",
+    "taskRequest": "Add a non-durable run event/status vocabulary for the Pro Rust product core: define shared run event timeline payloads in the domain crate, expose a keyless per-run events API endpoint generated from the current run record, render a compact run event timeline in the graph-first web shell, and synchronize Pro docs/evidence. Do not add database/Redis/event-store connections, background workers, live provider calls, auth enforcement, billing, OSS runtime changes, or package dependencies.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],

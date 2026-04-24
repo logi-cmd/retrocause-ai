@@ -142,6 +142,40 @@ pub struct WorkspacePermission {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RunEventTimeline {
+    pub run_id: String,
+    pub workspace_id: String,
+    pub current_status: RunStatus,
+    pub generated_at: String,
+    pub durable: bool,
+    pub events: Vec<RunEvent>,
+    pub status_vocabulary: Vec<RunStatusVocabularyEntry>,
+    pub safeguards: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RunEvent {
+    pub id: String,
+    pub sequence: u32,
+    pub status: RunStatus,
+    pub kind: RunEventKind,
+    pub title: String,
+    pub detail: String,
+    pub occurred_at: String,
+    pub source: RunEventSource,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RunStatusVocabularyEntry {
+    pub status: RunStatus,
+    pub label: String,
+    pub reviewable: bool,
+    pub terminal: bool,
+    pub requires_worker: bool,
+    pub description: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CooldownState {
     pub state: CooldownKind,
     pub retry_after_seconds: Option<u32>,
@@ -309,6 +343,25 @@ pub enum WorkspaceRole {
 pub enum WorkspacePermissionStatus {
     PreviewAllowed,
     RequiresAuthLater,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RunEventKind {
+    RunAccepted,
+    RetrievalStarted,
+    CooldownEntered,
+    PartialEvidenceReady,
+    FollowupRequired,
+    ReviewReady,
+    Blocked,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RunEventSource {
+    DerivedFromRunRecord,
+    FutureDurableEventStore,
 }
 
 pub fn create_run_from_request(sequence: u64, request: CreateRunRequest) -> Result<ProRun, String> {
@@ -923,6 +976,167 @@ pub fn workspace_access_context() -> WorkspaceAccessContext {
     }
 }
 
+pub fn run_event_timeline(run: &ProRun) -> RunEventTimeline {
+    let mut events = Vec::new();
+    push_run_event(
+        &mut events,
+        run,
+        RunStatus::Queued,
+        RunEventKind::RunAccepted,
+        "Run accepted",
+        format!("Question captured for workspace {}.", run.workspace_id),
+    );
+
+    match run.status {
+        RunStatus::Queued => {}
+        RunStatus::Running => {
+            push_run_event(
+                &mut events,
+                run,
+                RunStatus::Running,
+                RunEventKind::RetrievalStarted,
+                "Retrieval started",
+                "A future worker would now retrieve sources and normalize evidence.",
+            );
+        }
+        RunStatus::CoolingDown => {
+            push_run_event(
+                &mut events,
+                run,
+                RunStatus::Running,
+                RunEventKind::RetrievalStarted,
+                "Retrieval started",
+                "The run attempted provider or source work before entering cooldown.",
+            );
+            push_run_event(
+                &mut events,
+                run,
+                RunStatus::CoolingDown,
+                RunEventKind::CooldownEntered,
+                "Cooldown entered",
+                "A provider or source lane is cooling down; retry-after state should be visible.",
+            );
+        }
+        RunStatus::PartialLive => {
+            push_retrieval_and_partial_events(&mut events, run);
+        }
+        RunStatus::NeedsFollowup => {
+            push_retrieval_and_partial_events(&mut events, run);
+            push_run_event(
+                &mut events,
+                run,
+                RunStatus::NeedsFollowup,
+                RunEventKind::FollowupRequired,
+                "Follow-up required",
+                "Review found a gap that must be checked before the run is ready.",
+            );
+        }
+        RunStatus::ReadyForReview => {
+            push_retrieval_and_partial_events(&mut events, run);
+            push_run_event(
+                &mut events,
+                run,
+                RunStatus::ReadyForReview,
+                RunEventKind::ReviewReady,
+                "Ready for review",
+                format!(
+                    "Run has {} graph nodes, {} evidence anchors, and {} challenge checks.",
+                    run.graph.nodes.len(),
+                    run.evidence.len(),
+                    run.challenge_checks.len()
+                ),
+            );
+        }
+        RunStatus::Blocked => {
+            push_run_event(
+                &mut events,
+                run,
+                RunStatus::Blocked,
+                RunEventKind::Blocked,
+                "Run blocked",
+                "The run cannot progress until a missing precondition is resolved.",
+            );
+        }
+    }
+
+    RunEventTimeline {
+        run_id: run.id.clone(),
+        workspace_id: run.workspace_id.clone(),
+        current_status: run.status,
+        generated_at: format!("derived-from:{}", run.updated_at),
+        durable: false,
+        events,
+        status_vocabulary: run_status_vocabulary(),
+        safeguards: vec![
+            s("non_durable_timeline_derived_from_run_record"),
+            s("no_event_store_connection_in_this_slice"),
+            s("no_worker_or_provider_execution_from_events"),
+            s("event_ids_are_preview_only"),
+        ],
+    }
+}
+
+pub fn run_status_vocabulary() -> Vec<RunStatusVocabularyEntry> {
+    vec![
+        status_vocabulary_entry(
+            RunStatus::Queued,
+            "Queued",
+            false,
+            false,
+            false,
+            "Run was accepted, but provider/search work has not started.",
+        ),
+        status_vocabulary_entry(
+            RunStatus::Running,
+            "Running",
+            false,
+            false,
+            true,
+            "A worker is expected to retrieve, extract, or synthesize evidence.",
+        ),
+        status_vocabulary_entry(
+            RunStatus::CoolingDown,
+            "Cooling down",
+            false,
+            false,
+            true,
+            "A provider or source lane needs a retry-after window before continuing.",
+        ),
+        status_vocabulary_entry(
+            RunStatus::PartialLive,
+            "Partial live",
+            true,
+            false,
+            true,
+            "Some evidence is inspectable while one or more lanes are degraded.",
+        ),
+        status_vocabulary_entry(
+            RunStatus::NeedsFollowup,
+            "Needs follow-up",
+            true,
+            false,
+            true,
+            "The run has usable findings but still needs a targeted review action.",
+        ),
+        status_vocabulary_entry(
+            RunStatus::ReadyForReview,
+            "Ready for review",
+            true,
+            true,
+            false,
+            "The run has enough evidence, challenge checks, and source state to review.",
+        ),
+        status_vocabulary_entry(
+            RunStatus::Blocked,
+            "Blocked",
+            false,
+            true,
+            false,
+            "The run cannot continue until a missing requirement is resolved.",
+        ),
+    ]
+}
+
 pub fn sample_run_by_id(run_id: &str) -> Option<ProRun> {
     let run = sample_run();
     (run.id == run_id).then_some(run)
@@ -1045,11 +1259,90 @@ fn generated_title(question: &str) -> String {
     }
 }
 
+fn push_retrieval_and_partial_events(events: &mut Vec<RunEvent>, run: &ProRun) {
+    push_run_event(
+        events,
+        run,
+        RunStatus::Running,
+        RunEventKind::RetrievalStarted,
+        "Retrieval started",
+        "Source and provider routing produced evidence candidates for graph synthesis.",
+    );
+    push_run_event(
+        events,
+        run,
+        RunStatus::PartialLive,
+        RunEventKind::PartialEvidenceReady,
+        "Evidence available",
+        format!(
+            "{} evidence anchors and {} source cards are visible for inspection.",
+            run.evidence.len(),
+            run.sources.len()
+        ),
+    );
+}
+
+fn push_run_event(
+    events: &mut Vec<RunEvent>,
+    run: &ProRun,
+    status: RunStatus,
+    kind: RunEventKind,
+    title: &str,
+    detail: impl Into<String>,
+) {
+    let sequence = (events.len() + 1) as u32;
+    events.push(RunEvent {
+        id: format!(
+            "{}_event_{sequence:02}_{}",
+            run.id,
+            run_event_kind_slug(kind)
+        ),
+        sequence,
+        status,
+        kind,
+        title: title.to_string(),
+        detail: detail.into(),
+        occurred_at: format!("{}#event-{sequence:02}", run.updated_at),
+        source: RunEventSource::DerivedFromRunRecord,
+    });
+}
+
+fn run_event_kind_slug(kind: RunEventKind) -> &'static str {
+    match kind {
+        RunEventKind::RunAccepted => "run_accepted",
+        RunEventKind::RetrievalStarted => "retrieval_started",
+        RunEventKind::CooldownEntered => "cooldown_entered",
+        RunEventKind::PartialEvidenceReady => "partial_evidence_ready",
+        RunEventKind::FollowupRequired => "followup_required",
+        RunEventKind::ReviewReady => "review_ready",
+        RunEventKind::Blocked => "blocked",
+    }
+}
+
+fn status_vocabulary_entry(
+    status: RunStatus,
+    label: &str,
+    reviewable: bool,
+    terminal: bool,
+    requires_worker: bool,
+    description: &str,
+) -> RunStatusVocabularyEntry {
+    RunStatusVocabularyEntry {
+        status,
+        label: label.to_string(),
+        reviewable,
+        terminal,
+        requires_worker,
+        description: description.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        CooldownKind, CreateRunRequest, ProviderReadiness, RunStatus, WorkspaceEnforcementMode,
-        WorkspacePermissionStatus, create_run_from_request, provider_status_snapshot, sample_run,
+        CooldownKind, CreateRunRequest, ProviderReadiness, RunEventKind, RunEventSource, RunStatus,
+        WorkspaceEnforcementMode, WorkspacePermissionStatus, create_run_from_request,
+        provider_status_snapshot, run_event_timeline, run_status_vocabulary, sample_run,
         sample_run_by_id, sample_run_summaries, validate_run_references, workspace_access_context,
     };
     use std::collections::HashSet;
@@ -1194,5 +1487,55 @@ mod tests {
                 .sensitive_data_rules
                 .contains(&"workspace_id_is_demo_tenant_not_acl".to_string())
         );
+    }
+
+    #[test]
+    fn run_event_timeline_is_derived_and_contains_status_vocabulary() {
+        let timeline = run_event_timeline(&sample_run());
+
+        assert_eq!(timeline.run_id, "run_semiconductor_controls_001");
+        assert_eq!(timeline.current_status, RunStatus::ReadyForReview);
+        assert!(!timeline.durable);
+        assert!(
+            timeline
+                .events
+                .iter()
+                .any(|event| event.kind == RunEventKind::ReviewReady
+                    && event.status == RunStatus::ReadyForReview)
+        );
+        assert!(
+            timeline
+                .status_vocabulary
+                .iter()
+                .any(|entry| entry.status == RunStatus::PartialLive && entry.reviewable)
+        );
+        assert!(
+            timeline
+                .safeguards
+                .contains(&"no_event_store_connection_in_this_slice".to_string())
+        );
+    }
+
+    #[test]
+    fn queued_run_event_timeline_stays_non_durable_and_minimal() {
+        let run = create_run_from_request(
+            8,
+            CreateRunRequest {
+                workspace_id: None,
+                title: None,
+                question: "Why did activation fall?".to_string(),
+            },
+        )
+        .expect("valid question should create a run");
+
+        let timeline = run_event_timeline(&run);
+
+        assert_eq!(timeline.events.len(), 1);
+        assert_eq!(timeline.events[0].status, RunStatus::Queued);
+        assert_eq!(
+            timeline.events[0].source,
+            RunEventSource::DerivedFromRunRecord
+        );
+        assert_eq!(run_status_vocabulary().len(), 7);
     }
 }
