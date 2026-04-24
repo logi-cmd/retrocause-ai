@@ -72,6 +72,7 @@ The first shared crate now defines:
 - workspace access context entries
 - credential-vault boundary entries
 - quota-ledger and billing boundary entries
+- result-commit and event-store boundary entries
 - run event timeline and status vocabulary entries
 - review-comparison payloads for evidence and challenge deltas
 - source cooldown state
@@ -86,6 +87,8 @@ The workspace access context is deliberately non-enforcing in this slice. It nam
 The credential-vault boundary is deliberately keyless and disconnected in this slice. It names future credential classes, metadata-only visibility, worker-scoped access requirements, rotation ownership, and safeguards while returning `secret_values_returned=false` and `connections_enabled=false`.
 
 The quota-ledger and billing boundary is deliberately preview-only in this slice. It names future quota lanes, metering rules, rate-limit rules, payment-provider absence, and billing safeguards while returning `ledger_mutation_enabled=false`, `payment_provider_connected=false`, and no billable usage.
+
+The result-commit and event-store boundary is deliberately preview-only in this slice. It names future commit stages, event write rules, and partial-result reconciliation rules while returning `event_store_connected=false`, `commit_writes_enabled=false`, and `partial_reconciliation_enabled=false`.
 
 The run event timeline is deliberately non-durable in this slice. It is generated from the current `ProRun` record and names event/status vocabulary before an event store exists. It does not open an event-store connection, run workers, call providers, enforce auth, or mutate run state.
 
@@ -156,6 +159,7 @@ Initial responsibility:
 - `GET /api/workspace/access-context`
 - `GET /api/credential-vault-boundary`
 - `GET /api/quota-ledger-boundary`
+- `GET /api/result-commit-boundary`
 - `GET /api/provider-status`
 - `GET /api/provider-adapter-contract`
 - `GET /api/provider-adapter/candidates`
@@ -176,7 +180,7 @@ Initial responsibility:
 - local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
 - future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The workspace access context, credential-vault boundary, quota-ledger boundary, run-events, review-comparison, provider-status, provider-route preview, execution-job, lifecycle, worker-lease, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, run status vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, retry/idempotency semantics, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, opening event-store/database/Redis connections, enforcing auth, claiming worker leases, scheduling retries, or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The workspace access context, credential-vault boundary, quota-ledger boundary, result-commit boundary, run-events, review-comparison, provider-status, provider-route preview, execution-job, lifecycle, worker-lease, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, result/event commit vocabulary, run status vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, retry/idempotency semantics, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, writing events, opening event-store/database/Redis connections, enforcing auth, claiming worker leases, scheduling retries, or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -189,6 +193,7 @@ Initial responsibility:
 - render the non-enforcing workspace/auth context from `GET /api/workspace/access-context`
 - render the planned credential-vault boundary from `GET /api/credential-vault-boundary`, showing credential classes, blocked access rules, and safeguards without showing values
 - render the planned quota-ledger/billing boundary from `GET /api/quota-ledger-boundary`, showing quota lanes, metering rules, and billing safeguards without writing usage or connecting payment infrastructure
+- render the planned result-commit/event-store boundary from `GET /api/result-commit-boundary`, showing commit stages, event write rules, partial-result reconciliation, and safeguards without writing durable events
 - render a non-durable run event timeline from `GET /api/runs/{run_id}/events`
 - render a derived review-comparison panel from `GET /api/runs/{run_id}/review-comparison`, showing evidence/challenge deltas and preview safeguards
 - show provider/search quota ownership, credential policy, and cooldown status through the local provider-status payload
@@ -247,6 +252,8 @@ The current `GET /api/credential-vault-boundary` path exposes planned credential
 The current `GET /api/quota-ledger-boundary` path exposes planned quota lanes, metering rules, rate-limit rules, and billing safeguards. It does not write ledger rows, reserve quota, connect a payment provider, emit billable usage, enforce limits, or enable provider execution. Future hosted Pro should replace it with tenant-scoped quota reservations and billing policy checks after auth, vault, event-store, and worker leases exist.
 
 The current `GET /api/worker-lease-boundary` path exposes planned worker-lease, retry, and idempotency rules. It does not start workers, claim leases, connect a lease store, schedule retries, read credentials, mutate quota/billing, or call providers. Future hosted Pro should replace it with durable lease claims, bounded retry scheduling, duplicate-call prevention, and partial-result reconciliation after tenant auth, quota reservations, vault access, and event-store writes exist.
+
+The current `GET /api/result-commit-boundary` path exposes planned result-commit stages, event write rules, partial-result reconciliation rules, and safeguards. It does not write events, open an event-store connection, mutate run state, claim worker leases, read credentials, reserve quota, or call providers. Future hosted Pro should replace it with durable event writes after tenant auth, quota reservations, vault access, idempotent worker commits, and storage boundaries exist.
 
 The current `GET /api/runs/{run_id}/events` path derives a non-durable timeline from the run record. It is useful for UI and API vocabulary, but it is not an audit log, not a durable event stream, and not a worker status queue. Future hosted Pro should replace or supplement it with event-store rows once tenant/auth, worker leases, and storage boundaries exist.
 
@@ -425,3 +432,11 @@ The worker-lease/retry boundary slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `GET /api/worker-lease-boundary` proving worker leases, lease-store connections, retry scheduling, and execution stay disabled while lease/retry/idempotency rules are visible
 - a browser smoke that starts the Pro API and web shell and verifies that the worker-lease panel renders planned-no-workers mode, lease store off, retry scheduler off, retry policies, and worker safeguards
+
+The result-commit/event-store boundary slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `GET /api/result-commit-boundary` proving event-store connections, commit writes, and partial-result reconciliation stay disabled while commit stages, event write rules, and safeguards are visible
+- a browser smoke that starts the Pro API and web shell and verifies that the result-commit panel renders planned-no-writes mode, event store off, writes off, partial reconciliation off, commit stages, event write rules, and commit safeguards

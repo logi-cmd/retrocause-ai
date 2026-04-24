@@ -150,6 +150,43 @@ pub struct QuotaLedgerBoundary {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ResultCommitBoundary {
+    pub mode: ResultCommitMode,
+    pub event_store_connected: bool,
+    pub commit_writes_enabled: bool,
+    pub partial_reconciliation_enabled: bool,
+    pub commit_stages: Vec<ResultCommitStage>,
+    pub event_write_rules: Vec<EventStoreWriteRule>,
+    pub reconciliation_rules: Vec<PartialResultReconciliationRule>,
+    pub safeguards: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ResultCommitStage {
+    pub id: String,
+    pub label: String,
+    pub status: ResultCommitStageStatus,
+    pub requirement: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EventStoreWriteRule {
+    pub id: String,
+    pub event_kind: String,
+    pub allowed_now: bool,
+    pub requirement: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PartialResultReconciliationRule {
+    pub id: String,
+    pub failure_state: String,
+    pub preserves_partial_results: bool,
+    pub status: ResultCommitStageStatus,
+    pub requirement: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QuotaLedgerLane {
     pub id: String,
     pub label: String,
@@ -511,6 +548,20 @@ pub enum QuotaAccountingStatus {
     PreviewOnly,
     FutureLedgerOnly,
     BlockedUntilBilling,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResultCommitMode {
+    PlannedNoWrites,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResultCommitStageStatus {
+    PreviewOnly,
+    FutureEventStoreOnly,
+    BlockedUntilWorkerCommit,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -1346,6 +1397,103 @@ pub fn quota_ledger_boundary() -> QuotaLedgerBoundary {
     }
 }
 
+pub fn result_commit_boundary() -> ResultCommitBoundary {
+    ResultCommitBoundary {
+        mode: ResultCommitMode::PlannedNoWrites,
+        event_store_connected: false,
+        commit_writes_enabled: false,
+        partial_reconciliation_enabled: false,
+        commit_stages: vec![
+            ResultCommitStage {
+                id: s("normalize_provider_result"),
+                label: s("Normalize provider result"),
+                status: ResultCommitStageStatus::PreviewOnly,
+                requirement: s(
+                    "Future workers normalize provider output before any event-store write.",
+                ),
+            },
+            ResultCommitStage {
+                id: s("commit_evidence_events"),
+                label: s("Commit evidence events"),
+                status: ResultCommitStageStatus::FutureEventStoreOnly,
+                requirement: s(
+                    "Evidence, challenge, usage, and graph deltas need durable event rows before run state changes.",
+                ),
+            },
+            ResultCommitStage {
+                id: s("reconcile_partial_result"),
+                label: s("Reconcile partial result"),
+                status: ResultCommitStageStatus::BlockedUntilWorkerCommit,
+                requirement: s(
+                    "Partial results stay preview-only until worker leases and idempotency keys exist.",
+                ),
+            },
+        ],
+        event_write_rules: vec![
+            EventStoreWriteRule {
+                id: s("api_routes_cannot_write_events"),
+                event_kind: s("any_run_event"),
+                allowed_now: false,
+                requirement: s(
+                    "API routes may expose derived previews, but event writes must be worker-owned later.",
+                ),
+            },
+            EventStoreWriteRule {
+                id: s("result_commit_requires_idempotency_key"),
+                event_kind: s("provider_result_committed"),
+                allowed_now: false,
+                requirement: s(
+                    "Each provider result commit needs a worker lease, idempotency key, quota reservation, and vault handle.",
+                ),
+            },
+            EventStoreWriteRule {
+                id: s("partial_failure_records_preserve_success"),
+                event_kind: s("partial_result_reconciled"),
+                allowed_now: false,
+                requirement: s(
+                    "Failures should record degraded state while preserving successful evidence anchors.",
+                ),
+            },
+        ],
+        reconciliation_rules: vec![
+            PartialResultReconciliationRule {
+                id: s("provider_rate_limit_preserves_evidence"),
+                failure_state: s("provider_rate_limited"),
+                preserves_partial_results: true,
+                status: ResultCommitStageStatus::FutureEventStoreOnly,
+                requirement: s(
+                    "Successful evidence must remain attached while retry-after and degraded-source state are committed.",
+                ),
+            },
+            PartialResultReconciliationRule {
+                id: s("model_timeout_preserves_usage_context"),
+                failure_state: s("model_timeout"),
+                preserves_partial_results: true,
+                status: ResultCommitStageStatus::FutureEventStoreOnly,
+                requirement: s(
+                    "Timeouts should keep source/evidence context and avoid re-billing duplicate completed work.",
+                ),
+            },
+            PartialResultReconciliationRule {
+                id: s("duplicate_commit_denied"),
+                failure_state: s("duplicate_idempotency_key"),
+                preserves_partial_results: true,
+                status: ResultCommitStageStatus::BlockedUntilWorkerCommit,
+                requirement: s(
+                    "Duplicate worker commits must resolve to the original event sequence instead of writing again.",
+                ),
+            },
+        ],
+        safeguards: vec![
+            s("no_event_store_write_in_this_slice"),
+            s("no_database_or_redis_connection"),
+            s("api_routes_do_not_commit_results"),
+            s("partial_results_are_preview_only"),
+            s("provider_execution_requires_worker_commit_boundary_first"),
+        ],
+    }
+}
+
 pub fn run_event_timeline(run: &ProRun) -> RunEventTimeline {
     let mut events = Vec::new();
     push_run_event(
@@ -1924,12 +2072,13 @@ fn status_vocabulary_entry(
 mod tests {
     use super::{
         CooldownKind, CreateRunRequest, CredentialStorageStatus, CredentialVaultMode,
-        ProviderReadiness, QuotaAccountingStatus, QuotaLedgerMode, QuotaOwner,
-        ReviewComparisonMode, ReviewDeltaKind, RunEventKind, RunEventSource, RunStatus,
-        WorkspaceEnforcementMode, WorkspacePermissionStatus, create_run_from_request,
-        credential_vault_boundary, provider_status_snapshot, quota_ledger_boundary,
-        run_event_timeline, run_review_comparison, run_status_vocabulary, sample_run,
-        sample_run_by_id, sample_run_summaries, validate_run_references, workspace_access_context,
+        ProviderReadiness, QuotaAccountingStatus, QuotaLedgerMode, QuotaOwner, ResultCommitMode,
+        ResultCommitStageStatus, ReviewComparisonMode, ReviewDeltaKind, RunEventKind,
+        RunEventSource, RunStatus, WorkspaceEnforcementMode, WorkspacePermissionStatus,
+        create_run_from_request, credential_vault_boundary, provider_status_snapshot,
+        quota_ledger_boundary, result_commit_boundary, run_event_timeline, run_review_comparison,
+        run_status_vocabulary, sample_run, sample_run_by_id, sample_run_summaries,
+        validate_run_references, workspace_access_context,
     };
     use std::collections::HashSet;
 
@@ -2135,6 +2284,38 @@ mod tests {
         assert!(boundary.quota_lanes.iter().all(|lane| {
             let combined = format!("{} {} {}", lane.id, lane.label, lane.note).to_lowercase();
             !combined.contains("sk-") && !combined.contains("api_key")
+        }));
+    }
+
+    #[test]
+    fn result_commit_boundary_is_preview_only_and_non_durable() {
+        let boundary = result_commit_boundary();
+
+        assert_eq!(boundary.mode, ResultCommitMode::PlannedNoWrites);
+        assert!(!boundary.event_store_connected);
+        assert!(!boundary.commit_writes_enabled);
+        assert!(!boundary.partial_reconciliation_enabled);
+        assert!(boundary.commit_stages.iter().any(|stage| {
+            stage.id == "commit_evidence_events"
+                && stage.status == ResultCommitStageStatus::FutureEventStoreOnly
+        }));
+        assert!(
+            boundary
+                .event_write_rules
+                .iter()
+                .any(|rule| { rule.id == "api_routes_cannot_write_events" && !rule.allowed_now })
+        );
+        assert!(boundary.reconciliation_rules.iter().any(|rule| {
+            rule.id == "provider_rate_limit_preserves_evidence" && rule.preserves_partial_results
+        }));
+        assert!(
+            boundary
+                .safeguards
+                .contains(&"no_event_store_write_in_this_slice".to_string())
+        );
+        assert!(boundary.commit_stages.iter().all(|stage| {
+            let combined = format!("{} {} {}", stage.id, stage.label, stage.requirement);
+            !combined.to_lowercase().contains("api_key") && !combined.contains("sk-")
         }));
     }
 

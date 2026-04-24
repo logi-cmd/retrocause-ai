@@ -268,6 +268,15 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "planned" }
                                 }
                             }
+                            div id="result-commit-panel" class="commit-panel" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "Result commit boundary" }
+                                        p { "Commit and event-store rules load from the Pro API; no durable writes run." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "planned" }
+                                }
+                            }
                             div id="storage-boundary-panel" class="storage-panel" {
                                 article class="queue-meter queue-meter--empty" {
                                     div {
@@ -1293,6 +1302,75 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderResultCommitBoundary(boundary) {
+    const panel = byId("result-commit-panel");
+    if (!panel) return;
+    if (!boundary) {
+      panel.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>Result commit boundary</strong>
+            <p>Commit and event-store rules load from the Pro API; no durable writes run.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">planned</span>
+        </article>
+      `;
+      return;
+    }
+
+    const stages = (boundary.commit_stages || []).slice(0, 4).map((stage) => `
+      <li>
+        <strong>${escapeHtml(stage.label)}</strong>
+        <span>${escapeHtml(readable(stage.status))}</span>
+        <small>${escapeHtml(stage.id)}: ${escapeHtml(stage.requirement)}</small>
+      </li>
+    `).join("");
+    const writeRules = (boundary.event_write_rules || []).slice(0, 4).map((rule) => `
+      <li>
+        <strong>${escapeHtml(rule.id)}</strong>
+        <span>${escapeHtml(rule.event_kind)} / ${rule.allowed_now ? "allowed now" : "blocked now"}</span>
+        <small>${escapeHtml(rule.requirement)}</small>
+      </li>
+    `).join("");
+    const reconciliation = (boundary.reconciliation_rules || []).slice(0, 3).map((rule) => `
+      <li>
+        <strong>${escapeHtml(rule.id)}</strong>
+        <span>${escapeHtml(rule.failure_state)} / ${rule.preserves_partial_results ? "preserves partials" : "drops partials"} / ${escapeHtml(readable(rule.status))}</span>
+        <small>${escapeHtml(rule.requirement)}</small>
+      </li>
+    `).join("");
+    const safeguards = (boundary.safeguards || [])
+      .slice(0, 4)
+      .map((guard) => `<li>${escapeHtml(guard)}</li>`)
+      .join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card commit-card">
+        <div class="work-order-header">
+          <strong>Result commit boundary</strong>
+          <span class="quota-state quota-state--deferred">${boundary.commit_writes_enabled ? "writes on" : "writes off"}</span>
+          <p>${escapeHtml(readable(boundary.mode || "planned_no_writes"))} / event store: ${boundary.event_store_connected ? "connected" : "off"} / partial reconciliation: ${boundary.partial_reconciliation_enabled ? "on" : "off"}</p>
+        </div>
+        <section>
+          <p class="work-order-label">Commit stages</p>
+          <ol class="work-order-list">${stages || "<li>No commit stages returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Event writes</p>
+          <ul class="work-order-list">${writeRules || "<li>No event write rules returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Partial reconciliation</p>
+          <ul class="work-order-list">${reconciliation || "<li>No reconciliation rules returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Commit safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>No commit safeguards returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   function renderStoragePlan(plan) {
     const panel = byId("storage-boundary-panel");
     if (!panel) return;
@@ -1621,6 +1699,7 @@ fn client_script() -> &'static str {
   renderWorkOrder(null);
   renderExecutionLifecycle(null);
   renderWorkerLeaseBoundary(null);
+  renderResultCommitBoundary(null);
   renderStoragePlan(null);
   renderCredentialVaultBoundary(null);
   renderQuotaLedgerBoundary(null);
@@ -1663,6 +1742,11 @@ fn client_script() -> &'static str {
     .then(renderWorkerLeaseBoundary)
     .catch(() => {
       renderWorkerLeaseBoundary(null);
+    });
+  fetchJson("/api/result-commit-boundary")
+    .then(renderResultCommitBoundary)
+    .catch(() => {
+      renderResultCommitBoundary(null);
     });
   fetchJson("/api/storage-plan")
     .then(renderStoragePlan)
@@ -2276,6 +2360,7 @@ p {
 #execution-work-order-detail,
 #execution-lifecycle-panel,
 #worker-lease-panel,
+#result-commit-panel,
 #storage-boundary-panel,
 #credential-vault-panel,
 #quota-ledger-panel {
@@ -2326,6 +2411,10 @@ p {
 
 .lease-card {
   background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.55 0.08 35));
+}
+
+.commit-card {
+  background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.54 0.07 125));
 }
 
 .storage-card {
@@ -2660,6 +2749,7 @@ mod tests {
         assert!(page.contains("execution-work-order-detail"));
         assert!(page.contains("execution-lifecycle-panel"));
         assert!(page.contains("worker-lease-panel"));
+        assert!(page.contains("result-commit-panel"));
         assert!(page.contains("storage-boundary-panel"));
         assert!(page.contains("credential-vault-panel"));
         assert!(page.contains("quota-ledger-panel"));
@@ -2667,6 +2757,7 @@ mod tests {
         assert!(page.contains("/work-order"));
         assert!(page.contains("/api/execution-lifecycle"));
         assert!(page.contains("/api/worker-lease-boundary"));
+        assert!(page.contains("/api/result-commit-boundary"));
         assert!(page.contains("/api/storage-plan"));
         assert!(page.contains("/api/credential-vault-boundary"));
         assert!(page.contains("/api/quota-ledger-boundary"));
@@ -2674,6 +2765,7 @@ mod tests {
         assert!(page.contains("function renderWorkOrder"));
         assert!(page.contains("function renderExecutionLifecycle"));
         assert!(page.contains("function renderWorkerLeaseBoundary"));
+        assert!(page.contains("function renderResultCommitBoundary"));
         assert!(page.contains("function renderStoragePlan"));
         assert!(page.contains("function renderCredentialVaultBoundary"));
         assert!(page.contains("function renderQuotaLedgerBoundary"));

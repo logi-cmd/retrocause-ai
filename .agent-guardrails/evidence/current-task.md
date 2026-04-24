@@ -2260,3 +2260,89 @@ This task adds a preview-only worker-lease and retry-scheduler boundary for the 
 - This is not a worker runtime, retry scheduler, durable lease store, idempotent provider executor, or event-backed result committer.
 - There is still no real tenant auth, queue persistence, lease ownership, retry loop, event-store write path, credential vault, quota reservation, billing policy, payment provider connection, or live source/provider call path.
 - Future hosted Pro must implement durable worker leases, bounded retry scheduling, idempotent provider calls, partial-result reconciliation, and event-store commits before any live adapter can execute safely.
+
+## Pro Product Core Slice 24 - Result Commit/Event Store Boundary Preview
+
+### Scope
+
+This task adds a preview-only result-commit and event-store boundary for the Pro Rust product core. The shared domain crate now defines result commit stages, event-store write rules, partial-result reconciliation rules, and safeguards; the API exposes a read-only boundary endpoint; and the graph-first web shell renders a compact result-commit panel. No durable event writes, database/Redis connections, worker execution, provider execution, credential access, auth enforcement, quota/billing mutation, OSS runtime changes, dependency changes, package publishing, or live provider calls were added.
+
+### Files Updated
+
+- `pro/crates/domain/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `ResultCommitBoundary`, commit stages, event-store write rules, partial-result reconciliation rules, and result-commit status enums.
+- Added `result_commit_boundary()` returning `planned_no_writes`, `event_store_connected=false`, `commit_writes_enabled=false`, and `partial_reconciliation_enabled=false`.
+- Added `GET /api/result-commit-boundary`.
+- Added a Pro web result-commit panel that renders commit stages, event-write rules, reconciliation rules, and safeguards without enabling durable writes.
+- Updated Pro project state and architecture docs so maintainers can see this is a disconnected boundary contract, not an event store.
+
+### Commands Run
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - First result: failed because Rustfmt wanted to reflow several domain-test lines.
+  - Fix: ran `cargo fmt --manifest-path pro/Cargo.toml --all`.
+  - Final result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `27 passed`.
+  - Domain tests: `16 passed`.
+  - Provider-routing tests: `10 passed`.
+  - Queue tests: `7 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API result-commit smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8831` with a temporary local run-store path.
+  - Called `GET /api/result-commit-boundary`.
+  - Result: passed; mode was `planned_no_writes`, event store was disconnected, commit writes were disabled, partial reconciliation was disabled, three commit stages and three event-write rules were returned, and safeguard `no_event_store_write_in_this_slice` was present.
+
+- Pro browser result-commit smoke
+  - First attempt counted intentionally aborted external font requests as console errors.
+  - Re-ran with font `ERR_FAILED` messages ignored, matching previous Pro browser smoke behavior.
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8832` and `retrocause-pro-web.exe` on `127.0.0.1:3042`.
+  - Result: passed; the result-commit panel rendered `Result commit boundary`, `planned no writes`, `event store: off`, `writes off`, `partial reconciliation: off`, `commit_evidence_events`, `api_routes_cannot_write_events`, and `no_event_store_write_in_this_slice`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - A key-shaped scan for common provider-token prefixes and API-key assignment patterns found no actual key-shaped tokens in the non-doc diff.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Pre-commit result: blocked because the base range included the previous committed worker-lease slice and reported `pro/crates/queue/src/lib.rs` as out of scope for this result-commit slice.
+  - Interpretation: this was a range-selection issue before the current slice was committed, not a current worktree scope violation. The current slice intentionally touches only the contract-allowed domain/API/web/docs/evidence paths.
+  - Final post-commit result: passed with no blocking errors.
+  - Score: `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the project state was synchronized to mark the result-commit/event-store boundary preview as implemented.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET /api/result-commit-boundary`; it does not change OSS APIs, write events, enforce auth, accept credentials, mutate quota/billing, or execute provider calls.
+
+- `agent-guardrails check --review --base-ref HEAD --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Pre-commit result: safe-to-deploy score `95/100`, with one non-blocking warning that no git changes were detected because this guardrails invocation did not include the uncommitted worktree diff.
+  - Interpretation: useful for confirming the contract/evidence shape, but not the final merge gate.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice explicitly does not implement an event store or result committer. It does not accept, read, store, log, or return provider secrets, payment credentials, auth tokens, or sensitive user credentials. It does not enforce permissions or protect hosted resources.
+- Dependencies: no new crates, npm packages, lockfile changes, or version upgrades were introduced.
+- Performance: the endpoint returns one static in-process payload and the browser renders one compact panel. It adds no provider, database, Redis, event-store, worker, retry-scheduler, credential-vault, quota-ledger, or payment-provider load.
+- Understanding: the deliberate tradeoff is naming commit, event-write, and reconciliation semantics before implementing durable event storage. This keeps future live adapters from committing results directly inside routes while being honest that current payloads are previews.
+- Continuity: reused the shared domain crate, Axum read-only endpoint style, web `fetchJson` helper, and compact boundary-card styling. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- This is not an event store, durable result committer, audit log, reconciliation engine, or worker result writer.
+- There is still no real tenant auth, quota reservation, credential vault access, durable event-store write path, worker lease ownership, retry scheduler, or live source/provider call path.
+- Future hosted Pro must implement durable event writes, idempotent worker commits, partial-result reconciliation, tenant-scoped auth, quota reservations, vault handles, and storage boundaries before any live adapter can execute safely.
