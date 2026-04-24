@@ -35,7 +35,7 @@ This index is the map for the tracked project documentation. It separates curren
 | [`docs/codebase-audit.md`](codebase-audit.md) | Current audit of undocumented capabilities and duplication/maintenance risks | Created for the 2026-04-17 documentation pass |
 | [`docs/engineering-audit.md`](engineering-audit.md) | Older engineering audit, strengths, weak points, recommended sequence | Partly superseded by current state docs |
 | [`docs/manual-smoke-test.md`](manual-smoke-test.md) | Manual browser/API smoke scenarios and real-analysis validation notes | Useful for release QA |
-| [`scripts/live_stability_probe.py`](../scripts/live_stability_probe.py) | Repeatable real-key provider/search stability probe for OfoxAI by default, OpenRouter by opt-in, and representative live scenarios | Requires the selected provider key; writes a secret-free JSON report |
+| [`scripts/live_stability_probe.py`](../scripts/live_stability_probe.py) | Repeatable keyless OSS stability probe for representative local/demo scenarios | Writes a secret-free JSON report |
 | [`docs/PR_CHECKLIST.md`](PR_CHECKLIST.md) | Pull request review checklist | Lightweight checklist |
 
 ## Decision And Reference Records

@@ -121,11 +121,11 @@ Those semantics should remain explicit in both API payloads and the graph worksp
 
 ## Knowledge-graph UI direction
 
-The Pro UI should feel like a review desk, not a generic SaaS dashboard.
+The Pro UI should feel like a graph command room, not a generic SaaS dashboard and not a direct carry-over from the OSS evidence board.
 
 - dark, calm, editorial surfaces
 - graph canvas as the largest area
-- side rails for operator summary and evidence review
+- supporting detail revealed through overlays, trays, and inspectors instead of inherited side rails
 - visible source states and challenge status
 - no gradient-heavy AI dashboard styling
 

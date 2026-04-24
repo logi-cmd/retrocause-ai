@@ -249,22 +249,13 @@ def test_api_live_failure_messages_have_no_known_mojibake_strings():
 
     assert "閳?" not in api_source
     assert "鈥?" not in api_source
-    assert " - empty result" in api_source
+    assert "api_key" not in api_source
+    assert "run_real_analysis" not in api_source
     assert " 路 " not in page_source
 
 
-def test_openrouter_catalog_keeps_curated_models_that_work_in_retrocause():
-    model_ids = list(PROVIDERS["openrouter"]["models"].keys())
-
-    assert model_ids[0] == "deepseek/deepseek-chat"
-    assert "google/gemini-2.5-flash" in model_ids
-    assert "anthropic/claude-haiku-4.5" in model_ids
-    assert "deepseek/deepseek-chat" in model_ids
-    assert "deepseek/deepseek-v3.2" not in model_ids
-    assert "deepseek/deepseek-chat-v3-0324" not in model_ids
-    assert "deepseek/deepseek-r1" not in model_ids
-    assert "google/gemini-2.5-pro-preview" not in model_ids
-    assert "qwen/qwen3-235b-a22b" not in model_ids
+def test_oss_provider_catalog_removes_deprecated_openrouter():
+    assert "openrouter" not in PROVIDERS
 
 
 def test_ofoxai_is_default_provider_catalog():
@@ -293,9 +284,11 @@ def test_readme_has_clean_bilingual_oss_onboarding():
         assert fragment not in readme
 
     assert "输入一个“为什么会这样？”的问题" in readme
-    assert "OfoxAI 是默认的本地模型提供商路径" in readme
+    assert "OSS 浏览器/API 入口是 keyless 的" in readme
     assert "芯原股份今天盘中为什么下跌？" in readme
     assert "These are local inspectability features. They are not hosted Pro infrastructure." in readme
+    assert "The OSS browser/API surface is keyless." in readme
+    assert "OpenRouter remains available as a fallback provider." not in readme
 
 
 def test_root_project_metadata_has_no_known_mojibake_strings():
@@ -322,15 +315,41 @@ def test_root_project_metadata_has_no_known_mojibake_strings():
     assert pyproject["project"]["description"].startswith("Evidence-backed causal explanation")
 
 
-def test_openrouter_catalog_uses_current_flash_and_haiku_model_ids():
-    model_ids = set(PROVIDERS["openrouter"]["models"].keys())
+def test_frontend_oss_settings_do_not_expose_key_fields():
+    page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    schema_source = (REPO_ROOT / "retrocause" / "api" / "schemas.py").read_text(
+        encoding="utf-8"
+    )
 
-    assert "google/gemini-2.5-flash" in model_ids
-    assert "anthropic/claude-haiku-4.5" in model_ids
-    assert "google/gemini-2.5-flash-preview" not in model_ids
-    assert "anthropic/claude-haiku-4" not in model_ids
-    assert "google/gemini-2.5-pro-preview" not in model_ids
-    assert "qwen/qwen3-235b-a22b" not in model_ids
+    assert "OSS analysis settings" in page_source
+    assert "Keyless local profile" in page_source
+    assert "OSS runs without model or search keys." in page_source
+    assert "OfoxAI" not in page_source
+    assert "selectedExplicitModel" not in page_source
+    assert "Run model preflight" not in page_source
+    assert "Run search preflight" not in page_source
+    assert "api_key" not in schema_source
+    assert "tavily_api_key" not in schema_source
+    assert "brave_search_api_key" not in schema_source
+
+
+def test_user_facing_oss_templates_do_not_advertise_provider_keys():
+    env_example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    manual_smoke = (REPO_ROOT / "docs" / "manual-smoke-test.md").read_text(
+        encoding="utf-8"
+    )
+
+    combined = "\n".join([env_example, readme, manual_smoke])
+    assert "OPENROUTER_API_KEY" not in combined
+    assert "TAVILY_API_KEY" not in combined
+    assert "BRAVE_SEARCH_API_KEY" not in combined
+    assert "Paste your" not in combined
+    assert "Run model preflight" not in combined
+    assert "Run search preflight" not in combined
+    assert "OpenRouter remains available" not in combined
 
 
 def test_provider_catalog_labels_have_no_known_mojibake_strings():
@@ -342,71 +361,37 @@ def test_provider_catalog_labels_have_no_known_mojibake_strings():
             assert not any(fragment in model_cfg["label"] for fragment in forbidden_fragments)
 
 
-def test_openrouter_catalog_live_public_model_smoke():
-    if os.environ.get("RETROCAUSE_LIVE_OPENROUTER_CATALOG") != "1":
-        pytest.skip("Set RETROCAUSE_LIVE_OPENROUTER_CATALOG=1 to hit OpenRouter's public catalog.")
-
-    with urllib.request.urlopen("https://openrouter.ai/api/v1/models", timeout=30) as response:
-        payload = json.load(response)
-
-    public_model_ids = {item["id"] for item in payload.get("data", []) if item.get("id")}
-    missing = sorted(set(PROVIDERS["openrouter"]["models"]) - public_model_ids)
-
-    assert missing == []
-
-
-def test_legacy_openrouter_deepseek_snapshot_resolves_to_stable_alias():
+def test_resolve_provider_model_keeps_explicit_ofoxai_model():
     _, model_name = resolve_provider_model(
         PROVIDERS,
-        "openrouter",
-        "deepseek/deepseek-chat-v3-0324",
+        "ofoxai",
+        "openai/gpt-5.4",
     )
 
-    assert model_name == "deepseek/deepseek-chat"
+    assert model_name == "openai/gpt-5.4"
 
 
-def test_analyze_v2_uses_stable_deepseek_alias_for_legacy_snapshot(monkeypatch):
+def test_analyze_v2_ignores_legacy_key_payload_in_keyless_oss():
     from fastapi.testclient import TestClient
-
-    captured: dict[str, str | None] = {}
-
-    def fake_run_real_analysis(
-        query,
-        api_key,
-        model,
-        base_url,
-        tavily_api_key=None,
-        brave_search_api_key=None,
-    ):
-        captured["query"] = query
-        captured["api_key"] = api_key
-        captured["model"] = model
-        captured["base_url"] = base_url
-        captured["tavily_api_key"] = tavily_api_key
-        captured["brave_search_api_key"] = brave_search_api_key
-        return _sample_result_with_one_supported_chain(query)
-
-    monkeypatch.setattr("retrocause.app.demo_data.run_real_analysis", fake_run_real_analysis)
 
     response = TestClient(app).post(
         "/api/analyze/v2",
         json={
             "query": "芯原股份今天盘中为什么下跌？",
-            "model": "openrouter",
-            "explicit_model": "deepseek/deepseek-chat-v3-0324",
-            "api_key": "sk-test",
+            "model": "ofoxai",
+            "explicit_model": "openai/gpt-5.4",
             "scenario_override": "market",
         },
     )
 
     assert response.status_code == 200
-    assert captured["model"] == "deepseek/deepseek-chat"
     payload = response.json()
-    assert payload["analysis_mode"] == "live"
+    assert payload["is_demo"] is True
+    assert payload["analysis_mode"] == "demo"
     assert payload["chains"]
 
 
-def test_frontend_and_api_expose_per_run_hosted_search_keys():
+def test_frontend_and_api_remove_per_run_hosted_search_keys():
     page_source = (REPO_ROOT / "frontend" / "src" / "app" / "page.tsx").read_text(
         encoding="utf-8"
     )
@@ -414,120 +399,48 @@ def test_frontend_and_api_expose_per_run_hosted_search_keys():
         encoding="utf-8"
     )
 
-    assert "tavilyApiKey" in page_source
-    assert "braveSearchApiKey" in page_source
-    assert "tavily_api_key" in page_source
-    assert "brave_search_api_key" in page_source
-    assert "tavily_api_key" in api_source
-    assert "brave_search_api_key" in api_source
-    assert "/api/sources/preflight" in page_source
-    assert "Run search preflight" in page_source
+    assert "tavilyApiKey" not in page_source
+    assert "braveSearchApiKey" not in page_source
+    assert "tavily_api_key" not in page_source
+    assert "brave_search_api_key" not in page_source
+    assert "tavily_api_key" not in api_source
+    assert "brave_search_api_key" not in api_source
+    assert "/api/sources/preflight" not in page_source
 
 
 @pytest.mark.anyio
-async def test_analyze_v2_passes_user_search_keys_to_live_analysis(monkeypatch):
-    captured: dict[str, str | None] = {}
-
-    def fake_run_real_analysis(
-        query,
-        api_key,
-        model,
-        base_url,
-        tavily_api_key=None,
-        brave_search_api_key=None,
-    ):
-        captured["query"] = query
-        captured["api_key"] = api_key
-        captured["model"] = model
-        captured["base_url"] = base_url
-        captured["tavily_api_key"] = tavily_api_key
-        captured["brave_search_api_key"] = brave_search_api_key
-        return _sample_result_with_one_supported_chain(query)
-
-    monkeypatch.setattr("retrocause.app.demo_data.run_real_analysis", fake_run_real_analysis)
-
+async def test_analyze_v2_without_key_surface_returns_local_demo(monkeypatch):
     response = await analyze_query_v2(
         AnalyzeRequest(
             query="Why did Bitcoin move today?",
-            model="openrouter",
-            api_key="sk-test",
-            explicit_model="openai/gpt-4o-mini",
-            tavily_api_key="tvly-test",
-            brave_search_api_key="brave-test",
+            model="ofoxai",
+            explicit_model="openai/gpt-5.4-mini",
             scenario_override="market",
         )
     )
 
-    assert response.analysis_mode == "live"
-    assert captured["tavily_api_key"] == "tvly-test"
-    assert captured["brave_search_api_key"] == "brave-test"
+    assert response.is_demo is True
+    assert response.analysis_mode == "demo"
+    assert response.usage_ledger[0].quota_owner == "local_demo"
 
 
 @pytest.mark.anyio
-async def test_source_preflight_reports_missing_search_keys(monkeypatch):
-    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
-    monkeypatch.delenv("BRAVE_SEARCH_API_KEY", raising=False)
-
+async def test_source_preflight_reports_keyless_builtin_path(monkeypatch):
     response = await preflight_sources(SourcePreflightRequest())
-
-    assert response.status == "error"
-    assert response.can_search is False
-    assert {check.source: check.status for check in response.checks} == {
-        "tavily": "missing_api_key",
-        "brave": "missing_api_key",
-    }
-
-
-@pytest.mark.anyio
-async def test_source_preflight_checks_tavily_without_leaking_key(monkeypatch):
-    monkeypatch.delenv("BRAVE_SEARCH_API_KEY", raising=False)
-
-    def fake_search(self, query, max_results=5):
-        assert query == "RetroCause source preflight latest market news"
-        assert max_results == 1
-        return [object()]
-
-    monkeypatch.setattr("retrocause.sources.tavily.TavilySourceAdapter.search", fake_search)
-
-    response = await preflight_sources(SourcePreflightRequest(tavily_api_key="tvly-test"))
-
-    tavily = next(check for check in response.checks if check.source == "tavily")
-    brave = next(check for check in response.checks if check.source == "brave")
 
     assert response.status == "ok"
     assert response.can_search is True
-    assert tavily.status == "ok"
-    assert tavily.can_search is True
-    assert tavily.result_count == 1
-    assert "tvly-test" not in tavily.diagnosis
-    assert brave.status == "missing_api_key"
+    assert response.checks[0].source == "built_in_sources"
+    assert response.checks[0].status == "ok"
 
 
 @pytest.mark.anyio
-async def test_source_preflight_uses_environment_search_key_without_leaking(monkeypatch):
-    monkeypatch.setenv("TAVILY_API_KEY", "tvly-env-test")
-    monkeypatch.delenv("BRAVE_SEARCH_API_KEY", raising=False)
+async def test_provider_preflight_is_disabled_in_keyless_oss(monkeypatch):
+    response = await preflight_provider(ProviderPreflightRequest())
 
-    def fake_search(self, query, max_results=5):
-        assert query == "RetroCause source preflight latest market news"
-        assert max_results == 1
-        return [object()]
-
-    monkeypatch.setattr("retrocause.sources.tavily.TavilySourceAdapter.search", fake_search)
-
-    response = await preflight_sources(SourcePreflightRequest())
-
-    tavily = next(check for check in response.checks if check.source == "tavily")
-    brave = next(check for check in response.checks if check.source == "brave")
-
-    assert response.status == "ok"
-    assert response.can_search is True
-    assert tavily.status == "ok"
-    assert tavily.can_search is True
-    assert tavily.result_count == 1
-    assert "tvly-env-test" not in tavily.diagnosis
-    assert "tvly-env-test" not in tavily.user_action
-    assert brave.status == "missing_api_key"
+    assert response.status == "disabled"
+    assert response.can_run_analysis is False
+    assert response.failure_code == "oss_keyless"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1579,7 +1492,7 @@ def test_api_timeout_runtime_helper_is_extracted():
         encoding="utf-8"
     )
 
-    assert "from retrocause.api.runtime import TimeoutError" in api_source
+    assert "from retrocause.api.runtime import TimeoutError" not in api_source
     assert "def _run_with_timeout" not in api_source
     assert "class _TimeoutError" not in api_source
     assert "def run_with_timeout" in runtime_source
@@ -1636,14 +1549,14 @@ def test_api_provider_preflight_classification_is_extracted():
         REPO_ROOT / "retrocause" / "api" / "analysis_execution.py"
     ).read_text(encoding="utf-8")
 
-    assert "from retrocause.api.provider_preflight import" in api_source
-    assert "is_live_failure" in api_source
+    assert "from retrocause.api.provider_preflight import" not in api_source
+    assert "is_live_failure" not in api_source
     assert "resolve_provider_model" not in api_source
     assert "classify_preflight_failure_code" not in api_source
     assert "preflight_user_action" not in api_source
     assert "resolve_provider_model" in analysis_execution_source
-    assert "classify_preflight_failure_code" in provider_route_source
-    assert "preflight_user_action" in provider_route_source
+    assert "classify_preflight_failure_code" not in provider_route_source
+    assert "preflight_user_action" not in provider_route_source
     assert "def _preflight_failure_code" not in api_source
     assert "def _preflight_user_action" not in api_source
     assert "def _is_live_failure" not in api_source
@@ -1739,8 +1652,8 @@ def test_api_live_failure_response_builder_is_extracted():
         REPO_ROOT / "retrocause" / "api" / "live_failure_response.py"
     ).read_text(encoding="utf-8")
 
-    assert "from retrocause.api.live_failure_response import" in api_source
-    assert "build_empty_live_failure_response" in api_source
+    assert "from retrocause.api.live_failure_response import" not in api_source
+    assert "build_empty_live_failure_response" not in api_source
     assert "def _empty_live_failure_response" not in api_source
     assert "def build_empty_live_failure_response" in live_failure_source
     assert "build_markdown_research_brief" in live_failure_source
@@ -1771,8 +1684,8 @@ def test_api_live_analysis_settings_are_extracted():
         REPO_ROOT / "retrocause" / "api" / "analysis_execution.py"
     ).read_text(encoding="utf-8")
 
-    assert "from retrocause.api.analysis_execution import" in api_source
-    assert "resolve_live_analysis_settings" in api_source
+    assert "from retrocause.api.analysis_execution import" not in api_source
+    assert "resolve_live_analysis_settings" not in api_source
     assert "PROVIDERS.get(request.model)" not in api_source
     assert 'list(provider_cfg["models"].keys())[0]' not in api_source
     assert "def resolve_live_analysis_settings" in analysis_execution_source
@@ -2090,25 +2003,17 @@ def test_result_to_v2_partial_live_reasons_follow_evaluation():
 
 
 @pytest.mark.anyio
-async def test_analyze_query_v2_returns_partial_live_instead_of_demo_on_live_failure(monkeypatch):
-    def _fail_run_real_analysis(*args, **kwargs):
-        raise RuntimeError("401 User not found.")
-
-    monkeypatch.setattr("retrocause.app.demo_data.run_real_analysis", _fail_run_real_analysis)
-
+async def test_legacy_key_payload_returns_demo_in_keyless_oss():
     request = AnalyzeRequest(
         query="为什么美国会同意与伊朗进行首轮谈判？",
-        model="openrouter",
-        api_key="sk-test",
-        explicit_model="openai/gpt-4o-mini",
+        model="ofoxai",
+        explicit_model="openai/gpt-5.4-mini",
     )
     response = await analyze_query_v2(request)
-    assert response.is_demo is False
-    assert response.analysis_mode == "partial_live"
-    assert response.error is not None
-    assert response.chains == []
-    assert response.evaluation is not None
-    assert any("api key" in action.lower() for action in response.evaluation.recommended_actions)
+    assert response.is_demo is True
+    assert response.analysis_mode == "demo"
+    assert response.error is None
+    assert response.chains
 
 
 @pytest.mark.anyio
@@ -2143,27 +2048,7 @@ async def test_multi_user_persona_outputs_are_actionable(monkeypatch):
     assert novice_response.markdown_brief
     assert novice_response.product_harness.next_actions
 
-    def _fail_run_real_analysis(*args, **kwargs):
-        raise RuntimeError("401 invalid API key")
-
-    monkeypatch.setattr("retrocause.app.demo_data.run_real_analysis", _fail_run_real_analysis)
-
-    blocked_response = await analyze_query_v2(
-        AnalyzeRequest(
-            query="Why did Bitcoin move today?",
-            model="openrouter",
-            api_key="sk-test",
-            explicit_model="deepseek/deepseek-chat-v3-0324",
-        )
-    )
-
-    assert blocked_response.is_demo is False
-    assert blocked_response.analysis_mode == "partial_live"
-    assert blocked_response.product_harness is not None
-    assert blocked_response.product_harness.status == "blocked_by_model"
-    assert blocked_response.error is not None
-    assert blocked_response.markdown_brief
-    assert any("preflight" in action.lower() for action in blocked_response.product_harness.next_actions)
+    assert "api_key" not in AnalyzeRequest.model_fields
 
 
 def test_multi_user_reviewer_can_audit_degraded_source_states():
@@ -2432,7 +2317,6 @@ def test_chain_diversity_identical_chains():
 
 
 def test_providers_have_required_keys():
-    assert "openrouter" in PROVIDERS
     assert "openai" in PROVIDERS
     assert "dashscope" in PROVIDERS
     for name, cfg in PROVIDERS.items():
@@ -2562,79 +2446,19 @@ def test_demo_result_hypothesis_variables_match_result_variables():
 
 
 @pytest.mark.anyio
-async def test_provider_preflight_classifies_missing_api_key():
-    response = await preflight_provider(
-        ProviderPreflightRequest(model="openrouter", api_key=None, explicit_model=None)
-    )
-
-    assert response.status == "error"
-    assert response.can_run_analysis is False
-    assert response.failure_code == "missing_api_key"
-    assert any(check.id == "api_key_present" and check.status == "fail" for check in response.checks)
-    assert "API key" in response.user_action
-
-
-@pytest.mark.anyio
-async def test_provider_preflight_runs_model_health_check(monkeypatch):
-    class FakeLLM:
-        def __init__(self, api_key, model, base_url, timeout):
-            self.api_key = api_key
-            self.model = model
-            self.base_url = base_url
-            self.timeout = timeout
-
-        def preflight_model_access(self):
-            return False, "BadRequestError: invalid model ID"
-
-    monkeypatch.setattr("retrocause.llm.LLMClient", FakeLLM)
-
+async def test_provider_preflight_is_disabled_before_model_health_check(monkeypatch):
     response = await preflight_provider(
         ProviderPreflightRequest(
-            model="openrouter",
-            api_key="sk-test",
+            model="ofoxai",
             explicit_model="not-a-real-model",
         )
     )
 
-    assert response.status == "error"
+    assert response.status == "disabled"
     assert response.can_run_analysis is False
-    assert response.failure_code == "invalid_model"
+    assert response.failure_code == "oss_keyless"
     assert response.model_name == "not-a-real-model"
-    assert any(check.id == "model_access" and check.status == "fail" for check in response.checks)
-    assert "model" in response.user_action.lower()
-
-
-@pytest.mark.anyio
-async def test_provider_preflight_requires_analysis_stage_smoke(monkeypatch):
-    class FakeLLM:
-        def __init__(self, api_key, model, base_url, timeout):
-            self.api_key = api_key
-            self.model = model
-            self.base_url = base_url
-            self.timeout = timeout
-
-        def preflight_model_access(self):
-            return True, None
-
-        def preflight_analysis_smoke(self):
-            return False, "Analysis-stage smoke returned empty search queries."
-
-    monkeypatch.setattr("retrocause.llm.LLMClient", FakeLLM)
-
-    response = await preflight_provider(
-        ProviderPreflightRequest(
-            model="openrouter",
-            api_key="sk-test",
-            explicit_model="openai/gpt-4o-mini",
-        )
-    )
-
-    assert response.status == "error"
-    assert response.can_run_analysis is False
-    assert response.failure_code == "invalid_or_empty_payload"
-    assert any(check.id == "model_access" and check.status == "pass" for check in response.checks)
-    assert any(check.id == "analysis_smoke" and check.status == "fail" for check in response.checks)
-    assert "reliable json output" in response.user_action.lower()
+    assert any(check.id == "oss_keyless_boundary" for check in response.checks)
 
 
 def test_product_harness_marks_model_blocked_empty_result_as_actionable():
@@ -2664,7 +2488,7 @@ def test_product_harness_marks_model_blocked_empty_result_as_actionable():
         check["id"] == "actionable_failure" and check["status"] == "pass"
         for check in report["checks"]
     )
-    assert any("preflight" in action.lower() for action in report["next_actions"])
+    assert any("pro" in action.lower() for action in report["next_actions"])
 
 
 def test_empty_live_failure_response_includes_specific_user_action():
@@ -2681,7 +2505,7 @@ def test_empty_live_failure_response_includes_specific_user_action():
     assert any(
         "reliable json output" in action.lower() for action in response.evaluation.recommended_actions
     )
-    assert any("preflight" in action.lower() for action in response.evaluation.recommended_actions)
+    assert any("pro" in action.lower() for action in response.evaluation.recommended_actions)
 
 
 def test_provider_failure_classifier_detects_rate_limits():
@@ -2699,29 +2523,28 @@ def test_provider_failure_classifier_detects_rate_limits():
     assert "rate-limited" in preflight_user_action(failure_code).lower()
     recovery_actions = provider_recovery_actions(
         PROVIDERS,
-        "openrouter",
-        "deepseek/deepseek-chat",
+        "ofoxai",
+        "openai/gpt-5.4-mini",
         failure_code,
     )
     joined = " ".join(recovery_actions)
-    assert "Try another openrouter model" in joined
-    assert "retry DeepSeek later" in joined
+    assert "Try another ofoxai model" in joined
 
 
 def test_empty_live_failure_response_includes_model_recovery_actions():
     response = build_empty_live_failure_response(
         "Why did Bitcoin move today?",
-        "RateLimitError: Error code: 429 - deepseek/deepseek-chat is temporarily rate-limited",
+        "RateLimitError: Error code: 429 - openai/gpt-5.4-mini is temporarily rate-limited",
         providers=PROVIDERS,
-        provider_key="openrouter",
-        model_name="deepseek/deepseek-chat",
+        provider_key="ofoxai",
+        model_name="openai/gpt-5.4-mini",
     )
 
     evaluation_actions = response.evaluation.recommended_actions if response.evaluation else []
     product_actions = response.product_harness.next_actions if response.product_harness else []
     joined = " ".join([*evaluation_actions, *product_actions])
     assert "rate-limit window" in joined
-    assert "Try another openrouter model" in joined
+    assert "Try another ofoxai model" in joined
 
 
 def test_live_analysis_gate_reports_busy_when_local_analysis_is_already_running(monkeypatch):
@@ -2837,8 +2660,8 @@ def test_detect_demo_topic_accepts_real_chinese_stock_query():
 
 
 def test_provider_labels_expose_clean_chinese_copy():
-    assert PROVIDERS["openrouter"]["label"] == "OpenRouter（多模型中转）"
-    assert PROVIDERS["openrouter"]["models"]["anthropic/claude-haiku-4.5"]["label"] == "Claude Haiku 4.5（快速）"
+    assert PROVIDERS["ofoxai"]["label"] == "OfoxAI\uff08OpenAI-compatible\uff09"
+    assert PROVIDERS["ofoxai"]["models"]["openai/gpt-5.4-mini"]["label"] == "GPT-5.4 Mini\uff08OfoxAI\uff0c\u9ed8\u8ba4\uff09"
 
 
 def test_product_harness_rewards_useful_evidence_backed_result():

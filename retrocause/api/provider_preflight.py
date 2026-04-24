@@ -18,10 +18,10 @@ LIVE_FAILURE_TOKENS = [
 ]
 
 PREFLIGHT_ACTIONS = {
-    "missing_api_key": "Enter an API key before running live analysis.",
+    "oss_keyless": "Use the local OSS path, or move hosted execution to the separate Rust Pro service.",
     "unknown_provider": "Choose a configured provider or add provider settings first.",
     "invalid_model": "Pick a model listed by the provider, then run preflight again.",
-    "auth_or_permission": "Check that the API key is valid and has access to this provider/model.",
+    "auth_or_permission": "Check hosted provider credentials and access in the Pro service.",
     "billing_or_quota": "Check provider balance, quota, or account limits before retrying.",
     "rate_limited": "The provider is currently rate-limited; wait briefly or switch model/provider.",
     "queue_busy": "Another local live analysis is running; wait for it to finish, then retry.",
@@ -33,11 +33,7 @@ PREFLIGHT_ACTIONS = {
 
 _FALLBACK_MODEL_LIMIT = 3
 
-MODEL_ALIASES = {
-    "openrouter": {
-        "deepseek/deepseek-chat-v3-0324": "deepseek/deepseek-chat",
-    },
-}
+MODEL_ALIASES: dict[str, dict[str, str]] = {}
 
 
 def is_live_failure(error_msg: str | None) -> bool:
@@ -103,11 +99,6 @@ def provider_recovery_actions(
         if alternates:
             choices = ", ".join(alternates[:_FALLBACK_MODEL_LIMIT])
             actions.append(f"Try another {provider_key} model your key can access: {choices}.")
-        if provider_key == "openrouter" and model_name and model_name.startswith("deepseek/"):
-            actions.append(
-                "If this OpenRouter key is DeepSeek-only, retry DeepSeek later or use a direct "
-                "DeepSeek provider key."
-            )
     elif failure_code in {"invalid_or_empty_payload", "timeout"} and alternates:
         choices = ", ".join(alternates[:_FALLBACK_MODEL_LIMIT])
         actions.append(f"Try another {provider_key} model with reliable JSON output: {choices}.")

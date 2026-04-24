@@ -61,7 +61,7 @@ def build_usage_ledger_payloads(
     *,
     provider_label: str,
     model_name: str,
-    has_api_key: bool,
+    uses_hosted_provider: bool,
     analysis_mode: str,
     chain_count: int,
     retrieval_trace: Sequence[object],
@@ -71,7 +71,7 @@ def build_usage_ledger_payloads(
         {
             "category": "model_provider",
             "name": model_name,
-            "quota_owner": "user_owned" if has_api_key else "local_demo",
+            "quota_owner": "hosted_provider" if uses_hosted_provider else "local_demo",
             "status": analysis_mode,
             "count": chain_count,
             "detail": provider_label,

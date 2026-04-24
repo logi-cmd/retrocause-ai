@@ -21,12 +21,10 @@ import type {
   ApiProductionBrief,
   ApiProductionHarness,
   ApiProductHarness,
-  ApiProviderPreflight,
   ApiRetrievalTrace,
   ApiRunStep,
   ApiSavedRunSummary,
   ApiScenario,
-  ApiSourcePreflight,
   ApiUsageLedgerItem,
 } from "@/lib/api-types";
 import {
@@ -448,15 +446,10 @@ export default function Home() {
   const [activeChain, setActiveChain] = useState(localizedDemo.primaryChain);
   const [currentQuery, setCurrentQuery] = useState("");
   const [lastQuery, setLastQuery] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [tavilyApiKey, setTavilyApiKey] = useState("");
-  const [braveSearchApiKey, setBraveSearchApiKey] = useState("");
   const selectedModel = "ofoxai";
-  const [selectedExplicitModel, setSelectedExplicitModel] = useState("");
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
-  const [availableModels, setAvailableModels] = useState<Record<string, string>>({});
   const [statusNote, setStatusNote] = useState("");
   const [availableChains, setAvailableChains] = useState<AnalyzeResponseV2["chains"]>([]);
   const [recommendedChainId, setRecommendedChainId] = useState<string | null>(null);
@@ -482,10 +475,6 @@ export default function Home() {
   const [uploadedEvidenceTitle, setUploadedEvidenceTitle] = useState("");
   const [uploadedEvidenceText, setUploadedEvidenceText] = useState("");
   const [uploadedEvidenceStatus, setUploadedEvidenceStatus] = useState("");
-  const [providerPreflight, setProviderPreflight] = useState<ApiProviderPreflight | null>(null);
-  const [providerPreflightLoading, setProviderPreflightLoading] = useState(false);
-  const [sourcePreflight, setSourcePreflight] = useState<ApiSourcePreflight | null>(null);
-  const [sourcePreflightLoading, setSourcePreflightLoading] = useState(false);
   const [pipelineEval, setPipelineEval] = useState<AnalyzeResponseV2["evaluation"]>(null);
   const [uncertaintyReport, setUncertaintyReport] = useState<AnalyzeResponseV2["uncertainty_report"]>(null);
   const [evidenceSourceFilter, setEvidenceSourceFilter] = useState<string>("all");
@@ -559,26 +548,6 @@ export default function Home() {
     recommendedChainId,
     selectedChainId,
   ]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`${API_BASE}/api/providers`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return;
-        const models = data?.providers?.[selectedModel]?.models ?? {};
-        setAvailableModels(models);
-        const keys = Object.keys(models);
-        setSelectedExplicitModel(keys[0] ?? "");
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setAvailableModels({});
-          setSelectedExplicitModel("");
-        }
-      });
-    return () => { cancelled = true; };
-  }, [selectedModel]);
 
   useEffect(() => {
     setBoardReady(false);
@@ -1208,87 +1177,6 @@ export default function Home() {
     }
   }, [currentQuery, lastQuery, locale, scenario?.key, uploadedEvidenceText, uploadedEvidenceTitle]);
 
-  const runProviderPreflight = useCallback(async () => {
-    setProviderPreflightLoading(true);
-    setProviderPreflight(null);
-    try {
-      const body: Record<string, unknown> = {
-        model: selectedModel,
-        api_key: apiKey,
-      };
-      if (selectedExplicitModel) body.explicit_model = selectedExplicitModel;
-
-      const response = await fetch(`${API_BASE}/api/providers/preflight`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) {
-        throw new Error(`Preflight failed (${response.status})`);
-      }
-      const payload = (await response.json()) as ApiProviderPreflight;
-      setProviderPreflight(payload);
-    } catch (error) {
-      setProviderPreflight({
-        provider: selectedModel,
-        model_name: selectedExplicitModel || selectedModel,
-        status: "error",
-        can_run_analysis: false,
-        failure_code: "request_failed",
-        diagnosis: error instanceof Error ? error.message : "Preflight request failed.",
-        user_action:
-          locale === "en"
-            ? "Check that the backend is running, then retry preflight."
-            : "\u8bf7\u786e\u8ba4\u540e\u7aef\u6b63\u5728\u8fd0\u884c\uff0c\u7136\u540e\u91cd\u65b0\u9884\u68c0\u3002",
-        checks: [],
-      });
-    } finally {
-      setProviderPreflightLoading(false);
-    }
-  }, [apiKey, locale, selectedExplicitModel, selectedModel]);
-
-  const runSourcePreflight = useCallback(async () => {
-    setSourcePreflightLoading(true);
-    setSourcePreflight(null);
-    try {
-      const response = await fetch(`${API_BASE}/api/sources/preflight`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tavily_api_key: tavilyApiKey,
-          brave_search_api_key: braveSearchApiKey,
-          query: currentQuery.trim() || "RetroCause source preflight latest market news",
-        }),
-      });
-      if (!response.ok) {
-        throw new Error(`Search preflight failed (${response.status})`);
-      }
-      const payload = (await response.json()) as ApiSourcePreflight;
-      setSourcePreflight(payload);
-    } catch (error) {
-      setSourcePreflight({
-        status: "error",
-        can_search: false,
-        checks: [
-          {
-            source: "request",
-            source_label: "Search preflight",
-            status: "request_failed",
-            can_search: false,
-            result_count: 0,
-            diagnosis: error instanceof Error ? error.message : "Search preflight request failed.",
-            user_action:
-              locale === "en"
-                ? "Check that the backend is running, then retry search preflight."
-                : "\u8bf7\u786e\u8ba4\u540e\u7aef\u6b63\u5728\u8fd0\u884c\uff0c\u7136\u540e\u91cd\u65b0\u641c\u7d22\u9884\u68c0\u3002",
-          },
-        ],
-      });
-    } finally {
-      setSourcePreflightLoading(false);
-    }
-  }, [braveSearchApiKey, currentQuery, locale, tavilyApiKey]);
-
   const runAnalysis = useCallback(async () => {
     const query = currentQuery.trim();
     if (!query) return;
@@ -1330,18 +1218,14 @@ export default function Home() {
       partialLiveReasons: [],
     });
     setPipelineProgress(null);
-    setStatusNote(locale === "en" ? "Running live analysis..." : "\u6b63\u5728\u6267\u884c\u771f\u5b9e\u5206\u6790...");
+    setStatusNote(locale === "en" ? "Running local OSS analysis..." : "\u6b63\u5728\u6267\u884c\u672c\u5730 OSS \u5206\u6790...");
     setLastQuery(query);
 
     const body: Record<string, unknown> = {
       query,
       model: selectedModel,
-      api_key: apiKey,
       scenario_override: scenarioOverride === "auto" ? null : scenarioOverride,
     };
-    if (selectedExplicitModel) body.explicit_model = selectedExplicitModel;
-    if (tavilyApiKey.trim()) body.tavily_api_key = tavilyApiKey;
-    if (braveSearchApiKey.trim()) body.brave_search_api_key = braveSearchApiKey;
 
     // Helper to process a successful payload (shared between SSE done and fallback)
     const processPayload = (payload: AnalyzeResponseV2) => {
@@ -1580,10 +1464,6 @@ export default function Home() {
   }, [
     currentQuery,
     selectedModel,
-    selectedExplicitModel,
-    apiKey,
-    tavilyApiKey,
-    braveSearchApiKey,
     scenarioOverride,
     locale,
     localizedDemo.primaryChain,
@@ -1929,164 +1809,21 @@ export default function Home() {
             aria-expanded={showAdvancedSettings}
             onClick={() => setShowAdvancedSettings((current) => !current)}
           >
-            <span>{locale === "en" ? "Provider settings" : "\u6a21\u578b\u4e0e\u5bc6\u94a5\u8bbe\u7f6e"}</span>
+            <span>{locale === "en" ? "OSS analysis settings" : "OSS \u5206\u6790\u8bbe\u7f6e"}</span>
             <span>{showAdvancedSettings ? "-" : "+"}</span>
           </button>
           {showAdvancedSettings && (
             <div className="advanced-settings">
           <div className="compact-label" style={{ marginTop: "2px" }}>{t("query.model")}</div>
           <div className="provider-lock">
-            <span>OfoxAI</span>
-            <span>{locale === "en" ? "fixed provider" : "\u56fa\u5b9a\u63d0\u4f9b\u5546"}</span>
+            <span>{locale === "en" ? "Keyless local profile" : "\u65e0 key \u672c\u5730\u914d\u7f6e"}</span>
+            <span>OSS</span>
           </div>
-          {Object.keys(availableModels).length > 0 && (
-            <select
-              value={selectedExplicitModel}
-              onChange={(event) => setSelectedExplicitModel(event.target.value)}
-              className="analyst-input"
-            >
-              {Object.entries(availableModels).map(([id, label]) => (
-                <option key={id} value={id}>{label}</option>
-              ))}
-            </select>
-          )}
-          <div className="compact-label" style={{ marginTop: "8px" }}>{t("query.apiKey")}</div>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder={t("query.apiKeyPlaceholder")}
-            className="analyst-input"
-          />
-          <div style={{ fontSize: "0.58rem", color: "var(--analyst-muted)", marginTop: "6px", lineHeight: 1.45 }}>
+          <div style={{ fontSize: "0.58rem", color: "var(--analyst-muted)", marginTop: "4px", lineHeight: 1.45 }}>
             {locale === "en"
-              ? "Stored in this browser session and sent only to the selected model provider."
-              : "\u4ec5\u4fdd\u5b58\u5728\u5f53\u524d\u6d4f\u89c8\u5668\u4f1a\u8bdd\u4e2d\uff0c\u5e76\u53ea\u53d1\u9001\u7ed9\u4f60\u9009\u62e9\u7684\u6a21\u578b\u63d0\u4f9b\u5546\u3002"}
+              ? "OSS runs without model or search keys. The hosted Pro line will own provider credentials, queues, and live search."
+              : "OSS \u7248\u672c\u4e0d\u63a5\u6536\u6a21\u578b\u6216\u641c\u7d22 key\u3002\u6258\u7ba1 Pro \u7ebf\u5c06\u627f\u62c5 provider \u51ed\u636e\u3001\u961f\u5217\u548c live search\u3002"}
           </div>
-          <div className="compact-label" style={{ marginTop: "10px" }}>
-            {locale === "en" ? "Tavily search key (optional)" : "Tavily \u641c\u7d22\u5bc6\u94a5\uff08\u53ef\u9009\uff09"}
-          </div>
-          <input
-            type="password"
-            value={tavilyApiKey}
-            onChange={(event) => setTavilyApiKey(event.target.value)}
-            placeholder={locale === "en" ? "Use for this local run" : "\u4ec5\u7528\u4e8e\u672c\u6b21\u672c\u5730\u5206\u6790"}
-            className="analyst-input"
-          />
-          <div className="compact-label" style={{ marginTop: "8px" }}>
-            {locale === "en" ? "Brave Search key (optional)" : "Brave Search \u5bc6\u94a5\uff08\u53ef\u9009\uff09"}
-          </div>
-          <input
-            type="password"
-            value={braveSearchApiKey}
-            onChange={(event) => setBraveSearchApiKey(event.target.value)}
-            placeholder={locale === "en" ? "Use for this local run" : "\u4ec5\u7528\u4e8e\u672c\u6b21\u672c\u5730\u5206\u6790"}
-            className="analyst-input"
-          />
-          <div style={{ fontSize: "0.58rem", color: "var(--analyst-muted)", marginTop: "6px", lineHeight: 1.45 }}>
-            {locale === "en"
-              ? "Search keys are optional. They are sent to the local backend for this run and override process environment keys."
-              : "\u641c\u7d22\u5bc6\u94a5\u662f\u53ef\u9009\u9879\u3002\u5b83\u4eec\u4f1a\u5728\u672c\u6b21\u8fd0\u884c\u4e2d\u53d1\u9001\u5230\u672c\u5730\u540e\u7aef\uff0c\u5e76\u8986\u76d6\u8fdb\u7a0b\u73af\u5883\u53d8\u91cf\u3002"}
-          </div>
-          <button
-            type="button"
-            onClick={runSourcePreflight}
-            disabled={sourcePreflightLoading || (!tavilyApiKey.trim() && !braveSearchApiKey.trim())}
-            style={{
-              marginTop: "8px",
-              width: "100%",
-              padding: "8px 10px",
-              borderRadius: "8px",
-              border: "1px solid rgba(49, 95, 131, 0.24)",
-              background: sourcePreflightLoading ? "rgba(49,95,131,0.08)" : "rgba(255,255,255,0.66)",
-              color: "var(--analyst-blue)",
-              fontSize: "0.64rem",
-              fontWeight: 800,
-              cursor: sourcePreflightLoading || (!tavilyApiKey.trim() && !braveSearchApiKey.trim()) ? "not-allowed" : "pointer",
-            }}
-          >
-            {sourcePreflightLoading
-              ? locale === "en" ? "Checking search..." : "\u6b63\u5728\u9884\u68c0\u641c\u7d22..."
-              : locale === "en" ? "Run search preflight" : "\u8fd0\u884c\u641c\u7d22\u9884\u68c0"}
-          </button>
-          {sourcePreflight && (
-            <div
-              style={{
-                marginTop: "8px",
-                padding: "8px 9px",
-                borderRadius: "8px",
-                border: sourcePreflight.can_search
-                  ? "1px solid rgba(92,130,84,0.22)"
-                  : "1px solid rgba(160,80,60,0.22)",
-                background: sourcePreflight.can_search
-                  ? "rgba(92,130,84,0.08)"
-                  : "rgba(160,80,60,0.08)",
-                color: sourcePreflight.can_search ? "#526f44" : "#9a4635",
-                fontSize: "0.58rem",
-                lineHeight: 1.45,
-              }}
-            >
-              <strong>
-                {sourcePreflight.can_search
-                  ? locale === "en" ? "Search preflight passed" : "\u641c\u7d22\u9884\u68c0\u901a\u8fc7"
-                  : locale === "en" ? "Search preflight blocked" : "\u641c\u7d22\u9884\u68c0\u672a\u901a\u8fc7"}
-              </strong>
-              {sourcePreflight.checks.map((check) => (
-                <div key={check.source} style={{ marginTop: "4px", color: "#6b5a42" }}>
-                  {`${check.source_label}: ${check.status} · ${check.diagnosis || check.user_action}`}
-                </div>
-              ))}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={runProviderPreflight}
-            disabled={providerPreflightLoading || !apiKey.trim()}
-            style={{
-              marginTop: "8px",
-              width: "100%",
-              padding: "8px 10px",
-              borderRadius: "8px",
-              border: "1px solid rgba(49, 95, 131, 0.24)",
-              background: providerPreflightLoading ? "rgba(49,95,131,0.08)" : "rgba(255,255,255,0.66)",
-              color: "var(--analyst-blue)",
-              fontSize: "0.64rem",
-              fontWeight: 800,
-              cursor: providerPreflightLoading || !apiKey.trim() ? "not-allowed" : "pointer",
-            }}
-          >
-            {providerPreflightLoading
-              ? locale === "en" ? "Checking model..." : "\u6b63\u5728\u9884\u68c0\u6a21\u578b..."
-              : locale === "en" ? "Run model preflight" : "\u8fd0\u884c\u6a21\u578b\u9884\u68c0"}
-          </button>
-          {providerPreflight && (
-            <div
-              style={{
-                marginTop: "8px",
-                padding: "8px 9px",
-                borderRadius: "8px",
-                border: providerPreflight.can_run_analysis
-                  ? "1px solid rgba(92,130,84,0.22)"
-                  : "1px solid rgba(160,80,60,0.22)",
-                background: providerPreflight.can_run_analysis
-                  ? "rgba(92,130,84,0.08)"
-                  : "rgba(160,80,60,0.08)",
-                color: providerPreflight.can_run_analysis ? "#526f44" : "#9a4635",
-                fontSize: "0.58rem",
-                lineHeight: 1.45,
-              }}
-            >
-              <strong>
-                {providerPreflight.can_run_analysis
-                  ? locale === "en" ? "Preflight passed" : "\u9884\u68c0\u901a\u8fc7"
-                  : locale === "en" ? "Preflight blocked" : "\u9884\u68c0\u672a\u901a\u8fc7"}
-              </strong>
-              {` · ${providerPreflight.model_name}`}
-              <div style={{ marginTop: "4px", color: "#6b5a42" }}>
-                {providerPreflight.user_action || providerPreflight.diagnosis}
-              </div>
-            </div>
-          )}
             </div>
           )}
           <button

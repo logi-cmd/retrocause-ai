@@ -46,7 +46,7 @@ def finalize_run_response(
         for payload in build_usage_ledger_payloads(
             provider_label=provider_label,
             model_name=model_name,
-            has_api_key=bool(request.api_key),
+            uses_hosted_provider=False,
             analysis_mode=response.analysis_mode,
             chain_count=len(response.chains),
             retrieval_trace=response.retrieval_trace,

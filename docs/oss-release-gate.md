@@ -23,7 +23,7 @@ Use this label when all of the following are true:
 1. `README.md` setup instructions work from a fresh local copy.
 2. The root `npm test` workflow passes in the active workspace.
 3. The root `npm test` workflow passes in a fresh local copy at least once after meaningful onboarding changes.
-4. Demo mode, partial-live failure mode, and source-trace transparency remain honest.
+4. Keyless local/demo mode and source-trace transparency remain honest.
 5. Public docs do not promise hosted/Pro behavior that does not exist.
 
 ### Non-alpha OSS `v0.1.0`
@@ -49,20 +49,19 @@ Status today: met for the current local alpha.
 
 Status today: met for the current local alpha on Windows.
 
-### 3. Provider-backed live validation gate
+### 3. Keyless OSS product validation gate
 
-- Run at least one provider-backed live validation with real keys using the current recommended provider path.
+- Run the keyless local stability probe.
 - Include Chinese finance coverage because that path has been a recurrent regression hotspot.
 - Record source quality, analysis mode, evidence count, source-trace quality, and reviewability outcome.
-- If OpenRouter remains documented as a fallback path, confirm whether it still works well enough to keep in docs and UI.
+- Confirm the OSS browser/API surface does not require or accept model/search credentials.
+- Confirm OpenRouter is not documented or exposed as an active OSS path.
 
 Recommended path today:
 
-- Primary: `OFOXAI_API_KEY` with the current default provider path
-- Search layer: real Tavily and/or Brave keys
 - Probe harness: `scripts/live_stability_probe.py`
 
-Status today: not fully met. Source-layer smoke exists, but the provider-backed Chinese finance run still needs to be recorded after the current fast-path changes.
+Status today: needs to be rerun after the keyless boundary change.
 
 ### 4. User-facing documentation gate
 
@@ -87,7 +86,7 @@ Status today: not met, because `v0.1.0` has not been published.
 - Run the representative scenarios in `docs/manual-smoke-test.md`.
 - Include:
   - demo mode
-  - partial-live / failure transparency
+  - keyless local/demo result transparency
   - source trace visibility
   - Chinese A-share sample query flow
   - panel controls and narrow viewport behavior
@@ -109,7 +108,7 @@ Before tagging `v0.1.0`, the evidence note should include:
 
 1. the exact `npm test` result for the release workspace
 2. the exact fresh-copy install + `npm test` result
-3. the provider-backed live probe result with real keys
+3. the keyless local stability probe result
 4. manual smoke notes or links to saved artifacts
 5. guardrails result for the release-prep change
 6. any residual risks accepted for launch
@@ -120,10 +119,10 @@ This gate exists to stop three failure modes:
 
 1. promoting "stable local alpha" into "stable release" without a real release package
 2. letting docs drift into claiming `v0.1.0` shipped before the tag and release exist
-3. calling the product ready without a real provider-backed live validation on the highest-risk query paths
+3. calling the product ready without a recorded keyless validation on the highest-risk query paths
 
 ## Next Release-Focused Actions
 
-1. Run `scripts/live_stability_probe.py` with real provider/search keys and record the Chinese finance result.
+1. Run `scripts/live_stability_probe.py` and record the Chinese finance local/demo result.
 2. Re-run a targeted manual release smoke using `docs/manual-smoke-test.md`.
 3. If those pass, prepare the explicit `v0.1.0` release-prep change and re-run guardrails on that release branch or commit.

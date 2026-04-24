@@ -488,20 +488,14 @@ class LLMClient:
         初始化 LLM 客户端。
 
         Args:
-            api_key: API 密钥，为 None 时依次尝试 OPENROUTER_API_KEY / OPENAI_API_KEY 环境变量。
-            model: 模型名称（OpenRouter 格式如 "deepseek/deepseek-chat-v3-0324"）。
-            base_url: API 地址，默认 https://openrouter.ai/api/v1 或 https://api.openai.com/v1。
+            api_key: API key for non-OSS integrations. The OSS browser/API surface
+                does not read provider credentials from environment variables.
+            model: 模型名称。
+            base_url: API 地址，默认跟随显式传入的 base_url，或 OpenAI SDK 默认端点。
             timeout: 请求超时秒数，为 None 时回退到 OPENAI_TIMEOUT 环境变量（默认 60s）。
         """
-        resolved_key = (
-            api_key or os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
-        )
-        if base_url:
-            resolved_base = base_url
-        elif os.environ.get("OPENROUTER_API_KEY"):
-            resolved_base = "https://openrouter.ai/api/v1"
-        else:
-            resolved_base = None
+        resolved_key = api_key
+        resolved_base = base_url
 
         resolved_timeout = timeout or float(os.environ.get("OPENAI_TIMEOUT", "60"))
 

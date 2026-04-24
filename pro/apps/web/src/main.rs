@@ -4,10 +4,10 @@ use axum::{
     routing::get,
 };
 use maud::{DOCTYPE, Markup, PreEscaped, html};
-use retrocause_pro_domain::{GraphNode, NodeKind, RunSeed, sample_run};
+use retrocause_pro_domain::{GraphEdge, GraphNode, NodeKind, RunSeed, sample_run};
 
 const CANVAS_WIDTH: u16 = 1220;
-const CANVAS_HEIGHT: u16 = 520;
+const CANVAS_HEIGHT: u16 = 720;
 
 fn router() -> Router {
     Router::new().route("/", get(index))
@@ -30,88 +30,84 @@ fn render_page(run: &RunSeed) -> Markup {
                 link rel="preconnect" href="https://fonts.googleapis.com";
                 link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="";
                 link
-                    href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap"
+                    href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap"
                     rel="stylesheet";
                 style { (PreEscaped(styles())) }
             }
             body {
-                main class="shell" {
-                    header class="topbar" {
-                        div class="brand" {
-                            div class="brand-mark" { "RC" }
-                            div {
-                                p class="eyebrow" { "RetroCause Pro kickoff" }
-                                h1 { "Knowledge graph review desk" }
-                            }
-                        }
-                        div class="topbar-meta" {
-                            span class="pill pill--state" { (run.run_state) }
-                            span class="pill" { "confidence " (percent(run.confidence)) }
-                            span class="pill" { (run.nodes.len()) " nodes / " (run.edges.len()) " edges" }
-                        }
-                    }
-
-                    section class="workspace" {
-                        aside class="rail rail--left" {
-                            p class="rail-label" { "Operator summary" }
-                            h2 { (run.title) }
-                            p class="question" { (run.question) }
-                            p class="verdict" { (run.verdict) }
-                            div class="section-block" {
-                                p class="section-label" { "Next review moves" }
-                                ol {
-                                    @for step in run.next_steps {
-                                        li { (step) }
-                                    }
-                                }
-                            }
-                        }
-
-                        section class="graph-stage" {
-                            div class="stage-header" {
+                main class="field-shell" {
+                    section class="graph-field" aria-label="Knowledge graph operating field" {
+                        header class="hud hud--top" {
+                            div class="brand-lockup" {
+                                div class="brand-mark" { "RC" }
                                 div {
-                                    p class="rail-label" { "Primary surface" }
-                                    h2 { "Graph-first run review" }
+                                    p class="eyebrow" { "RetroCause Pro" }
+                                    h1 { "Causal graph command room" }
                                 }
-                                p class="stage-note" { "Pro starts from the graph, then expands into evidence and export." }
                             }
-                            div class="graph-board" {
-                                svg
-                                    class="graph-wires"
-                                    viewBox={(format!("0 0 {} {}", CANVAS_WIDTH, CANVAS_HEIGHT))}
-                                    aria-hidden="true"
-                                {
-                                    @for edge in &run.edges {
-                                        (render_edge(run, edge.source, edge.target, edge.label))
-                                    }
+                            div class="run-state" {
+                                span class="state-token state-token--live" { (run.run_state) }
+                                span class="state-token" { "confidence " (percent(run.confidence)) }
+                                span class="state-token" { (run.nodes.len()) " nodes" }
+                                span class="state-token" { (run.edges.len()) " edges" }
+                            }
+                        }
+
+                        div class="question-band" {
+                            p class="eyebrow" { "Run" }
+                            h2 { (run.title) }
+                            p { (run.question) }
+                        }
+
+                        div class="graph-viewport" {
+                            div class="axis-line axis-line--x" {}
+                            div class="axis-line axis-line--y" {}
+                            svg
+                                class="graph-wires"
+                                viewBox={(format!("0 0 {} {}", CANVAS_WIDTH, CANVAS_HEIGHT))}
+                                aria-hidden="true"
+                            {
+                                @for edge in &run.edges {
+                                    (render_edge(run, edge))
                                 }
-                                @for node in &run.nodes {
-                                    (render_node(node))
+                            }
+                            @for node in &run.nodes {
+                                (render_node(node))
+                            }
+                        }
+
+                        aside class="focus-docket" aria-label="Focus queue" {
+                            p class="eyebrow" { "Focus queue" }
+                            ol {
+                                @for step in run.next_steps {
+                                    li { (step) }
                                 }
                             }
                         }
 
-                        aside class="rail rail--right" {
-                            p class="rail-label" { "Evidence and source health" }
-                            div class="section-block" {
-                                p class="section-label" { "Source ledger" }
-                                ul class="source-list" {
-                                    @for source in &run.source_status {
-                                        li class="source-item" {
-                                            div {
-                                                strong { (source.source) }
-                                                p { (source.note) }
-                                            }
-                                            span class=(format!("status {}", source.status)) { (source.status) }
-                                        }
-                                    }
-                                }
+                        aside class="source-pulse" aria-label="Source pulse" {
+                            p class="eyebrow" { "Source pulse" }
+                            @for source in &run.source_status {
+                                (render_source_meter(source.source, source.status, source.note))
                             }
-                            div class="section-block" {
-                                p class="section-label" { "Future data contract" }
-                                p class="stage-note" { "The web shell already embeds the canonical run JSON for future hydration, diffing, and export." }
-                                pre class="json-seed" { (seed_json) }
+                        }
+
+                        footer class="command-deck" {
+                            div class="verdict" {
+                                p class="eyebrow" { "Current read" }
+                                strong { (run.verdict) }
                             }
+                            div class="command-clusters" aria-label="Run signals" {
+                                span { (run.run_state) }
+                                span { (percent(run.confidence)) " confidence" }
+                                span { (run.nodes.len()) " nodes tracked" }
+                                span { (run.edges.len()) " causal links" }
+                            }
+                        }
+
+                        details class="seed-drawer" {
+                            summary { "Run payload" }
+                            pre { (seed_json) }
                         }
                     }
                 }
@@ -120,16 +116,16 @@ fn render_page(run: &RunSeed) -> Markup {
     }
 }
 
-fn render_edge(run: &RunSeed, source_id: &str, target_id: &str, label: &str) -> Markup {
+fn render_edge(run: &RunSeed, edge: &GraphEdge) -> Markup {
     let source = run
         .nodes
         .iter()
-        .find(|node| node.id == source_id)
+        .find(|node| node.id == edge.source)
         .expect("known source node");
     let target = run
         .nodes
         .iter()
-        .find(|node| node.id == target_id)
+        .find(|node| node.id == edge.target)
         .expect("known target node");
 
     let path = wire_path(source, target);
@@ -137,8 +133,9 @@ fn render_edge(run: &RunSeed, source_id: &str, target_id: &str, label: &str) -> 
     let label_y = (source.y + target.y) / 2;
 
     html! {
+        path class="wire-shadow" d=(path.clone()) {}
         path class="wire" d=(path) {}
-        text class="wire-label" x=(label_x) y=(label_y) { (label) }
+        text class="wire-label" x=(label_x) y=(label_y) { (edge.label) }
     }
 }
 
@@ -148,21 +145,33 @@ fn render_node(node: &GraphNode) -> Markup {
             class=(format!("graph-node {:?}", node.kind).to_lowercase().replace(' ', "-"))
             style=(format!("left:{}px; top:{}px;", node.x, node.y))
         {
-            p class="node-kind" { (node_kind_label(node.kind)) }
-            h3 { (node.title) }
-            p class="node-summary" { (node.summary) }
-            div class="node-meta" {
-                span { "confidence " (percent(node.confidence)) }
+            div class="node-head" {
+                p class="node-kind" { (node_kind_label(node.kind)) }
+                span { (percent(node.confidence)) }
             }
+            h3 { (node.title) }
+            p { (node.summary) }
+        }
+    }
+}
+
+fn render_source_meter(source: &str, status: &str, note: &str) -> Markup {
+    html! {
+        article class="source-meter" {
+            div {
+                strong { (source) }
+                p { (note) }
+            }
+            span class=(format!("status-dot status-dot--{}", status)) {}
         }
     }
 }
 
 fn wire_path(source: &GraphNode, target: &GraphNode) -> String {
-    let start_x = i32::from(source.x) + 150;
-    let start_y = i32::from(source.y) + 70;
+    let start_x = i32::from(source.x) + 168;
+    let start_y = i32::from(source.y) + 86;
     let end_x = i32::from(target.x);
-    let end_y = i32::from(target.y) + 70;
+    let end_y = i32::from(target.y) + 86;
     let control_x = (start_x + end_x) / 2;
     format!("M {start_x} {start_y} C {control_x} {start_y}, {control_x} {end_y}, {end_x} {end_y}")
 }
@@ -184,261 +193,361 @@ fn styles() -> &'static str {
     r#"
 :root {
   color-scheme: dark;
-  --bg: oklch(0.18 0.02 95);
-  --panel: oklch(0.23 0.02 95);
-  --panel-strong: oklch(0.28 0.02 95);
-  --surface: oklch(0.92 0.02 95);
-  --text: oklch(0.95 0.01 92);
-  --muted: oklch(0.72 0.02 92);
-  --line: oklch(0.46 0.05 45);
-  --driver: oklch(0.78 0.09 78);
-  --enabler: oklch(0.8 0.06 165);
-  --risk: oklch(0.78 0.08 30);
-  --outcome: oklch(0.78 0.08 250);
+  --bg: oklch(0.16 0.016 148);
+  --bg-lift: oklch(0.2 0.018 148);
+  --panel: oklch(0.24 0.018 148 / 0.9);
+  --panel-hard: oklch(0.29 0.02 148 / 0.96);
+  --line: oklch(0.74 0.075 96);
+  --text: oklch(0.93 0.01 118);
+  --muted: oklch(0.72 0.026 132);
+  --accent: oklch(0.78 0.09 95);
+  --danger: oklch(0.66 0.13 27);
+  --driver: oklch(0.76 0.08 95);
+  --enabler: oklch(0.78 0.06 168);
+  --risk: oklch(0.7 0.12 27);
+  --outcome: oklch(0.76 0.05 205);
 }
 
 * { box-sizing: border-box; }
+
 body {
   margin: 0;
-  font-family: "Familjen Grotesk", sans-serif;
+  font-family: "Hanken Grotesk", sans-serif;
   background:
-    radial-gradient(circle at top, color-mix(in oklch, var(--panel-strong) 70%, transparent), transparent 38%),
+    linear-gradient(color-mix(in oklch, var(--text) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklch, var(--text) 4%, transparent) 1px, transparent 1px),
     var(--bg);
+  background-size: 36px 36px, 36px 36px, auto;
   color: var(--text);
 }
 
-.shell {
+.field-shell {
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 1rem;
+  padding: 0.75rem;
 }
 
-.topbar,
-.rail,
-.graph-stage {
-  background: color-mix(in oklch, var(--panel) 92%, black);
-  border: 1px solid color-mix(in oklch, var(--panel-strong) 72%, black);
+.graph-field {
+  min-height: calc(100vh - 1.5rem);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--text) 10%, transparent);
   border-radius: 8px;
+  background:
+    linear-gradient(115deg, color-mix(in oklch, var(--bg-lift) 88%, black), var(--bg));
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.32);
 }
 
-.topbar {
+.hud,
+.question-band,
+.focus-docket,
+.source-pulse,
+.command-deck,
+.seed-drawer {
+  position: absolute;
+  z-index: 5;
+  border: 1px solid color-mix(in oklch, var(--text) 10%, transparent);
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--panel) 92%, black);
+  backdrop-filter: blur(14px);
+}
+
+.hud--top {
+  top: 0.9rem;
+  left: 0.9rem;
+  right: 0.9rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
-  padding: 1rem 1.2rem;
+  padding: 0.85rem 1rem;
 }
 
-.brand {
+.brand-lockup {
   display: flex;
   align-items: center;
-  gap: 0.9rem;
+  gap: 0.75rem;
 }
 
 .brand-mark {
   width: 2.6rem;
   height: 2.6rem;
-  border-radius: 8px;
   display: grid;
   place-items: center;
-  background: oklch(0.8 0.08 80);
-  color: oklch(0.25 0.02 85);
+  border-radius: 8px;
+  background: var(--accent);
+  color: oklch(0.18 0.018 148);
   font-family: "Sora", sans-serif;
   font-weight: 700;
 }
 
-.eyebrow,
-.rail-label,
-.section-label,
-.node-kind {
+.run-state,
+.command-clusters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.state-token,
+.command-clusters span {
+  border: 1px solid color-mix(in oklch, var(--text) 11%, transparent);
+  border-radius: 999px;
+  padding: 0.32rem 0.62rem;
+  color: color-mix(in oklch, var(--text) 88%, var(--muted));
+  background: color-mix(in oklch, var(--panel-hard) 82%, black);
+  font-size: 0.78rem;
+}
+
+.state-token--live {
+  color: oklch(0.9 0.05 128);
+}
+
+.question-band {
+  top: 5.5rem;
+  left: 0.9rem;
+  max-width: min(620px, calc(100% - 1.8rem));
+  padding: 0.95rem 1rem;
+}
+
+.graph-viewport {
+  position: absolute;
+  inset: 8.6rem 1rem 5.7rem;
+  overflow: auto;
+  border-radius: 8px;
+  background:
+    linear-gradient(color-mix(in oklch, var(--text) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklch, var(--text) 5%, transparent) 1px, transparent 1px),
+    color-mix(in oklch, var(--bg-lift) 88%, black);
+  background-size: 42px 42px, 42px 42px, auto;
+  border: 1px solid color-mix(in oklch, var(--text) 8%, transparent);
+}
+
+.axis-line {
+  position: absolute;
+  background: color-mix(in oklch, var(--accent) 28%, transparent);
+  opacity: 0.35;
+}
+
+.axis-line--x {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+}
+
+.axis-line--y {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+}
+
+.graph-wires {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1220px;
+  height: 720px;
+}
+
+.wire-shadow {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 7;
+  stroke-linecap: round;
+}
+
+.wire {
+  fill: none;
+  stroke: color-mix(in oklch, var(--line) 78%, var(--text));
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.wire-label {
+  fill: color-mix(in oklch, var(--text) 72%, var(--muted));
+  font-size: 11px;
+}
+
+.graph-node {
+  position: absolute;
+  width: 248px;
+  padding: 0.86rem;
+  display: grid;
+  gap: 0.5rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in oklch, white 22%, transparent);
+  color: oklch(0.18 0.018 148);
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.28);
+}
+
+.graph-node.driver { background: color-mix(in oklch, var(--driver) 88%, white); }
+.graph-node.enabler { background: color-mix(in oklch, var(--enabler) 88%, white); }
+.graph-node.risk { background: color-mix(in oklch, var(--risk) 86%, white); }
+.graph-node.outcome { background: color-mix(in oklch, var(--outcome) 88%, white); }
+
+.node-head,
+.source-meter {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.node-kind,
+.eyebrow {
   margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.72rem;
   color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.node-kind {
+  color: color-mix(in oklch, black 58%, transparent);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
 }
 
 h1,
 h2,
 h3 {
-  margin: 0;
   font-family: "Sora", sans-serif;
   font-weight: 600;
 }
 
-h1 { font-size: 1.35rem; }
+h1 { font-size: 1.34rem; }
 h2 { font-size: 1.1rem; }
-h3 { font-size: 1rem; }
+h3 { font-size: 0.98rem; }
 
-.topbar-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-}
-
-.pill {
-  border-radius: 999px;
-  padding: 0.35rem 0.7rem;
-  border: 1px solid color-mix(in oklch, var(--surface) 12%, transparent);
-  background: color-mix(in oklch, var(--panel-strong) 70%, black);
-  color: var(--surface);
-  font-size: 0.82rem;
-}
-
-.pill--state {
-  background: color-mix(in oklch, var(--enabler) 18%, var(--panel-strong));
-}
-
-.workspace {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 330px;
-  gap: 1rem;
-  min-height: calc(100vh - 7rem);
-}
-
-.rail,
-.graph-stage {
-  padding: 1rem;
-}
-
-.rail {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.question,
-.verdict,
-.stage-note,
-.node-summary,
-.source-item p,
-.json-seed {
-  margin: 0;
+p {
   line-height: 1.55;
-  color: color-mix(in oklch, var(--text) 88%, var(--muted));
+  color: color-mix(in oklch, var(--text) 84%, var(--muted));
 }
 
-.section-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding-top: 0.9rem;
-  border-top: 1px solid color-mix(in oklch, var(--surface) 10%, transparent);
+.graph-node p {
+  color: color-mix(in oklch, black 76%, transparent);
 }
 
-ol {
-  margin: 0;
-  padding-left: 1.2rem;
+.focus-docket {
+  left: 1rem;
+  bottom: 6.1rem;
+  width: min(360px, calc(100% - 2rem));
+  padding: 0.9rem 1rem;
+}
+
+.focus-docket ol {
+  margin: 0.7rem 0 0;
+  padding-left: 1.15rem;
   display: grid;
-  gap: 0.75rem;
+  gap: 0.62rem;
 }
 
-.graph-stage {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.stage-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: end;
-}
-
-.graph-board {
-  position: relative;
-  min-height: 560px;
-  border-radius: 8px;
-  overflow: hidden;
-  background:
-    linear-gradient(color-mix(in oklch, var(--surface) 6%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in oklch, var(--surface) 6%, transparent) 1px, transparent 1px),
-    color-mix(in oklch, var(--panel-strong) 88%, black);
-  background-size: 32px 32px, 32px 32px, auto;
-}
-
-.graph-wires {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.wire {
-  fill: none;
-  stroke: color-mix(in oklch, var(--line) 70%, var(--surface));
-  stroke-width: 2.5;
-  stroke-linecap: round;
-}
-
-.wire-label {
-  fill: color-mix(in oklch, var(--surface) 80%, var(--muted));
-  font-size: 11px;
-  font-family: "Familjen Grotesk", sans-serif;
-}
-
-.graph-node {
-  position: absolute;
-  width: 220px;
+.source-pulse {
+  right: 1rem;
+  top: 5.5rem;
+  width: min(340px, calc(100% - 2rem));
   padding: 0.9rem;
-  border-radius: 8px;
-  border: 1px solid color-mix(in oklch, var(--surface) 10%, transparent);
-  color: oklch(0.22 0.02 85);
-  box-shadow: 0 18px 32px color-mix(in oklch, black 35%, transparent);
+  display: grid;
+  gap: 0.65rem;
 }
 
-.graph-node.driver { background: color-mix(in oklch, var(--driver) 88%, white); }
-.graph-node.enabler { background: color-mix(in oklch, var(--enabler) 88%, white); }
-.graph-node.risk { background: color-mix(in oklch, var(--risk) 88%, white); }
-.graph-node.outcome { background: color-mix(in oklch, var(--outcome) 88%, white); }
+.source-meter {
+  padding: 0.72rem;
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--panel-hard) 72%, black);
+}
 
-.node-meta {
-  margin-top: 0.8rem;
+.source-meter p {
   font-size: 0.82rem;
-  color: color-mix(in oklch, black 45%, transparent);
+  margin-top: 0.22rem;
 }
 
-.source-list {
-  list-style: none;
-  display: grid;
-  gap: 0.75rem;
-  padding: 0;
-  margin: 0;
+.status-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--muted);
 }
 
-.source-item {
+.status-dot--verified { background: oklch(0.74 0.12 150); }
+.status-dot--cached { background: oklch(0.75 0.08 205); }
+.status-dot--rate_limited { background: var(--danger); }
+
+.command-deck {
+  left: 1rem;
+  right: 1rem;
+  bottom: 1rem;
   display: flex;
   justify-content: space-between;
-  gap: 0.75rem;
-  align-items: start;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.86rem 1rem;
 }
 
-.status {
-  border-radius: 999px;
-  padding: 0.2rem 0.55rem;
-  font-size: 0.76rem;
-  border: 1px solid color-mix(in oklch, var(--surface) 12%, transparent);
+.verdict {
+  display: grid;
+  gap: 0.25rem;
 }
 
-.status.verified { background: color-mix(in oklch, var(--enabler) 25%, var(--panel-strong)); }
-.status.cached { background: color-mix(in oklch, var(--outcome) 24%, var(--panel-strong)); }
-.status.rate_limited { background: color-mix(in oklch, var(--risk) 28%, var(--panel-strong)); }
+.seed-drawer {
+  right: 1rem;
+  bottom: 6.1rem;
+  width: min(420px, calc(100% - 2rem));
+  padding: 0.8rem 0.9rem;
+}
 
-.json-seed {
-  max-height: 260px;
+.seed-drawer summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.seed-drawer pre {
+  max-height: 220px;
   overflow: auto;
-  padding: 0.9rem;
-  background: color-mix(in oklch, black 18%, var(--panel-strong));
+  margin: 0.7rem 0 0;
+  padding: 0.75rem;
   border-radius: 8px;
-  font-size: 0.8rem;
+  background: color-mix(in oklch, black 24%, var(--panel-hard));
+  color: color-mix(in oklch, var(--text) 88%, var(--muted));
+  font-size: 0.78rem;
 }
 
-@media (max-width: 1200px) {
-  .workspace { grid-template-columns: 1fr; }
-  .graph-board { min-height: 720px; }
+@media (max-width: 1080px) {
+  .hud--top,
+  .command-deck {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .graph-field {
+    overflow: visible;
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .hud,
+  .question-band,
+  .focus-docket,
+  .source-pulse,
+  .command-deck,
+  .seed-drawer,
+  .graph-viewport {
+    position: relative;
+    inset: auto;
+    width: auto;
+  }
+
+  .graph-viewport {
+    min-height: 980px;
+  }
 }
 "#
 }
@@ -472,10 +581,11 @@ mod tests {
     }
 
     #[test]
-    fn rendered_page_contains_primary_sections() {
+    fn rendered_page_contains_graph_first_sections() {
         let page = render_page(&sample_run()).into_string();
-        assert!(page.contains("Knowledge graph review desk"));
-        assert!(page.contains("Graph-first run review"));
-        assert!(page.contains("Source ledger"));
+        assert!(page.contains("Knowledge graph operating field"));
+        assert!(page.contains("graph-viewport"));
+        assert!(page.contains("Focus queue"));
+        assert!(page.contains("Source pulse"));
     }
 }

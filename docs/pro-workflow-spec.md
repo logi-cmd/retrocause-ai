@@ -120,13 +120,13 @@ The Pro promise should be reliability under limits, not unlimited usage. A paid 
 
 ## Commercial Key And Quota Strategy
 
-Commercial Pro must not route all users through one shared OpenRouter key and one shared Tavily key. That creates a single global bottleneck: one heavy user can exhaust quota for everyone, provider 429s become site-wide failures, and costs cannot be attributed cleanly.
+Commercial Pro must not route all users through one shared model-provider key and one shared search-provider key. That creates a single global bottleneck: one heavy user can exhaust quota for everyone, provider 429s become site-wide failures, and costs cannot be attributed cleanly. OpenRouter is deprecated for RetroCause and should not be treated as the default Pro control plane.
 
 The correct strategy is not blind key rotation. Multiple provider keys or accounts can help with redundancy and tenant separation, but every call still needs quota, queueing, caching, rate-limit, and audit controls. Do not build a hidden "spray requests across keys" layer.
 
 Recommended ownership model:
 
-- OSS Local: user-supplied provider/search keys or demo mode. RetroCause stores no hosted quota promise.
+- OSS Local: keyless local/demo analysis. RetroCause stores no hosted quota promise and does not expose credential fields.
 - Solo Pro: RetroCause-managed provider/search quota, with per-user daily/monthly run limits, source-call limits, LLM-token limits, concurrency limits, and visible usage ledger.
 - Team/Business: support BYOK first, plus optional managed quota. Each workspace should have independent budget, concurrency, usage ledger, and audit trail.
 - Enterprise later, only if justified: dedicated tenant provider accounts or customer-owned provider accounts, not a shared consumer key pool.
@@ -135,7 +135,7 @@ Provider routing requirements:
 
 - Keep a provider account pool, but select accounts by tenant, model, source, remaining budget, health, retry-after, and error rate.
 - Respect upstream retry-after and cooldown states; do not immediately retry the same source or model through another key unless policy explicitly allows it.
-- Treat OpenRouter and search providers separately. LLM limits, search RPM, storage terms, and cache permissions are different control planes.
+- Treat model providers and search providers separately. LLM limits, search RPM, storage terms, and cache permissions are different control planes.
 - Use cheaper/stable default models for normal Pro runs and reserve expensive or slower models for higher tiers, explicit deep checks, or BYOK users.
 - Record every provider/search call in a usage ledger with quota owner: `retrocause_managed`, `workspace_managed`, `user_byok`, `local_demo`, or `uploaded_evidence`.
 
@@ -156,11 +156,11 @@ Minimum Pro infrastructure before accepting broad paid usage:
 - source-result cache with provider-term-aware retention
 - audit log for provider calls, retries, fallback, and partial-live decisions
 
-This is a hard boundary for the future Rust rewrite. The current Python/Next alpha may keep local key fields and local inspectability metadata, but it should not grow into a commercial hosted key-pool service.
+This is a hard boundary for the future Rust rewrite. The current Python/Next alpha keeps local inspectability metadata only; it should not grow into a commercial hosted key-pool service.
 
 This also defines the OSS/Pro boundary:
 
-- OSS: local inspectable runs, explicit source trace, optional user-supplied keys, bounded adapters, and Markdown export.
+- OSS: local inspectable runs, explicit source trace, bounded built-in adapters, and Markdown export.
 - Pro: hosted run records, usage ledger, queue, cache reuse, saved runs, exports, uploaded evidence, scheduled watch topics, lightweight team review, source-policy controls, managed quota, BYOK, tenant-aware provider routing, and provider/source audit logs.
 - Not near-term: private enterprise deployment, hidden scraping, account rotation, or promises that bypass provider terms.
 

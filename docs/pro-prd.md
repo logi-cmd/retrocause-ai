@@ -67,7 +67,7 @@ The user creates a run from a saved watch topic, pasted query, or uploaded evide
 1. Pro routes the run through the right source policy.
 2. The run enters a queued or active state.
 3. The graph canvas fills with the current best explanation, evidence, and challenge coverage.
-4. The side rails show run state, source health, evidence pack, and next review actions.
+4. Supporting detail appears through docks, overlays, and focused drill-down surfaces rather than a fixed inherited OSS layout.
 5. The user exports or shares the run after review.
 
 ### Deliverable definition
@@ -87,7 +87,7 @@ A successful Pro run produces:
 
 - Hosted run records with run status and step history
 - Knowledge-graph workspace as the default run view
-- Evidence and source-health side rails
+- Evidence and source-health review surfaces
 - Saved runs and compare-ready structure
 - Uploaded evidence library
 - Export-ready report schema
@@ -102,11 +102,11 @@ A successful Pro run produces:
 
 ## UX shape
 
-### Primary layout
+### Primary layout principle
 
-- Center: knowledge graph canvas
-- Left: operator summary, run status, next actions
-- Right: evidence pack, source-health ledger, challenge coverage
+- The graph owns the screen.
+- Everything else is subordinate to graph review and can appear as floating docks, overlay cards, bottom trays, or collapsible inspectors.
+- Pro should not be locked to the OSS evidence-board composition.
 
 ### Critical states
 

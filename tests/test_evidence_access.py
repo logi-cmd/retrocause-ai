@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from retrocause.evidence_access import (
     EvidenceAccessLayer,
     EvidenceAccessPolicy,
@@ -16,6 +18,8 @@ from datetime import date
 
 from retrocause.models import EvidenceType
 from retrocause.sources.base import BaseSourceAdapter, SearchResult
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class _Source(BaseSourceAdapter):
@@ -310,16 +314,16 @@ def test_access_layer_records_source_errors_and_continues_to_next_adapter():
 def test_access_layer_classifies_rate_limited_sources():
     reset_evidence_access_state()
     access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
-    limited = _Source("tavily", [], fail=_HttpError(429, {"retry-after": "7"}))
-    healthy = _Source("web", [_result("healthy item", "fulltext", "https://example.com/h")])
+    limited = _Source("web", [], fail=_HttpError(429, {"retry-after": "7"}))
+    healthy = _Source("ap_news", [_result("healthy item", "fulltext", "https://example.com/h")])
 
     batch = access.search("latest market shock", [limited, healthy], max_results=1)
 
-    assert batch.errors == {"tavily": "rate_limited"}
+    assert batch.errors == {"web": "rate_limited"}
     assert batch.attempts[0].status == "rate_limited"
     assert batch.attempts[0].retry_after_seconds == 7
-    assert batch.attempts[0].source_label == "Tavily Search"
-    assert batch.attempts[0].source_kind == "hosted_ai_search"
+    assert batch.attempts[0].source_label == "Trusted web search"
+    assert batch.attempts[0].source_kind == "web_search"
     assert batch.attempts[1].status == "ok"
     assert [result.title for result in batch.results] == ["healthy item"]
 
@@ -327,15 +331,15 @@ def test_access_layer_classifies_rate_limited_sources():
 def test_access_layer_classifies_forbidden_sources():
     reset_evidence_access_state()
     access = EvidenceAccessLayer(EvidenceAccessPolicy(query_cache_ttl=60))
-    forbidden = _Source("brave", [], fail=_HttpError(403))
+    forbidden = _Source("gdelt", [], fail=_HttpError(403))
 
     batch = access.search("policy shock", [forbidden], max_results=1)
 
-    assert batch.errors == {"brave": "forbidden"}
+    assert batch.errors == {"gdelt": "forbidden"}
     assert batch.attempts[0].status == "forbidden"
     assert batch.attempts[0].retry_after_seconds is None
-    assert batch.attempts[0].source_label == "Brave Search API"
-    assert batch.attempts[0].cache_policy == "transient_results_only"
+    assert batch.attempts[0].source_label == "GDELT Global Knowledge Graph"
+    assert batch.attempts[0].cache_policy == "short_lived_cache_allowed"
 
 
 def test_access_layer_cools_down_recently_failed_sources():
@@ -438,7 +442,7 @@ def test_result_time_matching_allows_hosted_search_for_today_when_undated():
         content="Hosted search returned a same-day market result without explicit published date.",
         url="https://example.com/stock",
         source_type=EvidenceType.NEWS,
-        metadata={"provider": "tavily", "content_quality": "fulltext"},
+        metadata={"content_quality": "fulltext", "cache_policy": "derived_cache_allowed"},
     )
 
     assert result_matches_time_range(hosted, "today", today=date(2026, 4, 21))
@@ -467,11 +471,15 @@ def test_source_broker_routes_chinese_intraday_stock_queries_to_web_first():
     assert broker_source_names(None, plan)[:3] == ["web", "gdelt", "ap_news"]
 
 
-def test_source_broker_keeps_chinese_intraday_hosted_path_short_when_available():
+def test_source_broker_keeps_chinese_intraday_path_keyless():
     query = "芯原股份今日午后股价为什么直线跳水？"
     plan = plan_query(query)
 
-    assert broker_source_names(None, plan, optional_sources=["tavily"]) == ["tavily", "web"]
+    assert broker_source_names(None, plan, optional_sources=["hosted_search"])[:3] == [
+        "web",
+        "gdelt",
+        "ap_news",
+    ]
 
 
 def test_source_broker_routes_outage_postmortems_to_live_web_sources():
@@ -479,8 +487,7 @@ def test_source_broker_routes_outage_postmortems_to_live_web_sources():
 
     assert plan.domain == "postmortem"
     assert plan.scenario == "postmortem"
-    assert broker_source_names(None, plan, optional_sources=["tavily"])[:4] == [
-        "tavily",
+    assert broker_source_names(None, plan, optional_sources=["hosted_search"])[:3] == [
         "web",
         "ap_news",
         "gdelt",
@@ -515,183 +522,50 @@ def test_source_descriptions_explain_reliability_for_ui_trace():
 
 
 def test_source_profiles_expose_budget_and_storage_policy():
-    tavily = source_profile("tavily")
-    brave = source_profile("brave")
     ap = describe_source_name("ap_news")
+    unknown_hosted = source_profile("hosted_search")
 
-    assert tavily.requires_api_key
-    assert tavily.cache_policy == "derived_cache_allowed"
-    assert tavily.default_rpm > 0
-    assert tavily.default_monthly_budget > 0
-    assert brave.requires_api_key
-    assert brave.cache_policy == "transient_results_only"
     assert ap["cache_policy"] == "short_lived_cache_allowed"
+    assert unknown_hosted.requires_credential is False
+    assert unknown_hosted.cache_policy == "no_cache_policy"
 
 
-def test_broker_source_names_can_include_optional_hosted_sources_when_enabled():
+def test_broker_source_names_keeps_hosted_sources_out_of_keyless_oss():
     market_plan = plan_query("Why did Bitcoin price fall today?")
     policy_plan = plan_query("Why did the US announce new semiconductor export controls?")
     override_plan = plan_query("Why did dinosaurs go extinct?")
 
-    assert broker_source_names(None, market_plan, optional_sources=["tavily", "brave"])[:5] == [
-        "tavily",
-        "brave",
+    assert broker_source_names(None, market_plan, optional_sources=["hosted_search"])[:3] == [
         "ap_news",
         "gdelt",
         "web",
     ]
-    assert broker_source_names(None, policy_plan, optional_sources=["tavily"])[:5] == [
+    assert broker_source_names(None, policy_plan, optional_sources=["hosted_search"])[:4] == [
         "ap_news",
         "federal_register",
-        "tavily",
         "gdelt",
         "web",
     ]
-    assert broker_source_names("web,arxiv", override_plan, optional_sources=["tavily"]) == [
+    assert broker_source_names("web,arxiv", override_plan, optional_sources=["hosted_search"]) == [
         "web",
         "arxiv",
     ]
 
 
-def test_optional_tavily_adapter_requires_api_key(monkeypatch):
+def test_oss_available_source_factories_are_keyless(monkeypatch):
     from retrocause.app.demo_data import (
         _available_source_classes_from_env,
         _available_source_factories,
-        _optional_hosted_source_names,
-        _optional_hosted_source_names_from_env,
     )
 
-    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    factories = _available_source_factories()
+    classes = _available_source_classes_from_env()
+    assert "hosted_search" not in factories
+    assert "hosted_search" not in classes
 
-    assert "tavily" not in _optional_hosted_source_names_from_env()
-    assert "tavily" not in _available_source_classes_from_env()
-    assert "tavily" in _optional_hosted_source_names(tavily_api_key="tvly-test")
-    assert "tavily" in _available_source_factories(tavily_api_key="tvly-test")
-
-    monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
-
-    assert "tavily" in _optional_hosted_source_names_from_env()
-    assert "tavily" in _available_source_classes_from_env()
-
-
-def test_optional_brave_adapter_requires_api_key(monkeypatch):
-    from retrocause.app.demo_data import (
-        _available_source_classes_from_env,
-        _available_source_factories,
-        _optional_hosted_source_names,
-        _optional_hosted_source_names_from_env,
-    )
-
-    monkeypatch.delenv("BRAVE_SEARCH_API_KEY", raising=False)
-
-    assert "brave" not in _optional_hosted_source_names_from_env()
-    assert "brave" not in _available_source_classes_from_env()
-    assert "brave" in _optional_hosted_source_names(brave_search_api_key="brave-test")
-    assert "brave" in _available_source_factories(brave_search_api_key="brave-test")
-
-    monkeypatch.setenv("BRAVE_SEARCH_API_KEY", "brave-test")
-
-    assert "brave" in _optional_hosted_source_names_from_env()
-    assert "brave" in _available_source_classes_from_env()
-
-
-def test_tavily_adapter_maps_results_to_search_result(monkeypatch):
-    from retrocause.sources.tavily import TavilySourceAdapter
-
-    calls: list[dict] = []
-
-    class _TavilyResponse:
-        def raise_for_status(self) -> None:
-            return None
-
-        def json(self) -> dict:
-            return {
-                "results": [
-                    {
-                        "title": "US and Iran talks end without agreement",
-                        "url": "https://example.com/us-iran-talks",
-                        "content": "Talks ended after disagreement over sanctions sequencing.",
-                        "raw_content": "Full article text about sanctions sequencing.",
-                        "score": 0.87,
-                        "published_date": "2026-04-15",
-                    }
-                ],
-                "request_id": "req-123",
-            }
-
-    def fake_post(url: str, **kwargs) -> _TavilyResponse:
-        calls.append({"url": url, **kwargs})
-        return _TavilyResponse()
-
-    monkeypatch.setattr("retrocause.sources.tavily.httpx.post", fake_post)
-
-    results = TavilySourceAdapter("tvly-test").search("US Iran talks", max_results=1)
-
-    assert calls[0]["url"] == "https://api.tavily.com/search"
-    assert calls[0]["headers"]["Authorization"] == "Bearer tvly-test"
-    assert calls[0]["json"]["query"] == "US Iran talks"
-    assert calls[0]["json"]["max_results"] == 1
-    assert calls[0]["json"]["include_raw_content"] == "text"
-
-    assert len(results) == 1
-    item = results[0]
-    assert item.title == "US and Iran talks end without agreement"
-    assert item.url == "https://example.com/us-iran-talks"
-    assert item.content == "Talks ended after disagreement over sanctions sequencing."
-    assert item.source_type == EvidenceType.NEWS
-    assert item.metadata["provider"] == "tavily"
-    assert item.metadata["score"] == 0.87
-    assert item.metadata["published"] == "2026-04-15"
-    assert item.metadata["page_content"] == "Full article text about sanctions sequencing."
-    assert item.metadata["content_quality"] == "fulltext"
-    assert item.metadata["cache_policy"] == "derived_cache_allowed"
-
-
-def test_brave_adapter_marks_transient_cache_policy(monkeypatch):
-    from retrocause.sources.brave import BraveSearchSourceAdapter
-
-    calls: list[dict] = []
-
-    class _BraveResponse:
-        def raise_for_status(self) -> None:
-            return None
-
-        def json(self) -> dict:
-            return {
-                "web": {
-                    "results": [
-                        {
-                            "title": "US and Iran talks end without agreement",
-                            "url": "https://example.com/us-iran-talks",
-                            "description": "Talks ended after disagreement over sanctions sequencing.",
-                            "age": "2026-04-15T12:00:00Z",
-                        }
-                    ]
-                }
-            }
-
-    def fake_get(url: str, **kwargs) -> _BraveResponse:
-        calls.append({"url": url, **kwargs})
-        return _BraveResponse()
-
-    monkeypatch.setattr("retrocause.sources.brave.httpx.get", fake_get)
-
-    results = BraveSearchSourceAdapter("brave-test").search("US Iran talks", max_results=1)
-
-    assert calls[0]["url"] == "https://api.search.brave.com/res/v1/web/search"
-    assert calls[0]["headers"]["X-Subscription-Token"] == "brave-test"
-    assert calls[0]["params"]["q"] == "US Iran talks"
-    assert calls[0]["params"]["count"] == 1
-
-    assert len(results) == 1
-    item = results[0]
-    assert item.title == "US and Iran talks end without agreement"
-    assert item.url == "https://example.com/us-iran-talks"
-    assert item.content == "Talks ended after disagreement over sanctions sequencing."
-    assert item.source_type == EvidenceType.NEWS
-    assert item.metadata["provider"] == "brave"
-    assert item.metadata["source_domain"] == "example.com"
-    assert item.metadata["published"] == "2026-04-15"
-    assert item.metadata["content_quality"] == "snippet"
-    assert item.metadata["cache_policy"] == "transient_results_only"
-    assert "page_content" not in item.metadata
+    assert "tavily.py" not in {
+        path.name for path in (REPO_ROOT / "retrocause" / "sources").glob("*.py")
+    }
+    assert "brave.py" not in {
+        path.name for path in (REPO_ROOT / "retrocause" / "sources").glob("*.py")
+    }

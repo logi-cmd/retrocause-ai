@@ -73,7 +73,7 @@ class SourceProfile:
     cache_policy: str
     default_monthly_budget: int
     default_rpm: int
-    requires_api_key: bool
+    requires_credential: bool
 
 
 @dataclass(frozen=True)
@@ -121,7 +121,7 @@ SOURCE_PROFILES: dict[str, SourceProfile] = {
         cache_policy="short_lived_cache_allowed",
         default_monthly_budget=5000,
         default_rpm=30,
-        requires_api_key=False,
+        requires_credential=False,
     ),
     "gdelt": SourceProfile(
         name="gdelt",
@@ -131,7 +131,7 @@ SOURCE_PROFILES: dict[str, SourceProfile] = {
         cache_policy="short_lived_cache_allowed",
         default_monthly_budget=10000,
         default_rpm=60,
-        requires_api_key=False,
+        requires_credential=False,
     ),
     "gdelt_news": SourceProfile(
         name="gdelt_news",
@@ -141,7 +141,7 @@ SOURCE_PROFILES: dict[str, SourceProfile] = {
         cache_policy="short_lived_cache_allowed",
         default_monthly_budget=10000,
         default_rpm=60,
-        requires_api_key=False,
+        requires_credential=False,
     ),
     "web": SourceProfile(
         name="web",
@@ -151,7 +151,7 @@ SOURCE_PROFILES: dict[str, SourceProfile] = {
         cache_policy="short_lived_cache_allowed",
         default_monthly_budget=3000,
         default_rpm=20,
-        requires_api_key=False,
+        requires_credential=False,
     ),
     "federal_register": SourceProfile(
         name="federal_register",
@@ -161,7 +161,7 @@ SOURCE_PROFILES: dict[str, SourceProfile] = {
         cache_policy="long_lived_cache_allowed",
         default_monthly_budget=5000,
         default_rpm=60,
-        requires_api_key=False,
+        requires_credential=False,
     ),
     "arxiv": SourceProfile(
         name="arxiv",
@@ -171,7 +171,7 @@ SOURCE_PROFILES: dict[str, SourceProfile] = {
         cache_policy="long_lived_cache_allowed",
         default_monthly_budget=5000,
         default_rpm=30,
-        requires_api_key=False,
+        requires_credential=False,
     ),
     "semantic_scholar": SourceProfile(
         name="semantic_scholar",
@@ -181,27 +181,7 @@ SOURCE_PROFILES: dict[str, SourceProfile] = {
         cache_policy="short_lived_cache_allowed",
         default_monthly_budget=5000,
         default_rpm=30,
-        requires_api_key=False,
-    ),
-    "tavily": SourceProfile(
-        name="tavily",
-        source_label="Tavily Search",
-        source_kind="hosted_ai_search",
-        stability="medium",
-        cache_policy="derived_cache_allowed",
-        default_monthly_budget=1000,
-        default_rpm=30,
-        requires_api_key=True,
-    ),
-    "brave": SourceProfile(
-        name="brave",
-        source_label="Brave Search API",
-        source_kind="hosted_web_search",
-        stability="medium",
-        cache_policy="transient_results_only",
-        default_monthly_budget=1000,
-        default_rpm=30,
-        requires_api_key=True,
+        requires_credential=False,
     ),
 }
 
@@ -220,7 +200,7 @@ def source_profile(source_name: str) -> SourceProfile:
             cache_policy="no_cache_policy",
             default_monthly_budget=0,
             default_rpm=0,
-            requires_api_key=False,
+            requires_credential=False,
         ),
     )
 
@@ -298,9 +278,8 @@ def _target_date_for_range(time_range: str | None, today: date | None = None) ->
 
 def _is_hosted_search_result(result: SearchResult) -> bool:
     metadata = result.metadata or {}
-    provider = str(metadata.get("provider", "")).lower()
     cache_policy = str(metadata.get("cache_policy", "")).lower()
-    return provider in {"tavily", "brave"} or cache_policy in {
+    return cache_policy in {
         "derived_cache_allowed",
         "transient_results_only",
     }
@@ -456,7 +435,13 @@ def broker_source_names(
     if configured_sources:
         return [item.strip() for item in configured_sources.split(",") if item.strip()]
 
-    optional = [item.strip().lower() for item in optional_sources or [] if item.strip()]
+    optional = [
+        item.strip().lower()
+        for item in optional_sources or []
+        if item.strip()
+        and item.strip().lower() in SOURCE_PROFILES
+        and not SOURCE_PROFILES[item.strip().lower()].requires_credential
+    ]
     if plan.scenario == "policy":
         return _prepend_unique(["gdelt", "web"], ["ap_news", "federal_register", *optional])
     if plan.scenario == "postmortem":

@@ -25,8 +25,8 @@ Excluded ignored runtime/vendor data such as `.venv/`, `.retrocause/`, `.tmp/`, 
 | Endpoint | Handler | Documentation status |
 | --- | --- | --- |
 | `GET /` | `root` | Documented indirectly as backend health |
-| `GET /api/providers` | `list_providers` | Partly documented through provider setup |
-| `POST /api/providers/preflight` | `preflight_provider` | Documented in README API usage |
+| `GET /api/providers` | `list_providers` | Active catalog is keyless and excludes OpenRouter |
+| `POST /api/providers/preflight` | `preflight_provider` | Compatibility endpoint returns the keyless OSS boundary |
 | `POST /api/analyze` | `analyze_query` | Legacy compatibility endpoint, not emphasized in README |
 | `POST /api/analyze/v2` | `analyze_query_v2` | Documented in README API usage |
 | `POST /api/analyze/v2/stream` | `analyze_query_v2_stream` | Mentioned in project history, not shown in README examples |
@@ -44,8 +44,8 @@ Finding: `/api/analyze/v2/stream` and legacy `/api/analyze` are real surfaces bu
 | Streamlit demo | `pyproject.toml` optional group `demo`, `retrocause/app/entry.py`, `retrocause/app/panels/` | Mentioned in CONTRIBUTING/manual smoke, not positioned in README |
 | Optional Bayesian/vector extras | `pyproject.toml` optional groups `bayesian` and `vector` | Not prominent in README; probably fine because they are not primary OSS workflow |
 | Browser UI local run workflow | `frontend/src/app/page.tsx`, `/api/runs`, `/api/evidence/upload` | Documented in README and project state |
-| SourceBroker optional adapters | `retrocause/sources/tavily.py`, `retrocause/sources/brave.py`, env keys | Documented in README and retrieval strategy |
-| Live provider/search stability probe | `scripts/live_stability_probe.py` | Documented in README development notes and docs index |
+| Hosted search adapters | Removed from active OSS source code | Future Pro may reintroduce managed hosted search behind quota, queue, and audit controls |
+| Local stability probe | `scripts/live_stability_probe.py` | Documented in docs index |
 
 Decision after this audit: the browser evidence board started by `python start.py` is the supported first-run path. The CLI is a secondary local smoke-check/scripting surface, and the Streamlit app is a legacy/development demo path. README now labels both accordingly.
 
@@ -53,7 +53,7 @@ Decision after this audit: the browser evidence board started by `python start.p
 
 1. CLI fallback behavior
 
-   `retrocause/cli.py` returns a topic-matched demo fallback when no model key is configured. README now lists the CLI as a secondary entry point for local smoke checks and scripting, not the primary OSS product surface.
+   `retrocause/cli.py` returns a topic-matched local/demo result. README keeps the browser app as the primary OSS product surface.
 
 2. Streamlit path still exists
 
@@ -181,7 +181,7 @@ Recommendation: introduce shared test fixtures only after the next refactor targ
 ## Test Harness Notes
 
 - `scripts/e2e_test.py` is the canonical browser dogfood script for the local OSS app. It autostarts backend/frontend services when needed.
-- `scripts/live_stability_probe.py` is the repeatable real-key provider/search probe. It runs in-process through the FastAPI app with `TestClient`, defaults to OfoxAI, supports `RETROCAUSE_LIVE_PROVIDER=openrouter` for the older OpenRouter path, supports `RETROCAUSE_LIVE_MODELS` for explicit retests, and writes a secret-free JSON report under `.agent-guardrails/evidence/`.
+- `scripts/live_stability_probe.py` is the repeatable keyless OSS stability probe. It runs in-process through the FastAPI app with `TestClient` and writes a secret-free JSON report under `.agent-guardrails/evidence/`.
 - Root `npm test` pins pytest temporary files under ignored `.tmp-tests/pytest` so Windows user-Temp or stale `.pytest-tmp` ACL issues do not break normal verification.
 - On Windows, the cleanup path must terminate the process tree, not only the `npm.cmd` parent, or `next start` can keep serving stale `.next` chunks after a later build.
 - The Playwright page load checks intentionally wait for DOM content plus product elements instead of `networkidle`; the homepage can issue background requests while still being ready for user interaction.

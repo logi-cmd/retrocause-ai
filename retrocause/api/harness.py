@@ -229,7 +229,7 @@ def build_product_harness_payload(response: object) -> dict[str, Any]:
         status = "blocked_by_model"
         summary = "The run did not produce a causal answer; the useful output is the failure diagnosis."
         next_actions.append(preflight_user_action(classify_preflight_failure_code(error_msg)))
-        next_actions.append("Run provider preflight before starting another full analysis.")
+        next_actions.append("Use the keyless OSS path, or run hosted provider checks in Pro.")
     elif score >= 0.75 and chains and evidences and has_anchored_evidence and has_source_trace:
         status = "ready_for_review"
         summary = "The result has enough structure for a user to review reasons, sources, and gaps."

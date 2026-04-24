@@ -9,8 +9,7 @@ from dataclasses import dataclass
 class RetroCauseConfig:
     """全局配置，不可变"""
 
-    llm_model: str = "gpt-4o-mini"
-    llm_api_key: str | None = None
+    llm_model: str = "openai/gpt-5.4-mini"
     max_sub_queries: int = 4
     max_results_per_source: int = 3
     debate_max_rounds: int = 1
@@ -31,8 +30,7 @@ class RetroCauseConfig:
         import os
 
         return cls(
-            llm_api_key=os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENROUTER_API_KEY"),
-            llm_model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+            llm_model=os.environ.get("OPENAI_MODEL", "openai/gpt-5.4-mini"),
             max_sub_queries=int(os.environ.get("RETROCAUSE_MAX_SUB_QUERIES", "4")),
             max_results_per_source=int(os.environ.get("RETROCAUSE_MAX_RESULTS_PER_SOURCE", "3")),
             debate_max_rounds=int(os.environ.get("RETROCAUSE_DEBATE_MAX_ROUNDS", "0")),

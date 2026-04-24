@@ -2,356 +2,134 @@
 
 ## Goal
 
-Quickly verify that the OSS demo is runnable, understandable, and does not mislead users about demo vs real analysis.
+Verify that the OSS browser/API path is runnable, keyless, understandable, and
+honest about local/demo output.
 
 ## Environment
 
 - Python 3.10+
 - Node.js / npm available
 - Dependencies installed
-- Optional: model API key if you want to compare real analysis vs demo mode
+- No model or search provider key is required for the OSS smoke path
 
 ## Launch
 
 ```bash
 pip install -e ".[dev]"
-cd frontend && npm install && cd ..
+npm install
+npm --prefix frontend install
 python start.py
 ```
 
 Expected:
 
-- frontend reachable at `http://localhost:3005`
+- frontend reachable at `http://127.0.0.1:3005`
 - backend reachable at `http://127.0.0.1:8000`
+- homepage renders without asking for model/search credentials
 
-If port `3005` is already occupied, stop the existing Next.js dev server first.
-
----
-
-## Scenario 1 — Initial load
+## Scenario 1 - Initial Load
 
 1. Open the frontend homepage.
-2. Confirm the page renders with the white evidence-board UI.
-3. Confirm left / center / right three-panel layout is visible.
-4. Confirm no obvious dark-terminal leftovers remain in the active view.
+2. Confirm the evidence board renders.
+3. Confirm the query panel, graph board, source trace, saved runs, and uploaded
+   evidence areas remain usable.
+4. Open OSS analysis settings.
 
 Expected:
 
-- white / paper-like visual system
-- header + status bar visible
-- hypothesis list visible
-- chain / graph area visible
-- right-side detail area visible
-- query area reads as an investigation brief, with provider/API-key controls collapsed under advanced settings
-- provider settings show OpenRouter as the fixed OSS provider rather than a multi-provider dropdown
-- command bar shows coverage/source health chips when live or partial-live evidence is available
-- left and right panels can be hidden from subtle embedded controls and restored from low-emphasis edge tabs
-- the center view hint avoids the old "drag canvas" wording, stays away from the bottom drag area, and does not block dragging evidence notes
-- canvas zoom controls are visible near the top of the board, can zoom in/out, and can reset to 100%
-- dragging a single sticky note downward leaves only a compact bottom safety area, so the lower canvas remains usable without clipping the note
+- no provider key field is visible
+- no search key field is visible
+- no OpenRouter provider appears in the active catalog
+- settings describe the keyless OSS boundary
 
----
+## Scenario 2 - Keyless Query Flow
 
-## Scenario 2 — Demo mode transparency
-
-1. Submit a query without configuring a real model backend.
-2. Inspect the top informational banner.
+1. Submit `Why did SVB collapse?`.
+2. Submit `Why did the 2008 financial crisis happen?`.
+3. Submit `芯原股份今天盘中为什么下跌？` through the Chinese A-share sample.
 
 Expected:
 
-- banner says current result is in demo mode
-- banner shows the user query text
-- UI does **not** imply the returned chain is a real analyzed result for that exact question
+- each request completes without a frontend crash
+- each result is explicitly local/demo or keyless OSS analysis
+- graph cards, source trace, challenge coverage, and copyable Markdown remain
+  available
+- Chinese text is not visibly corrupted in the query or primary result labels
 
----
+## Scenario 3 - Provider Compatibility Endpoints
 
-## Scenario 3 — Query flow
-
-Try queries such as:
-
-- `Why did SVB collapse?`
-- `Why did the 2008 financial crisis happen?`
-- `为什么某股票暴跌？`
-
-Expected:
-
-- request completes without frontend crash
-- hypothesis list updates or remains usable
-- chain view remains interactive
-- right panel remains coherent
-- expanding and collapsing provider settings does not clear the query
-- submit button remains visually disabled while the query is empty or a run is loading
-
----
-
-## Scenario 3.5 — Browser UI local real-analysis path
-
-1. Open the homepage left panel.
-2. Enter a supported provider mode.
-3. Paste a valid API key.
-4. Open provider settings and run model preflight.
-5. Submit a query.
-
-Expected:
-
-- request body includes `query`, `model`, and `api_key`
-- homepage does not claim hosted/SaaS-grade credential handling
-- provider preflight explains whether the key/model can return JSON before a full run
-- invalid model IDs, missing keys, auth/quota failures, timeouts, or empty JSON are surfaced as concrete next actions
-- if the backend succeeds, the board is labeled as live analysis
-- after completion, the status panel can show source trace rows with source name, query text, hit count, cache marker, or source error/cooldown
-- if the backend fails, the board returns explicit `partial_live` failure detail or falls back to explicitly labeled demo data
-- the left panel shows a value harness card that says whether the result is reviewable, needs more evidence, or is blocked by provider/model setup
-
----
-
-## Scenario 3.5c - Golden value check for US/Iran talks
-
-1. Run provider preflight with the selected live model.
-2. Submit: `美国和伊朗在伊斯兰堡谈判结束 未达成协议的原因是什么`.
-3. Inspect the analysis brief, source trace, challenge coverage, and value harness card.
-
-Expected:
-
-- model/provider problems are caught before a full run or returned as `blocked_by_model`
-- if analysis succeeds, the result includes causal reasons, not only evidence rows
-- each top reason is tied to evidence, source trace, or a missing-evidence note
-- challenge coverage shows checked edges and refuting/context result counts
-- the value harness is at least `needs_more_evidence`; it should be `ready_for_review` only when chains, summary, source trace, evidence stance, and challenge coverage are present
-- Chinese/English toggling keeps the evidence and harness state visible
-
----
-
-Observed 2026-04-13 result with OpenRouter DeepSeek V3:
-
-- provider preflight passed for `deepseek/deepseek-chat-v3-0324`
-- `/api/analyze/v2` returned `analysis_mode=live`, `freshness_status=fresh`, and `is_demo=false`
-- API response included 7 chains, 19 evidence items, 7 retrieval trace rows, 3 challenge checks, an analysis brief, and `product_harness.status=ready_for_review`
-- browser UI showed Live coverage 100%, 12 source rows, challenge coverage with 5 refuting items across 3 checked edges, and no console errors
-- screenshot: `docs/images/golden-us-iran-live-ui.png`
-- PowerShell API tests must send UTF-8 JSON bytes, not the default string body, otherwise Chinese queries may arrive at FastAPI as `????????`
-- Chinese localization should not replace the `ear` substring inside words such as `nuclear`; this was fixed by bounding the EAR abbreviation replacement to whole words
-
----
-
-## Scenario 3.5b - Back-to-back live query isolation
-
-1. Submit a live query about one topic, for example Iran talks.
-2. Immediately submit a different live query, for example `美国为什么会推出新的半导体出口管制？`.
-3. Watch the status strip and evidence board while the second run is in flight.
-
-Expected:
-
-- the board switches to the second query immediately instead of keeping the old completed board as if it were current
-- stale SSE events from the first request do not overwrite the second request
-- the final result query and evidence topic match the second request
-- the evidence list does not reuse thin CJK overlap from an unrelated prior query
-
----
-
-## Scenario 3.6 — Streamlit demo honesty
-
-1. Launch `streamlit run retrocause/app/entry.py` without an API key.
-2. Observe the initial screen.
-3. Run a query without entering a key.
-
-Expected:
-
-- Streamlit shows a persistent demo warning banner
-- the result is clearly presented as demo/example output
-- the demo can be topic-aware rather than always defaulting to the dinosaur example
-- the app does not silently imply the result is real analysis
-
----
-
-## Scenario 4 — Multi-hop tracing
-
-1. Click a node in the main chain.
-2. Confirm the node becomes selected.
-3. Check the right panel for upstream causes.
-4. Click one upstream cause in the right panel.
-
-Expected:
-
-- selected path is visually highlighted
-- right panel updates for the clicked node
-- upstream causes can be traversed step-by-step
-- switching chain B and then chain A updates the active chain state without console border shorthand warnings
-
----
-
-## Scenario 5 — View switching
-
-Switch across all available views:
-
-- Chain view
-- Causal graph view
-- Debate view
-- Table view
-
-Expected:
-
-- no rendering error
-- all views follow the evidence-board design language
-- no old black-terminal theme remains in these views
-
----
-
-## Scenario 6 — Evidence readability
-
-1. Select a node with incoming evidence.
-2. Inspect the evidence section in the right panel.
-
-Expected:
-
-- evidence is grouped clearly
-- reliability distinctions are visible
-- weights / labels are readable
-
----
-
-## Scenario 7 — Fallback resilience
-
-1. Stop or break backend availability.
-2. Reload frontend and submit a query.
-
-Expected:
-
-- frontend does not hard crash
-- connection state reflects failure
-- app falls back to usable demo data or safe state
-
----
-
-## Command Checks
-
-Run these before release:
+Run:
 
 ```bash
-python -m pytest tests/ -v
-ruff check retrocause/
-cd frontend && npm run build
+curl http://127.0.0.1:8000/api/providers
 ```
 
 Expected:
 
-- pytest passing
-- ruff passing
-- Next.js build passing
+- response is HTTP 200
+- response contains the active keyless provider catalog
+- response does not contain `openrouter`
 
----
+Run:
 
-## Known environment caveats
+```bash
+curl -X POST http://127.0.0.1:8000/api/providers/preflight ^
+  -H "Content-Type: application/json" ^
+  -d "{\"model\":\"ofoxai\"}"
+```
 
-- On Windows consoles, direct Python stdout may display UTF-8 Chinese text as garbled if the console encoding is GBK. This does **not** necessarily mean the FastAPI JSON response is wrong.
-- On Windows PowerShell, direct `Invoke-RestMethod` string bodies can corrupt Chinese JSON unless the body is sent as UTF-8 bytes with `application/json; charset=utf-8`.
-- Browser automation may fail if Chrome/Playwright browser binaries are not installed locally.
+Expected:
 
----
+- response is HTTP 200
+- response status is `disabled`
+- response explains that provider preflight is disabled in OSS
 
-## Recent real-analysis validation
+## Scenario 4 - Local Workflow Features
 
-Local validation on 2026-04-12 used OpenRouter DeepSeek with the query:
+1. Run an analysis.
+2. Reopen the saved-runs panel.
+3. Upload a short pasted evidence note.
+4. Reopen the saved run.
 
-- `为什么美国会同意与伊朗进行首轮谈判？`
+Expected:
 
-Observed result:
+- run id, run steps, and usage ledger are visible
+- saved runs remain local
+- pasted evidence is labeled as user-provided local evidence
+- no hosted storage, team sharing, or credential handling is implied
 
-- `analysis_mode=live`
-- `freshness_status=mixed`
-- 15 v2 evidence items
-- 5 v2 chains
-- 6 variables
-- 6 edges
-- evidence methods included `llm_fulltext_trusted` and `store_cache`
-- GDELT failed during the run, but the product still returned a live evidence chain instead of demo fallback
+## Scenario 5 - Narrow Viewport
 
-Manual expectation for this scenario:
+1. Resize the browser to a narrow viewport.
+2. Toggle side panels.
+3. Pan or inspect the board.
 
-- geopolitics/news questions should route through scenario-fit sources instead of academic-first sources
-- the UI should show a streaming retrieval trace while the pipeline is running
-- evidence coverage should not collapse to only one or two causal evidence items when another bounded scenario-fit adapter is available
-- broad-source failures should degrade through other bounded sources instead of silently becoming demo fallback
+Expected:
 
-Latest local validation on 2026-04-12 also used OpenRouter DeepSeek with the query:
+- panel controls remain visible
+- text stays inside its containers
+- graph paths do not produce `NaN` SVG values
+- no console error appears for duplicate React keys
 
-- `美国为什么会推出新的半导体出口管制？`
+## Automated Commands
 
-Observed result:
+Run before release work:
 
-- `analysis_mode=live`
-- `freshness_status=mixed`
-- 16 v2 evidence items
-- 2 v2 chains
-- 7 unique nodes
-- 7 unique edges
-- evidence methods included `llm_fulltext_trusted` and `store_cache`
-- evidence sources included both `NEWS` and official `ARCHIVE`
-- Federal Register official documents supplied trusted full-text policy evidence
-- no stale Iran-topic evidence appeared in the result
+```bash
+npm test
+python scripts/live_stability_probe.py
+```
 
-Manual expectation for this scenario:
+Expected:
 
-- Chinese policy questions should keep event-specific retrieval anchors such as `semiconductor` and `export controls`
-- generic rewrites like `United States why reasons diplomacy foreign policy` should be rejected
-- public-news source weakness should be offset by bounded official-source retrieval when the query is regulatory/policy-shaped
-- extracted evidence should be attributed to its best matching source result, not blindly to the first result in a merged batch
+- `npm test` passes
+- the stability probe writes `.agent-guardrails/evidence/local-stability-probe.json`
+- the probe report contains no secret fields
 
-Latest clean browser validation on 2026-04-12 used Playwright against a freshly started FastAPI backend and Next.js frontend with the same query:
+## Environment Caveats
 
-- `美国为什么会推出新的半导体出口管制？`
-
-Observed browser result:
-
-- `/api/analyze/v2/stream` returned a non-demo live result
-- 8 causal graph cards were rendered by default
-- 7 chain buttons were available for comparison
-- switching between Chinese and English preserved all 8 graph cards instead of resetting to demo/default state
-- clicking a graph card and clicking hypothesis-chain controls produced no console errors or page errors
-- chain-compare controls must support B -> A switching with the selected chain reflected by `aria-pressed`, and must not mix React inline border shorthand with side-specific border properties
-- locale persistence must be applied after hydration, so stored English/Chinese preference does not create a React hydration mismatch on first render
-
-Regression command:
-
-- set `RETROCAUSE_OPENROUTER_KEY`
-- start backend on `127.0.0.1:8000`
-- start frontend on `localhost:3005`
-- run `npx -y -p playwright node scripts/_qa_frontend_live.js`
-
-Quality expectation for this scenario:
-
-- live/news/policy graph construction should not accept a collapsed 3-4 node graph when the evidence supports a broader causal DAG
-- if the first LLM graph is too narrow, the graph builder may spend one extra model call to retry for broader evidence-supported coverage
-- the default board should prefer the evidence-wide causal map when the DAG is broader than any single root-to-outcome path
-
-Latest clean browser validation on 2026-04-12 also covered a time-sensitive crypto/finance query:
-
-- `比特币今日价格为何跳水`
-
-For relative market/news queries such as `昨天比特币价格跳水`, confirm that retrieval traces include concrete date context, dated evidence outside the inferred calendar window is not used to build the graph, and undated results only survive when their title, URL, snippet, or fetched page text contains the target date.
-
-Observed browser result:
-
-- `/api/analyze/v2/stream` returned a non-demo live result
-- 8 causal graph cards were rendered by default
-- 7 chain buttons were available for comparison
-- Chinese-mode graph cards passed the localization check instead of rendering mostly English variable labels
-- switching between Chinese and English preserved all 8 graph cards
-- clicking a graph card and clicking hypothesis-chain controls produced no console errors or page errors
-
-Regression command:
-
-- set `RETROCAUSE_OPENROUTER_KEY`
-- set `RETROCAUSE_QA_SCENARIO=bitcoin`
-- set `RETROCAUSE_QA_MIN_CARDS=6`
-- set `RETROCAUSE_QA_EXPECTED_PATTERN=比特币|Bitcoin|BTC|加密货币`
-- start backend on `127.0.0.1:8000`
-- start frontend on `localhost:3005`
-- run `npx -y -p playwright node scripts/_qa_frontend_live.js`
-
-Quality expectation for this scenario:
-
-- Chinese crypto market-move questions should parse as `finance`, not `general`
-- retrieval queries should preserve `Bitcoin`, `BTC`, `price`, and selloff/drop anchors
-- finance/crypto graphs should use the same low-coverage retry gate as live news/policy questions
-- Chinese UI cards should not expose mostly English market/policy variable labels
+- On Windows consoles, direct stdout may display UTF-8 Chinese text incorrectly
+  even when FastAPI JSON is valid.
+- On Windows PowerShell, send Chinese JSON as UTF-8 bytes if calling the API
+  directly.
+- Browser automation may need Playwright/Chromium installed locally.

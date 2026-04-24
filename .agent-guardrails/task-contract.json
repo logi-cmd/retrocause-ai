@@ -1,14 +1,21 @@
 {
   "schemaVersion": 3,
-  "task": "Kick off RetroCause Pro as a separate Rust full-stack rewrite with product/design docs, a Rust workspace skeleton, and an initial knowledge-graph web shell.",
+  "task": "Remove all user-facing and tracked OSS key/OpenRouter surfaces, make OSS browser/API keyless, update docs/tests/scripts accordingly, and redesign the Pro Rust web shell so the only retained frontend requirement is a knowledge-graph-first experience rather than the previous evidence-board layout. This branch also includes the existing Pro Rust kickoff workspace files from the current HEAD comparison window.",
   "preset": "generic",
-  "createdAt": "2026-04-23T17:35:50.935Z",
+  "createdAt": "2026-04-24T03:34:03.105Z",
   "allowedPaths": [
     ".gitignore",
-    ".impeccable.md",
+    "README.md",
+    "STATE.md",
+    ".env.example",
     "docs/",
+    "frontend/",
+    "retrocause/",
+    "tests/",
+    "scripts/",
+    ".impeccable.md",
     "pro/",
-    ".agent-guardrails/evidence/"
+    ".agent-guardrails/"
   ],
   "requiredCommands": [
     "cargo test --manifest-path pro/Cargo.toml"
@@ -18,39 +25,75 @@
   ],
   "intendedFiles": [
     ".gitignore",
-    ".impeccable.md",
+    "README.md",
+    "STATE.md",
+    ".env.example",
+    "docs/PROJECT_STATE.md",
     "docs/INDEX.md",
+    "docs/codebase-audit.md",
+    "docs/oss-release-gate.md",
+    "docs/retrieval-and-output-strategy.md",
+    "docs/roadmap-and-limitations.md",
+    "docs/manual-smoke-test.md",
     "docs/pro-prd.md",
     "docs/pro-rust-architecture.md",
+    "docs/pro-workflow-spec.md",
+    ".impeccable.md",
+    "frontend/src/app/page.tsx",
+    "frontend/src/lib/i18n/en.ts",
+    "frontend/src/lib/i18n/zh.ts",
+    "retrocause/api/schemas.py",
+    "retrocause/api/main.py",
+    "retrocause/api/provider_routes.py",
+    "retrocause/api/provider_preflight.py",
+    "retrocause/api/harness.py",
+    "retrocause/api/live_failure_response.py",
+    "retrocause/api/run_finalization.py",
+    "retrocause/api/run_metadata.py",
+    "retrocause/app/demo_data.py",
+    "retrocause/app/entry.py",
+    "retrocause/app/panels/sidebar_query.py",
+    "retrocause/app/__init__.py",
+    "retrocause/config.py",
+    "retrocause/llm.py",
+    "retrocause/cli.py",
+    "retrocause/evidence_access.py",
+    "retrocause/sources/tavily.py",
+    "retrocause/sources/brave.py",
+    "tests/test_comprehensive.py",
+    "tests/test_evidence_access.py",
+    "tests/test_live_stability_probe.py",
+    "scripts/e2e_test.py",
+    "scripts/live_stability_probe.py",
     "pro/Cargo.toml",
     "pro/Cargo.lock",
-    "pro/crates/domain/Cargo.toml",
-    "pro/crates/domain/src/lib.rs",
     "pro/apps/api/Cargo.toml",
     "pro/apps/api/src/main.rs",
     "pro/apps/web/Cargo.toml",
     "pro/apps/web/src/main.rs",
+    "pro/crates/domain/Cargo.toml",
+    "pro/crates/domain/src/lib.rs",
     ".agent-guardrails/evidence/current-task.md"
   ],
   "protectedPaths": [],
   "allowedChangeTypes": [],
-  "riskLevel": "medium",
+  "riskLevel": "high",
   "requiresReviewNotes": false,
   "validationProfile": "standard",
   "securityRequirements": [
-    "Mention auth, secrets, permissions, and sensitive-data handling explicitly."
+    "明确说明认证、密钥、权限以及敏感数据处理相关影响。"
   ],
   "dependencyRequirements": [
-    "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
+    "明确说明新增或升级的依赖、lockfile 变化以及依赖影响。"
   ],
   "performanceRequirements": [
     "Mention performance, latency, or load impact in evidence."
   ],
   "understandingRequirements": [
-    "Explain the main tradeoffs so future maintainers can follow the change."
+    "解释主要权衡点，方便后续维护者快速理解这次改动。"
   ],
   "continuityRequirements": [
-    "Mention reuse targets and any deliberate continuity break in evidence."
+    "说明复用目标，以及任何刻意打破现有连续性的地方。"
   ],
   "acknowledgedSkips": [],
   "patternSummary": "",
@@ -80,10 +123,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "2e31b79b-002f-403b-9eed-b1fdac965ba8",
-    "createdAt": "2026-04-23T17:35:50.929Z",
+    "sessionId": "893aede7-eff9-48fb-b8c7-7befe7df2fe6",
+    "createdAt": "2026-04-24T03:34:03.103Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Kick off RetroCause Pro as a separate Rust full-stack rewrite with product/design docs, a Rust workspace skeleton, and an initial knowledge-graph web shell.",
+    "taskRequest": "Remove all user-facing and tracked OSS key/OpenRouter surfaces, make OSS browser/API keyless, update docs/tests/scripts accordingly, and redesign the Pro Rust web shell so the only retained frontend requirement is a knowledge-graph-first experience rather than the previous evidence-board layout. This branch also includes the existing Pro Rust kickoff workspace files from the current HEAD comparison window.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],
@@ -100,35 +143,36 @@
     "evidencePathSuggested": ".agent-guardrails/evidence/current-task.md",
     "riskDimensions": {
       "securityRequirements": [
-        "Mention auth, secrets, permissions, and sensitive-data handling explicitly."
+        "明确说明认证、密钥、权限以及敏感数据处理相关影响。"
       ],
       "dependencyRequirements": [
-        "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
+        "明确说明新增或升级的依赖、lockfile 变化以及依赖影响。"
       ],
       "performanceRequirements": [
         "Mention performance, latency, or load impact in evidence."
       ],
       "understandingRequirements": [
-        "Explain the main tradeoffs so future maintainers can follow the change."
+        "解释主要权衡点，方便后续维护者快速理解这次改动。"
       ],
       "continuityRequirements": [
-        "Mention reuse targets and any deliberate continuity break in evidence."
+        "说明复用目标，以及任何刻意打破现有连续性的地方。"
       ]
     },
     "finishCheckHints": [
-      "Report the commands you actually ran: cargo test --manifest-path pro/Cargo.toml",
-      "Keep the evidence note current: .agent-guardrails/evidence/current-task.md",
-      "Keep security, dependency, performance, understanding, and continuity concerns explicit in the evidence note and review summary.",
-      "Finish with agent-guardrails check --review before handing off or merging."
+      "记录你实际执行过的命令：cargo test --manifest-path pro/Cargo.toml",
+      "保持证据说明为最新：.agent-guardrails/evidence/current-task.md",
+      "在证据说明和 review 摘要里明确写出这些风险维度：安全、依赖、性能、可理解性、连续性。",
+      "交付或合并前，用 `agent-guardrails check --review` 做最后检查。"
     ],
     "riskSignals": [],
     "archaeologyNotes": [],
     "nextActions": [
-      "Implement the smallest change that fits the contract.",
-      "Run required commands: cargo test --manifest-path pro/Cargo.toml",
-      "Update evidence: .agent-guardrails/evidence/current-task.md",
-      "Keep security, dependency, performance, understanding, continuity concerns explicit in the evidence note and review summary.",
-      "Run agent-guardrails check --review before completing the task."
+      "先完成符合契约的最小改动。",
+      "运行要求的命令：cargo test --manifest-path pro/Cargo.toml",
+      "更新证据文件：.agent-guardrails/evidence/current-task.md",
+      "结束前补充面向 review 的说明。",
+      "在证据说明和 review 摘要里明确写出这些风险维度：安全、依赖、性能、可理解性、连续性。",
+      "完成任务前运行 `agent-guardrails check --review`。"
     ],
     "roughIntent": null
   }

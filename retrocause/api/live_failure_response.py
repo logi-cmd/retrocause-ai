@@ -40,7 +40,7 @@ def build_empty_live_failure_response(
         )
     else:
         recommended_actions = [preflight_user_action(failure_code)]
-    recommended_actions.append("Run provider preflight before retrying the full analysis.")
+    recommended_actions.append("Use the keyless OSS path, or run hosted provider checks in Pro.")
     deduped_actions: list[str] = []
     for action in recommended_actions:
         if action and action not in deduped_actions:

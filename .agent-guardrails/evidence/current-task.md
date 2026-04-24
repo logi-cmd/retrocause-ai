@@ -276,3 +276,89 @@ After pushing the current OSS stabilization branch, Pro work was started on a se
 - Performance: no runtime logic changed. The only performance-relevant result is that the full local verification gate remains executable from a fresh copy on Windows.
 - Understanding: the docs now distinguish three states clearly: stable-deliverable local alpha, not-yet-stable `v0.1.0`, and not-a-hosted-service.
 - Continuity: reused the existing README, project-state, and guardrails evidence pattern instead of adding a new release-status document.
+
+## 2026-04-24 Keyless OSS Boundary And Pro Graph Redesign
+
+This task responds to the product boundary correction that OSS should not expose user/provider keys and that OpenRouter is deprecated for RetroCause. It also refreshes the Pro Rust web shell so the only carried-forward frontend requirement is a knowledge-graph-first workspace, not the earlier OSS evidence-board/rail layout.
+
+### Files Updated
+
+- `README.md`
+- `.env.example`
+- `.impeccable.md`
+- `STATE.md`
+- `docs/INDEX.md`
+- `docs/PROJECT_STATE.md`
+- `docs/codebase-audit.md`
+- `docs/manual-smoke-test.md`
+- `docs/oss-release-gate.md`
+- `docs/pro-prd.md`
+- `docs/pro-rust-architecture.md`
+- `docs/pro-workflow-spec.md`
+- `docs/retrieval-and-output-strategy.md`
+- `frontend/src/app/page.tsx`
+- `frontend/src/lib/i18n/en.ts`
+- `frontend/src/lib/i18n/zh.ts`
+- `pro/apps/web/src/main.rs`
+- `retrocause/api/*` keyless response/finalization/preflight helpers
+- `retrocause/app/demo_data.py`
+- `retrocause/evidence_access.py`
+- `retrocause/config.py`
+- `retrocause/llm.py`
+- `retrocause/sources/tavily.py` removed
+- `retrocause/sources/brave.py` removed
+- `scripts/live_stability_probe.py`
+- `scripts/e2e_test.py`
+- `tests/test_comprehensive.py`
+- `tests/test_evidence_access.py`
+- `tests/test_live_stability_probe.py`
+
+### What Changed
+
+- Removed active OpenRouter support from the OSS provider catalog and docs.
+- Removed OSS browser/API request fields for model keys and hosted-search keys.
+- Changed `/api/analyze`, `/api/analyze/v2`, and `/api/analyze/v2/stream` to return the keyless local/demo analysis path instead of trying hosted model execution.
+- Kept provider/source preflight endpoints only as compatibility surfaces: provider preflight now reports `oss_keyless`, and source preflight reports the built-in keyless source path.
+- Removed tracked Tavily and Brave source-adapter files from the active OSS source tree and removed environment-key registration from the OSS source factory.
+- Updated README, project state, release gate, manual smoke notes, and retrieval strategy so they describe the keyless OSS boundary and point hosted model/search execution to the future Rust Pro line.
+- Reworked the Pro Rust web shell into a full-screen graph-field command room with overlay/dock surfaces around the graph rather than left/right rails inherited from the OSS page.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: task contract refreshed to include OSS docs/runtime/tests/scripts plus the Pro Rust web shell.
+
+- `python -m pytest tests\test_evidence_access.py -q --basetemp=.tmp-tests\pytest-evidence`
+  - Result: `27 passed`.
+
+- `python -m pytest tests\test_comprehensive.py tests\test_live_stability_probe.py -q --basetemp=.tmp-tests\pytest-keyless`
+  - Result: `138 passed`.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - Coverage includes Pro API health, domain seed integrity, graph-wire path rendering, and Pro web graph-first section rendering.
+
+- `npm test`
+  - Result: passed.
+  - Included frontend lint/build, `python -m ruff check retrocause/`, full pytest, and browser E2E.
+  - Pytest result: `321 collected`, all passed.
+  - E2E result: `609 passed`, `1 skipped`, `0 failed`.
+
+- Pro web smoke
+  - Started with `cargo run --manifest-path pro/apps/web/Cargo.toml`.
+  - Result: `GET http://127.0.0.1:3007/` returned HTTP `200`.
+  - The returned HTML contained `Causal graph command room` and `Knowledge graph operating field`.
+
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test" --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with concerns, `50/100`, no blocking errors.
+  - Non-blocking warnings were expected for this correction because it intentionally updates the OSS public boundary, API schemas/routes, docs, tests, `.env.example`, scripts, and the Pro graph shell in one branch-level handoff.
+  - The sensitive-file warning is for `.env.example`, which now removes provider secret placeholders rather than adding them.
+
+### Risk / Tradeoff Notes
+
+- Security: the active OSS browser/API no longer accepts user model/search keys, `.env.example` no longer advertises provider secrets, OpenRouter is not in the active catalog, and Tavily/Brave key-reading adapters were removed from the active source tree. The low-level `LLMClient` still has a non-OSS integration constructor parameter because the project uses the OpenAI SDK internally, but it is no longer wired to the OSS browser/API surface or environment-key fallback.
+- Dependencies: no new Python, Node, or Rust dependencies were added. Removing hosted-search adapter files reduces the active OSS source surface.
+- Performance: keyless OSS requests now avoid hosted model/search calls from the browser/API path, making local analysis deterministic and less latency-sensitive. The Pro web redesign remains server-rendered HTML from the existing Rust stack.
+- Understanding: the main deliberate tradeoff is product clarity over live-provider flexibility. OSS is now the local inspectable alpha; hosted credentials, quotas, live search, and provider recovery belong in Pro.
+- Continuity: saved runs, uploaded evidence, source traces, challenge coverage, and the evidence board stay in OSS. The intentional continuity break is the Pro frontend: it keeps the knowledge graph as the core, but does not inherit the OSS evidence-board layout.
+- Remaining risk: old historical decision logs and archived implementation plans may still mention prior provider experiments. Current README/project-state/manual-smoke/runtime paths have been synchronized to the keyless boundary.

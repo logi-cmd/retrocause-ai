@@ -1062,28 +1062,6 @@ PROVIDERS: dict[str, dict] = {
             "openai/gpt-5.4": {"label": "GPT-5.4\uff08OfoxAI\uff09", "json_mode": True},
         },
     },
-    "openrouter": {
-        "label": "OpenRouter（多模型中转）",
-        "base_url": "https://openrouter.ai/api/v1",
-        "models": {
-            "deepseek/deepseek-chat": {
-                "label": "DeepSeek Chat（OpenRouter，可用性需预检）",
-                "json_mode": True,
-            },
-            "openai/gpt-4o-mini": {"label": "GPT-4o Mini", "json_mode": True},
-            "google/gemini-2.5-flash": {"label": "Gemini 2.5 Flash", "json_mode": True},
-            "anthropic/claude-sonnet-4": {"label": "Claude Sonnet 4", "json_mode": True},
-            "anthropic/claude-haiku-4.5": {"label": "Claude Haiku 4.5（快速）", "json_mode": True},
-            "openai/gpt-4.1-mini": {"label": "GPT-4.1 Mini", "json_mode": True},
-            "openai/gpt-4.1": {"label": "GPT-4.1", "json_mode": True},
-            "meta-llama/llama-4-maverick": {"label": "Llama 4 Maverick", "json_mode": True},
-            "mistralai/mistral-small-3.1-24b-instruct": {
-                "label": "Mistral Small 3.1",
-                "json_mode": True,
-            },
-            "moonshotai/kimi-k2": {"label": "Kimi K2", "json_mode": True},
-        },
-    },
     "openai": {
         "label": "OpenAI（直连）",
         "base_url": None,
@@ -1155,7 +1133,6 @@ PROVIDERS: dict[str, dict] = {
     },
 }
 
-
 def _select_source_names(configured_sources: str | None, domain: str) -> list[str]:
     from retrocause.evidence_access import QueryPlan, broker_source_names
 
@@ -1172,28 +1149,7 @@ def _select_source_names(configured_sources: str | None, domain: str) -> list[st
     return broker_source_names(configured_sources, plan)
 
 
-def _optional_hosted_source_names(
-    tavily_api_key: str | None = None,
-    brave_search_api_key: str | None = None,
-) -> list[str]:
-    import os
-
-    optional_sources: list[str] = []
-    if (tavily_api_key or os.environ.get("TAVILY_API_KEY", "")).strip():
-        optional_sources.append("tavily")
-    if (brave_search_api_key or os.environ.get("BRAVE_SEARCH_API_KEY", "")).strip():
-        optional_sources.append("brave")
-    return optional_sources
-
-
-def _optional_hosted_source_names_from_env() -> list[str]:
-    return _optional_hosted_source_names()
-
-
-def _available_source_factories(
-    tavily_api_key: str | None = None,
-    brave_search_api_key: str | None = None,
-) -> dict[str, Callable[[], object]]:
+def _available_source_factories() -> dict[str, Callable[[], object]]:
     from retrocause.sources.ap_news import APNewsAdapter as _AP
     from retrocause.sources.arxiv import ArxivSourceAdapter as _Arxiv
     from retrocause.sources.federal_register import FederalRegisterAdapter as _FederalRegister
@@ -1209,14 +1165,6 @@ def _available_source_factories(
         "web": _Web,
         "gdelt": _Gdelt,
     }
-    if "tavily" in _optional_hosted_source_names(tavily_api_key, None):
-        from retrocause.sources.tavily import TavilySourceAdapter as _Tavily
-
-        available_sources["tavily"] = lambda: _Tavily(tavily_api_key)
-    if "brave" in _optional_hosted_source_names(None, brave_search_api_key):
-        from retrocause.sources.brave import BraveSearchSourceAdapter as _Brave
-
-        available_sources["brave"] = lambda: _Brave(brave_search_api_key)
     return available_sources
 
 
@@ -1236,105 +1184,4 @@ def _available_source_classes_from_env() -> dict[str, type]:
         "web": _Web,
         "gdelt": _Gdelt,
     }
-    if "tavily" in _optional_hosted_source_names_from_env():
-        from retrocause.sources.tavily import TavilySourceAdapter as _Tavily
-
-        available_sources["tavily"] = _Tavily
-    if "brave" in _optional_hosted_source_names_from_env():
-        from retrocause.sources.brave import BraveSearchSourceAdapter as _Brave
-
-        available_sources["brave"] = _Brave
     return available_sources
-
-
-def run_real_analysis(
-    query: str,
-    api_key: str,
-    model: str,
-    base_url: str | None,
-    tavily_api_key: str | None = None,
-    brave_search_api_key: str | None = None,
-) -> AnalysisResult | None:
-    import os
-
-    from retrocause.config import RetroCauseConfig as _Config
-    from retrocause.engine import analyze as _analyze
-    from retrocause.llm import LLMClient as _LLMClient
-    from retrocause.parser import parse_input as _parse_input
-    from retrocause.sources.arxiv import ArxivSourceAdapter as _Arxiv
-    from retrocause.sources.semantic_scholar import SemanticScholarAdapter as _SS
-    from retrocause.sources.web import WebSearchAdapter as _Web
-
-    available_sources = _available_source_factories(tavily_api_key, brave_search_api_key)
-    parsed = _parse_input(query)
-    from retrocause.evidence_access import broker_source_names, plan_query as _plan_query
-
-    requested_sources = broker_source_names(
-        os.environ.get("RETROCAUSE_ENABLED_SOURCES"),
-        _plan_query(query, parsed),
-        optional_sources=_optional_hosted_source_names(tavily_api_key, brave_search_api_key),
-    )
-
-    cfg = _Config.from_env()
-    llm = _LLMClient(
-        api_key=api_key, model=model, base_url=base_url, timeout=cfg.request_timeout_seconds
-    )
-    ok, preflight_error = llm.preflight_model_access()
-    if not ok:
-        raise RuntimeError(preflight_error or "Model preflight failed.")
-    sources = [
-        available_sources[name]()
-        for name in requested_sources
-        if name in available_sources
-    ] or [_Arxiv(), _SS(), _Web()]
-    return _analyze(query, llm_client=llm, source_adapters=sources, config=cfg)
-
-
-def run_real_analysis_with_progress(
-    query: str,
-    api_key: str,
-    model: str,
-    base_url: str | None,
-    on_progress: object,
-    tavily_api_key: str | None = None,
-    brave_search_api_key: str | None = None,
-) -> AnalysisResult | None:
-    import os
-
-    from retrocause.config import RetroCauseConfig as _Config
-    from retrocause.engine import analyze as _analyze
-    from retrocause.llm import LLMClient as _LLMClient
-    from retrocause.parser import parse_input as _parse_input
-    from retrocause.sources.arxiv import ArxivSourceAdapter as _Arxiv
-    from retrocause.sources.semantic_scholar import SemanticScholarAdapter as _SS
-    from retrocause.sources.web import WebSearchAdapter as _Web
-
-    available_sources = _available_source_factories(tavily_api_key, brave_search_api_key)
-    parsed = _parse_input(query)
-    from retrocause.evidence_access import broker_source_names, plan_query as _plan_query
-
-    requested_sources = broker_source_names(
-        os.environ.get("RETROCAUSE_ENABLED_SOURCES"),
-        _plan_query(query, parsed),
-        optional_sources=_optional_hosted_source_names(tavily_api_key, brave_search_api_key),
-    )
-
-    cfg = _Config.from_env()
-    llm = _LLMClient(
-        api_key=api_key, model=model, base_url=base_url, timeout=cfg.request_timeout_seconds
-    )
-    ok, preflight_error = llm.preflight_model_access()
-    if not ok:
-        raise RuntimeError(preflight_error or "Model preflight failed.")
-    sources = [
-        available_sources[name]()
-        for name in requested_sources
-        if name in available_sources
-    ] or [_Arxiv(), _SS(), _Web()]
-    return _analyze(
-        query,
-        llm_client=llm,
-        source_adapters=sources,
-        config=cfg,
-        on_progress=on_progress,
-    )

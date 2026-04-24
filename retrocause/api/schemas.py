@@ -8,16 +8,12 @@ from pydantic import BaseModel
 class AnalyzeRequest(BaseModel):
     query: str
     model: str = "ofoxai"
-    api_key: Optional[str] = None
-    tavily_api_key: Optional[str] = None
-    brave_search_api_key: Optional[str] = None
     explicit_model: Optional[str] = None
     scenario_override: Optional[str] = None
 
 
 class ProviderPreflightRequest(BaseModel):
     model: str = "ofoxai"
-    api_key: Optional[str] = None
     explicit_model: Optional[str] = None
 
 
@@ -85,8 +81,6 @@ class ProviderPreflightResponse(BaseModel):
 
 
 class SourcePreflightRequest(BaseModel):
-    tavily_api_key: Optional[str] = None
-    brave_search_api_key: Optional[str] = None
     query: str = "RetroCause source preflight latest market news"
 
 

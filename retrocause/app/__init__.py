@@ -1,4 +1,4 @@
-from retrocause.app.demo_data import DEMO_EVIDENCES, PROVIDERS, demo_result, run_real_analysis  # noqa: F401
+from retrocause.app.demo_data import DEMO_EVIDENCES, PROVIDERS, demo_result  # noqa: F401
 from retrocause.app.entry import main  # noqa: F401
 from retrocause.app.helpers import (  # noqa: F401
     _get_evidences,
@@ -20,7 +20,6 @@ __all__ = [
     "PROVIDERS",
     "main",
     "demo_result",
-    "run_real_analysis",
     "render_sidebar_query",
     "render_sidebar_evidence",
     "render_graph_panel",
