@@ -1,10 +1,10 @@
 {
   "schemaVersion": 3,
-  "task": "Add the next Pro product-core slice for provider/search quota ownership: define shared Rust domain types for provider/search quota ownership and source cooldown state, expose a local keyless Pro API status endpoint, surface the status in the graph-first Pro web shell, and synchronize Pro docs/evidence. Do not add credentials, live provider calls, billing, or hosted execution.",
+  "task": "Add the next Pro graph interaction slice: make graph nodes selectable in the Rust web shell, show the selected node in a graph inspector with confidence, evidence links, and challenge links, keep state browser-local only, and synchronize Pro docs/evidence. Do not add persistence, provider calls, or OSS runtime changes.",
   "preset": "generic",
-  "createdAt": "2026-04-24T10:16:56.070Z",
+  "createdAt": "2026-04-24T10:25:33.971Z",
   "allowedPaths": [
-    "pro/",
+    "pro/apps/web/src/main.rs",
     "docs/PROJECT_STATE.md",
     "docs/pro-rust-architecture.md",
     ".agent-guardrails/"
@@ -18,7 +18,7 @@
   "intendedFiles": [],
   "protectedPaths": [],
   "allowedChangeTypes": [],
-  "riskLevel": "high",
+  "riskLevel": "medium",
   "requiresReviewNotes": false,
   "validationProfile": "standard",
   "securityRequirements": [
@@ -64,10 +64,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "6f7ea7a4-8d7d-40f6-b567-3bf4f772f93c",
-    "createdAt": "2026-04-24T10:16:56.070Z",
+    "sessionId": "0695b35d-0f5f-433d-8ff9-fb19aa8c9599",
+    "createdAt": "2026-04-24T10:25:33.971Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add the next Pro product-core slice for provider/search quota ownership: define shared Rust domain types for provider/search quota ownership and source cooldown state, expose a local keyless Pro API status endpoint, surface the status in the graph-first Pro web shell, and synchronize Pro docs/evidence. Do not add credentials, live provider calls, billing, or hosted execution.",
+    "taskRequest": "Add the next Pro graph interaction slice: make graph nodes selectable in the Rust web shell, show the selected node in a graph inspector with confidence, evidence links, and challenge links, keep state browser-local only, and synchronize Pro docs/evidence. Do not add persistence, provider calls, or OSS runtime changes.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],
@@ -111,7 +111,6 @@
       "Implement the smallest change that fits the contract.",
       "Run required commands: cargo test --manifest-path pro/Cargo.toml",
       "Update evidence: .agent-guardrails/evidence/current-task.md",
-      "Capture review-oriented notes before finishing.",
       "Keep security, dependency, performance, understanding, continuity concerns explicit in the evidence note and review summary.",
       "Run agent-guardrails check --review before completing the task."
     ],

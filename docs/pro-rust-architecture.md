@@ -101,6 +101,7 @@ Initial responsibility:
 - create new in-memory runs through `POST /api/runs`
 - reload run summaries, run detail, and graph payloads from the Pro API
 - show provider/search quota ownership, credential policy, and cooldown status through the local provider-status payload
+- keep a browser-local selected-node state and graph inspector for evidence/challenge links
 - establish layout, palette, and information hierarchy for the knowledge-graph experience
 
 ## Future crates after the kickoff
@@ -152,7 +153,7 @@ The Pro UI should feel like a graph command room, not a generic SaaS dashboard a
 - visible source states and challenge status
 - no gradient-heavy AI dashboard styling
 
-The kickoff web shell encodes that direction with a static graph workspace, while leaving advanced interaction for later.
+The kickoff web shell encodes that direction with a graph workspace that now supports browser-local node selection and an inspector for the active node's evidence/challenge links. Advanced interaction such as persisted layout state, graph editing, multi-select, and review workflows remains later work.
 
 The current web shell is still intentionally lightweight: server-rendered HTML plus a small browser script for local API calls and DOM refresh. It is enough to prove the Pro run loop without committing to the eventual interactive graph client stack.
 
@@ -174,3 +175,5 @@ The provider-status slice adds focused unit coverage under:
 - `cargo test --manifest-path pro/Cargo.toml`
 
 The tests assert that quota ownership remains explicit, the static cooldown bucket is visible, and provider-status payloads do not contain API-key or secret-shaped fields.
+
+The graph-interaction slice adds the same Rust test command plus a Playwright smoke that clicks a graph node and verifies that the inspector switches to the selected node while keeping only one node selected.

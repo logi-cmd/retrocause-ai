@@ -25,6 +25,7 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
     let provider_snapshot = provider_status_snapshot();
     let provider_json =
         serde_json::to_string_pretty(&provider_snapshot).expect("serialize provider status");
+    let selected_node_id = run.graph.nodes.first().map(|node| node.id.as_str());
 
     html! {
         (DOCTYPE)
@@ -96,7 +97,18 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                             }
                             div id="graph-nodes" {
                                 @for node in &run.graph.nodes {
-                                    (render_node(node))
+                                    (render_node(node, selected_node_id == Some(node.id.as_str())))
+                                }
+                            }
+                        }
+
+                        aside class="graph-inspector" aria-label="Graph inspector" {
+                            p class="eyebrow" { "Graph inspector" }
+                            div id="node-inspector" {
+                                @if let Some(node) = run.graph.nodes.first() {
+                                    (render_node_inspector(run, node))
+                                } @else {
+                                    p { "Select a node to inspect evidence and challenge links." }
                                 }
                             }
                         }
@@ -212,10 +224,18 @@ fn render_edge(run: &ProRun, edge: &GraphEdge) -> Markup {
     }
 }
 
-fn render_node(node: &GraphNode) -> Markup {
+fn render_node(node: &GraphNode, selected: bool) -> Markup {
     html! {
         article
-            class=(format!("graph-node {}", node_kind_label(node.kind)))
+            class=(format!(
+                "graph-node {}{}",
+                node_kind_label(node.kind),
+                if selected { " is-selected" } else { "" }
+            ))
+            data-node-id=(node.id.as_str())
+            role="button"
+            tabindex="0"
+            aria-label=(format!("Inspect {}", node.title))
             style=(format!("left:{}px; top:{}px;", node.x, node.y))
         {
             div class="node-head" {
@@ -225,6 +245,39 @@ fn render_node(node: &GraphNode) -> Markup {
             h3 { (node.title.as_str()) }
             p { (node.summary.as_str()) }
             small { (node.evidence_ids.len()) " evidence / " (node.challenge_ids.len()) " checks" }
+        }
+    }
+}
+
+fn render_node_inspector(run: &ProRun, node: &GraphNode) -> Markup {
+    html! {
+        article class="inspector-card" {
+            div class="inspector-head" {
+                strong id="inspector-node-title" { (node.title.as_str()) }
+                span id="inspector-node-confidence" { (percent(node.confidence)) }
+            }
+            p id="inspector-node-kind" { (node_kind_label(node.kind)) }
+            p id="inspector-node-summary" { (node.summary.as_str()) }
+            div class="inspector-links" {
+                p { "Evidence" }
+                ul id="inspector-evidence-list" {
+                    @for evidence_id in &node.evidence_ids {
+                        li {
+                            (lookup_evidence_title(run, evidence_id).unwrap_or(evidence_id.as_str()))
+                        }
+                    }
+                }
+            }
+            div class="inspector-links" {
+                p { "Challenges" }
+                ul id="inspector-challenge-list" {
+                    @for challenge_id in &node.challenge_ids {
+                        li {
+                            (lookup_challenge_title(run, challenge_id).unwrap_or(challenge_id.as_str()))
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -239,6 +292,20 @@ fn render_source_meter(source: &str, status: SourceStatus, note: &str) -> Markup
             span class=(format!("status-dot status-dot--{}", source_status_label(status))) {}
         }
     }
+}
+
+fn lookup_evidence_title<'a>(run: &'a ProRun, evidence_id: &str) -> Option<&'a str> {
+    run.evidence
+        .iter()
+        .find(|evidence| evidence.id.as_str() == evidence_id)
+        .map(|evidence| evidence.title.as_str())
+}
+
+fn lookup_challenge_title<'a>(run: &'a ProRun, challenge_id: &str) -> Option<&'a str> {
+    run.challenge_checks
+        .iter()
+        .find(|challenge| challenge.id.as_str() == challenge_id)
+        .map(|challenge| challenge.title.as_str())
 }
 
 fn render_provider_status(entry: &ProviderQuotaStatus) -> Markup {
@@ -276,6 +343,8 @@ fn client_script() -> &'static str {
   const seed = JSON.parse(document.getElementById("seed-run-json").textContent || "{}");
   const providerSeed = JSON.parse(document.getElementById("provider-status-json").textContent || "{}");
   const byId = (id) => document.getElementById(id);
+  let currentRun = seed;
+  let activeNodeId = seed?.graph?.nodes?.[0]?.id || null;
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -312,6 +381,12 @@ fn client_script() -> &'static str {
     return `M ${startX} ${startY} C ${controlX} ${startY}, ${controlX} ${endY}, ${endX} ${endY}`;
   }
 
+  function selectNode(nodeId) {
+    activeNodeId = nodeId;
+    renderGraph(currentRun);
+    renderInspector(currentRun);
+  }
+
   function renderGraph(run) {
     const graph = run.graph || { nodes: [], edges: [] };
     const wires = byId("graph-wires");
@@ -333,7 +408,7 @@ fn client_script() -> &'static str {
     }).join("");
 
     nodes.innerHTML = graph.nodes.map((node) => `
-      <article class="graph-node ${escapeHtml(readable(node.kind).replaceAll(" ", "-"))}" style="left:${Number(node.x) || 0}px; top:${Number(node.y) || 0}px;">
+      <article class="graph-node ${escapeHtml(readable(node.kind).replaceAll(" ", "-"))}${node.id === activeNodeId ? " is-selected" : ""}" data-node-id="${escapeHtml(node.id)}" role="button" tabindex="0" aria-label="Inspect ${escapeHtml(node.title)}" style="left:${Number(node.x) || 0}px; top:${Number(node.y) || 0}px;">
         <div class="node-head">
           <p class="node-kind">${escapeHtml(readable(node.kind))}</p>
           <span>${percent(node.confidence)}</span>
@@ -343,10 +418,57 @@ fn client_script() -> &'static str {
         <small>${(node.evidence_ids || []).length} evidence / ${(node.challenge_ids || []).length} checks</small>
       </article>
     `).join("");
+    nodes.querySelectorAll(".graph-node").forEach((nodeElement) => {
+      nodeElement.addEventListener("click", () => selectNode(nodeElement.dataset.nodeId));
+      nodeElement.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          selectNode(nodeElement.dataset.nodeId);
+        }
+      });
+    });
+  }
+
+  function renderInspector(run) {
+    const graph = run.graph || { nodes: [] };
+    const node = graph.nodes.find((candidate) => candidate.id === activeNodeId) || graph.nodes[0];
+    const panel = byId("node-inspector");
+    if (!panel) return;
+    if (!node) {
+      panel.innerHTML = "<p>Select a node to inspect evidence and challenge links.</p>";
+      return;
+    }
+    const evidence = new Map((run.evidence || []).map((item) => [item.id, item.title]));
+    const challenges = new Map((run.challenge_checks || []).map((item) => [item.id, item.title]));
+    activeNodeId = node.id;
+    panel.innerHTML = `
+      <article class="inspector-card">
+        <div class="inspector-head">
+          <strong id="inspector-node-title">${escapeHtml(node.title)}</strong>
+          <span id="inspector-node-confidence">${percent(node.confidence)}</span>
+        </div>
+        <p id="inspector-node-kind">${escapeHtml(readable(node.kind))}</p>
+        <p id="inspector-node-summary">${escapeHtml(node.summary)}</p>
+        <div class="inspector-links">
+          <p>Evidence</p>
+          <ul id="inspector-evidence-list">${(node.evidence_ids || []).map((id) => `<li>${escapeHtml(evidence.get(id) || id)}</li>`).join("")}</ul>
+        </div>
+        <div class="inspector-links">
+          <p>Challenges</p>
+          <ul id="inspector-challenge-list">${(node.challenge_ids || []).map((id) => `<li>${escapeHtml(challenges.get(id) || id)}</li>`).join("")}</ul>
+        </div>
+      </article>
+    `;
   }
 
   function renderRun(run) {
+    currentRun = run;
+    const nodes = run.graph?.nodes || [];
+    if (!nodes.some((node) => node.id === activeNodeId)) {
+      activeNodeId = nodes[0]?.id || null;
+    }
     renderGraph(run);
+    renderInspector(run);
     setText("run-status", readable(run.status));
     setText("run-confidence", `confidence ${percent(run.confidence)}`);
     setText("run-node-count", `${(run.graph?.nodes || []).length} nodes`);
@@ -652,6 +774,7 @@ body {
 
 .hud,
 .question-band,
+.graph-inspector,
 .focus-docket,
 .source-pulse,
 .quota-console,
@@ -719,7 +842,7 @@ body {
 .question-band {
   top: 5.5rem;
   left: 0.9rem;
-  max-width: min(620px, calc(100% - 1.8rem));
+  max-width: min(420px, calc(100% - 1.8rem));
   padding: 0.95rem 1rem;
   display: grid;
   gap: 0.55rem;
@@ -773,7 +896,7 @@ body {
 
 .graph-viewport {
   position: absolute;
-  inset: 8.6rem 1rem 5.7rem;
+  inset: 17rem 1rem 5.7rem;
   overflow: auto;
   border-radius: 8px;
   background:
@@ -847,6 +970,7 @@ body {
   border-radius: 8px;
   border: 1px solid color-mix(in oklch, white 22%, transparent);
   color: oklch(0.18 0.018 148);
+  cursor: pointer;
   box-shadow: 0 20px 44px rgba(0, 0, 0, 0.28);
 }
 
@@ -854,6 +978,10 @@ body {
 .graph-node.enabler { background: color-mix(in oklch, var(--enabler) 88%, white); }
 .graph-node.risk { background: color-mix(in oklch, var(--risk) 86%, white); }
 .graph-node.outcome { background: color-mix(in oklch, var(--outcome) 88%, white); }
+.graph-node.is-selected {
+  outline: 3px solid color-mix(in oklch, var(--accent) 88%, white);
+  outline-offset: 4px;
+}
 
 .node-head,
 .source-meter {
@@ -902,6 +1030,49 @@ p {
 
 .graph-node p {
   color: color-mix(in oklch, black 76%, transparent);
+}
+
+.graph-inspector {
+  left: 1rem;
+  top: 19.4rem;
+  width: min(340px, calc(100% - 2rem));
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.inspector-card {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.inspector-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.inspector-head span {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.inspector-links {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.inspector-links ul {
+  display: grid;
+  gap: 0.22rem;
+  margin: 0;
+  padding-left: 1.05rem;
+}
+
+.inspector-links p,
+.inspector-links li {
+  color: color-mix(in oklch, var(--text) 76%, var(--muted));
+  font-size: 0.78rem;
 }
 
 .focus-docket {
@@ -1093,6 +1264,7 @@ p {
 
   .hud,
   .question-band,
+  .graph-inspector,
   .focus-docket,
   .source-pulse,
   .quota-console,
@@ -1145,6 +1317,9 @@ mod tests {
         let page = render_page(&sample_run(), "http://127.0.0.1:8787").into_string();
         assert!(page.contains("Knowledge graph operating field"));
         assert!(page.contains("graph-viewport"));
+        assert!(page.contains("node-inspector"));
+        assert!(page.contains("data-node-id"));
+        assert!(page.contains("function selectNode"));
         assert!(page.contains("run-create-form"));
         assert!(page.contains("provider-status-list"));
         assert!(page.contains("/api/provider-status"));

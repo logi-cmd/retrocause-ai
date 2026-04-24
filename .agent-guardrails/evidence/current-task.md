@@ -744,3 +744,67 @@ This task adds the first provider/search quota ownership and cooldown status mod
 - The provider-status payload is static; it does not enforce real quota, cooldown, tenant, or billing rules yet.
 - There is still no auth/tenant boundary, persistent run store, credential vault, provider executor, or queue.
 - The browser panel is an inspectable status surface, not the final provider-management UX.
+
+## 2026-04-24 Pro Product Core Slice 5
+
+This task adds the first browser-local graph interaction state for the Pro web shell. It keeps state in the page only and does not add persistence, provider calls, credentials, or OSS runtime changes.
+
+### Files Updated
+
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Made graph nodes selectable with `data-node-id`, button semantics, keyboard activation, and a stable selected-node class.
+- Added a graph inspector that shows the selected node's kind, confidence, summary, evidence links, and challenge links.
+- Added browser-local `activeNodeId` handling so the inspector follows node clicks and resets safely when a newly loaded run does not contain the old selected node.
+- Adjusted desktop graph spacing after browser smoke found the create-run panel intercepting clicks on a graph node.
+- Updated Pro docs so graph interaction state is marked as implemented and the next step moves to durable run storage, provider/search routing, and deeper graph review.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: contract refreshed for the graph interaction slice.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `8 passed`.
+  - Domain tests: `8 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro browser interaction smoke
+  - First result: failed because the create-run textarea intercepted pointer events on the second graph node.
+  - Fix: narrowed the question panel and moved the graph viewport lower to preserve node clickability.
+  - Final result: passed after layout adjustment.
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8796`.
+  - Started `retrocause-pro-web.exe` on `127.0.0.1:3020` with `PRO_API_BASE=http://127.0.0.1:8796`.
+  - Opened the Pro web shell with Playwright/Chromium, clicked the second graph node, and verified inspector title changed from `Control scope tightened` to `Customer pause` with exactly one selected node.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `95/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. The state doc was intentionally synchronized to mark graph node selection/inspector state as implemented and to move the next-step queue forward.
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, API keys, credential fields, provider calls, or stored user data were added. The selected node state is browser-local only.
+- Dependencies: no new packages, lockfile changes, or version upgrades were introduced.
+- Performance: node selection re-renders the small graph node layer and inspector only; this is fine for the current static alpha graph, but a larger future graph should use incremental updates or a dedicated client graph runtime.
+- Understanding: the tradeoff is intentionally lightweight browser-local interaction instead of introducing a full graph-client framework before persistence and run-store boundaries exist.
+- Continuity: this reuses the existing Maud web shell, embedded payload, and vanilla browser script. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- Selection state is not persisted and does not synchronize across tabs or runs.
+- The inspector is read-only and only shows node-level evidence/challenge links; edge-level inspection and richer review workflows remain future work.
+- The current layout is still an alpha shell and will need more visual QA as the graph grows.
