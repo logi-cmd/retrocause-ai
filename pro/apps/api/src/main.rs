@@ -15,7 +15,8 @@ use retrocause_pro_domain::{
     sample_run, workspace_access_context,
 };
 use retrocause_pro_event_store::{
-    EventStoreEntry, EventStoreError, EventStoreReplay, FileEventStore, WorkerResultDryRun,
+    EventStoreEntry, EventStoreError, EventStoreReplay, FileEventStore, ResultSnapshotReadiness,
+    WorkerResultDryRun,
 };
 use retrocause_pro_provider_routing::{
     ProviderAdapterCandidateCatalog, ProviderAdapterContract, ProviderAdapterDryRunRequest,
@@ -122,6 +123,10 @@ fn router() -> Router {
         .route(
             "/api/runs/{run_id}/worker-result-dry-run",
             post(run_worker_result_dry_run).options(cors_preflight),
+        )
+        .route(
+            "/api/runs/{run_id}/result-snapshot-readiness",
+            post(run_result_snapshot_readiness).options(cors_preflight),
         )
         .route(
             "/api/runs/{run_id}/review-comparison",
@@ -333,6 +338,21 @@ async fn run_worker_result_dry_run(
     state
         .event_store
         .worker_result_dry_run(&run)
+        .map(Json)
+        .map_err(event_store_error)
+}
+
+async fn run_result_snapshot_readiness(
+    State(state): State<AppState>,
+    Path(run_id): Path<String>,
+) -> Result<Json<ResultSnapshotReadiness>, ApiError> {
+    let run = state
+        .run_store
+        .get_run(&run_id)
+        .ok_or_else(|| not_found(run_id))?;
+    state
+        .event_store
+        .result_snapshot_readiness(&run)
         .map(Json)
         .map_err(event_store_error)
 }
@@ -966,6 +986,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn result_snapshot_readiness_blocks_persistence_until_hosted_gates_exist() {
+        let payload = run_result_snapshot_readiness(
+            State(AppState::seeded()),
+            Path("run_semiconductor_controls_001".to_string()),
+        )
+        .await
+        .expect("known sample run")
+        .0;
+
+        assert_eq!(payload.run_id, "run_semiconductor_controls_001");
+        assert!(!payload.snapshot_persistence_allowed);
+        assert!(!payload.result_event_write_allowed);
+        assert!(!payload.provider_execution_allowed);
+        assert!(payload.worker_commit_required);
+        assert!(payload.replay_event_count >= 3);
+        assert!(!payload.proposed_snapshot.persisted);
+        assert!(!payload.proposed_snapshot.publishable);
+        assert!(
+            payload
+                .readiness_checks
+                .iter()
+                .any(|check| check.id == "tenant_auth_enforced"
+                    && check.blocking_snapshot_persistence)
+        );
+        assert!(
+            payload
+                .safeguards
+                .contains(&"derives_from_worker_result_dry_run".to_string())
+        );
+    }
+
+    #[tokio::test]
     async fn review_comparison_payload_is_derived_from_requested_run() {
         let payload = get_run_review_comparison(
             State(AppState::seeded()),
@@ -1054,13 +1106,21 @@ mod tests {
         assert_eq!(replay.run_id, created.id);
         assert_eq!(replay.event_count, 1);
 
-        let dry_run = run_worker_result_dry_run(State(state), Path(created.id.clone()))
+        let dry_run = run_worker_result_dry_run(State(state.clone()), Path(created.id.clone()))
             .await
             .expect("created run worker result dry-run should be readable")
             .0;
         assert_eq!(dry_run.run_id, created.id);
         assert_eq!(dry_run.replay_event_count, 1);
         assert!(!dry_run.result_event_write_allowed);
+
+        let readiness = run_result_snapshot_readiness(State(state), Path(created.id.clone()))
+            .await
+            .expect("created run result snapshot readiness should be readable")
+            .0;
+        assert_eq!(readiness.run_id, created.id);
+        assert_eq!(readiness.replay_event_count, 1);
+        assert!(!readiness.snapshot_persistence_allowed);
     }
 
     #[tokio::test]

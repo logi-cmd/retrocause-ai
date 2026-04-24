@@ -301,6 +301,21 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "preview" }
                                 }
                             }
+                            button id="result-snapshot-readiness-button" type="button" {
+                                "Check snapshot gate"
+                            }
+                            p id="result-snapshot-readiness-status" class="console-status" {
+                                "Snapshot readiness checks hosted safety gates without persisting a result."
+                            }
+                            div id="result-snapshot-readiness-panel" class="commit-panel" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "Result snapshot readiness" }
+                                        p { "Check why persisted result snapshots are still blocked." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "gated" }
+                                }
+                            }
                             div id="storage-boundary-panel" class="storage-panel" {
                                 article class="queue-meter queue-meter--empty" {
                                     div {
@@ -1502,6 +1517,65 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderResultSnapshotReadiness(readiness) {
+    const panel = byId("result-snapshot-readiness-panel");
+    if (!panel) return;
+    if (!readiness) {
+      panel.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>Result snapshot readiness</strong>
+            <p>Check why persisted result snapshots are still blocked.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">gated</span>
+        </article>
+      `;
+      return;
+    }
+
+    const snapshot = readiness.proposed_snapshot || {};
+    const checks = (readiness.readiness_checks || []).map((check) => `
+      <li>
+        <strong>${escapeHtml(check.label || check.id)}</strong>
+        <span>${check.passed ? "passed" : "blocked"} / blocks persistence: ${check.blocking_snapshot_persistence ? "yes" : "no"}</span>
+        <small>${escapeHtml(check.note || "No readiness note.")}</small>
+      </li>
+    `).join("");
+    const safeguards = (readiness.safeguards || [])
+      .slice(0, 7)
+      .map((guard) => `<li>${escapeHtml(guard)}</li>`)
+      .join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card commit-card">
+        <div class="work-order-header">
+          <strong>Result snapshot readiness</strong>
+          <span class="quota-state quota-state--deferred">${readiness.snapshot_persistence_allowed ? "persistence on" : "persistence off"}</span>
+          <p>${escapeHtml(readable(readiness.mode || "preview_only_gate"))} / replay events: ${escapeHtml(readiness.replay_event_count || 0)} / worker commit required: ${readiness.worker_commit_required ? "yes" : "no"}</p>
+          <small>Run: ${escapeHtml(readiness.run_id || "unknown")} / Workspace: ${escapeHtml(readiness.workspace_id || "unknown")}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Proposed snapshot</p>
+          <ul class="work-order-list">
+            <li>
+              <strong>${escapeHtml(snapshot.id || "snapshot_preview")}</strong>
+              <span>persisted: ${snapshot.persisted ? "yes" : "no"} / publishable: ${snapshot.publishable ? "yes" : "no"}</span>
+              <small>nodes: ${escapeHtml(snapshot.graph_node_count || 0)} / evidence: ${escapeHtml(snapshot.evidence_count || 0)} / challenges: ${escapeHtml(snapshot.challenge_count || 0)}</small>
+            </li>
+          </ul>
+        </section>
+        <section>
+          <p class="work-order-label">Readiness checks</p>
+          <ul class="work-order-list">${checks || "<li>No readiness checks returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Snapshot safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>No snapshot safeguards returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   function renderStoragePlan(plan) {
     const panel = byId("storage-boundary-panel");
     if (!panel) return;
@@ -1708,6 +1782,7 @@ fn client_script() -> &'static str {
     renderEventReplay(eventReplay);
     renderReviewComparison(reviewComparison);
     renderWorkerResultDryRun(null);
+    renderResultSnapshotReadiness(null);
     await refreshRuns(run.id);
     setStatus(`Loaded ${run.id}`);
   }
@@ -1805,6 +1880,23 @@ fn client_script() -> &'static str {
     );
   }
 
+  async function checkResultSnapshotReadiness() {
+    const runId = currentRun?.id;
+    if (!runId) {
+      throw new Error("No run selected for result snapshot readiness.");
+    }
+    setText("result-snapshot-readiness-status", "Checking result snapshot gate...");
+    const readiness = await fetchJson(`/api/runs/${encodeURIComponent(runId)}/result-snapshot-readiness`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    renderResultSnapshotReadiness(readiness);
+    setText(
+      "result-snapshot-readiness-status",
+      `Snapshot persistence remains ${readiness.snapshot_persistence_allowed ? "allowed" : "blocked"}; ${readiness.readiness_checks?.length || 0} checks returned.`,
+    );
+  }
+
   byId("run-create-form")?.addEventListener("submit", (event) => {
     createRun(event).catch((error) => setStatus(`API error: ${error.message}`));
   });
@@ -1820,6 +1912,10 @@ fn client_script() -> &'static str {
   byId("worker-result-dry-run-button")?.addEventListener("click", () => {
     runWorkerResultDryRun()
       .catch((error) => setText("worker-result-dry-run-status", `Result dry-run error: ${error.message}`));
+  });
+  byId("result-snapshot-readiness-button")?.addEventListener("click", () => {
+    checkResultSnapshotReadiness()
+      .catch((error) => setText("result-snapshot-readiness-status", `Snapshot gate error: ${error.message}`));
   });
   byId("provider-adapter-dry-run-button")?.addEventListener("click", () => {
     runProviderAdapterDryRun()
@@ -1857,6 +1953,7 @@ fn client_script() -> &'static str {
   renderWorkerLeaseBoundary(null);
   renderResultCommitBoundary(null);
   renderWorkerResultDryRun(null);
+  renderResultSnapshotReadiness(null);
   renderStoragePlan(null);
   renderCredentialVaultBoundary(null);
   renderQuotaLedgerBoundary(null);
@@ -2525,6 +2622,7 @@ p {
 #worker-lease-panel,
 #result-commit-panel,
 #worker-result-dry-run-panel,
+#result-snapshot-readiness-panel,
 #storage-boundary-panel,
 #credential-vault-panel,
 #quota-ledger-panel {
@@ -2920,6 +3018,8 @@ mod tests {
         assert!(page.contains("result-commit-panel"));
         assert!(page.contains("worker-result-dry-run-panel"));
         assert!(page.contains("worker-result-dry-run-button"));
+        assert!(page.contains("result-snapshot-readiness-panel"));
+        assert!(page.contains("result-snapshot-readiness-button"));
         assert!(page.contains("storage-boundary-panel"));
         assert!(page.contains("credential-vault-panel"));
         assert!(page.contains("quota-ledger-panel"));
@@ -2929,6 +3029,7 @@ mod tests {
         assert!(page.contains("/api/worker-lease-boundary"));
         assert!(page.contains("/api/result-commit-boundary"));
         assert!(page.contains("/api/runs/${encodeURIComponent(runId)}/worker-result-dry-run"));
+        assert!(page.contains("/api/runs/${encodeURIComponent(runId)}/result-snapshot-readiness"));
         assert!(page.contains("/api/storage-plan"));
         assert!(page.contains("/api/credential-vault-boundary"));
         assert!(page.contains("/api/quota-ledger-boundary"));
@@ -2939,6 +3040,8 @@ mod tests {
         assert!(page.contains("function renderResultCommitBoundary"));
         assert!(page.contains("function renderWorkerResultDryRun"));
         assert!(page.contains("function runWorkerResultDryRun"));
+        assert!(page.contains("function renderResultSnapshotReadiness"));
+        assert!(page.contains("function checkResultSnapshotReadiness"));
         assert!(page.contains("function renderStoragePlan"));
         assert!(page.contains("function renderCredentialVaultBoundary"));
         assert!(page.contains("function renderQuotaLedgerBoundary"));

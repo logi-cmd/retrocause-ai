@@ -80,6 +80,42 @@ pub struct WorkerResultCommitCheck {
     pub note: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ResultSnapshotReadiness {
+    pub run_id: String,
+    pub workspace_id: String,
+    pub mode: ResultSnapshotReadinessMode,
+    pub snapshot_persistence_allowed: bool,
+    pub result_event_write_allowed: bool,
+    pub provider_execution_allowed: bool,
+    pub worker_commit_required: bool,
+    pub replay_event_count: usize,
+    pub proposed_snapshot: ResultSnapshotPreview,
+    pub readiness_checks: Vec<ResultSnapshotReadinessCheck>,
+    pub safeguards: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ResultSnapshotPreview {
+    pub id: String,
+    pub run_revision: String,
+    pub source_replay_events: usize,
+    pub graph_node_count: usize,
+    pub evidence_count: usize,
+    pub challenge_count: usize,
+    pub persisted: bool,
+    pub publishable: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ResultSnapshotReadinessCheck {
+    pub id: String,
+    pub label: String,
+    pub passed: bool,
+    pub blocking_snapshot_persistence: bool,
+    pub note: String,
+}
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EventReplayMode {
@@ -103,6 +139,12 @@ pub enum WorkerResultDryRunMode {
 pub enum WorkerResultDryRunStepStatus {
     PreviewOnly,
     BlockedUntilWorkerCommit,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResultSnapshotReadinessMode {
+    PreviewOnlyGate,
 }
 
 #[derive(Debug)]
@@ -164,6 +206,14 @@ impl FileEventStore {
     ) -> Result<WorkerResultDryRun, EventStoreError> {
         let replay = self.ensure_run_events(run)?;
         Ok(worker_result_dry_run_from_replay(&replay))
+    }
+
+    pub fn result_snapshot_readiness(
+        &self,
+        run: &ProRun,
+    ) -> Result<ResultSnapshotReadiness, EventStoreError> {
+        let dry_run = self.worker_result_dry_run(run)?;
+        Ok(result_snapshot_readiness_from_dry_run(run, &dry_run))
     }
 
     fn persist_current_state(&self) -> Result<(), EventStoreError> {
@@ -317,6 +367,89 @@ pub fn worker_result_dry_run_from_replay(replay: &EventStoreReplay) -> WorkerRes
     }
 }
 
+pub fn result_snapshot_readiness_from_dry_run(
+    run: &ProRun,
+    dry_run: &WorkerResultDryRun,
+) -> ResultSnapshotReadiness {
+    let replay_event_count = dry_run.replay_event_count;
+    ResultSnapshotReadiness {
+        run_id: run.id.clone(),
+        workspace_id: run.workspace_id.clone(),
+        mode: ResultSnapshotReadinessMode::PreviewOnlyGate,
+        snapshot_persistence_allowed: false,
+        result_event_write_allowed: false,
+        provider_execution_allowed: false,
+        worker_commit_required: true,
+        replay_event_count,
+        proposed_snapshot: ResultSnapshotPreview {
+            id: format!("{}_snapshot_preview", run.id),
+            run_revision: run.updated_at.clone(),
+            source_replay_events: replay_event_count,
+            graph_node_count: run.graph.nodes.len(),
+            evidence_count: run.evidence.len(),
+            challenge_count: run.challenge_checks.len(),
+            persisted: false,
+            publishable: false,
+        },
+        readiness_checks: vec![
+            ResultSnapshotReadinessCheck {
+                id: "worker_dry_run_loaded".to_string(),
+                label: "Worker dry-run loaded".to_string(),
+                passed: replay_event_count > 0,
+                blocking_snapshot_persistence: replay_event_count == 0,
+                note: format!(
+                    "{replay_event_count} replay event(s) are available for snapshot preview input."
+                ),
+            },
+            ResultSnapshotReadinessCheck {
+                id: "durable_worker_commit_ready".to_string(),
+                label: "Durable worker commit ready".to_string(),
+                passed: false,
+                blocking_snapshot_persistence: true,
+                note: "No worker-owned durable result-event commit path exists yet.".to_string(),
+            },
+            ResultSnapshotReadinessCheck {
+                id: "tenant_auth_enforced".to_string(),
+                label: "Tenant auth enforced".to_string(),
+                passed: false,
+                blocking_snapshot_persistence: true,
+                note: "The Pro shell still uses a preview-only workspace context.".to_string(),
+            },
+            ResultSnapshotReadinessCheck {
+                id: "quota_reservation_ready".to_string(),
+                label: "Quota reservation ready".to_string(),
+                passed: false,
+                blocking_snapshot_persistence: true,
+                note: "Quota ledger rows and billable usage writes remain disabled.".to_string(),
+            },
+            ResultSnapshotReadinessCheck {
+                id: "credential_vault_ready".to_string(),
+                label: "Credential vault ready".to_string(),
+                passed: false,
+                blocking_snapshot_persistence: true,
+                note: "Provider credentials cannot be read by workers in this slice.".to_string(),
+            },
+            ResultSnapshotReadinessCheck {
+                id: "idempotent_event_writes_ready".to_string(),
+                label: "Idempotent event writes ready".to_string(),
+                passed: false,
+                blocking_snapshot_persistence: true,
+                note: "Result-event writes still need idempotency keys and replay-safe commits."
+                    .to_string(),
+            },
+        ],
+        safeguards: vec![
+            "preview_only_no_snapshot_persistence".to_string(),
+            "derives_from_worker_result_dry_run".to_string(),
+            "uses_local_event_replay_as_input".to_string(),
+            "no_result_event_writes".to_string(),
+            "no_provider_execution_or_secret_access".to_string(),
+            "no_quota_or_billing_mutation".to_string(),
+            "run_scoped_to_requested_run_id".to_string(),
+        ],
+    }
+}
+
 fn read_state(path: &Path) -> Result<StoredEventState, EventStoreError> {
     let raw = fs::read_to_string(path)?;
     let mut state = serde_json::from_str::<StoredEventState>(&raw)?;
@@ -365,8 +498,8 @@ impl From<serde_json::Error> for EventStoreError {
 #[cfg(test)]
 mod tests {
     use super::{
-        EventReplayMode, FileEventStore, WorkerResultDryRunMode, WorkerResultDryRunStepStatus,
-        temp_store_path,
+        EventReplayMode, FileEventStore, ResultSnapshotReadinessMode, WorkerResultDryRunMode,
+        WorkerResultDryRunStepStatus, temp_store_path,
     };
     use retrocause_pro_domain::{CreateRunRequest, create_run_from_request, sample_run};
     use std::fs;
@@ -474,6 +607,49 @@ mod tests {
             dry_run
                 .safeguards
                 .contains(&"preview_only_no_result_event_writes".to_string())
+        );
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn result_snapshot_readiness_blocks_persistence_until_hosted_gates_exist() {
+        let path = temp_store_path("result-snapshot-readiness");
+        let store = FileEventStore::open(&path).expect("event store should open");
+        let run = sample_run();
+
+        let readiness = store
+            .result_snapshot_readiness(&run)
+            .expect("snapshot readiness should build from dry-run");
+
+        assert_eq!(readiness.run_id, run.id);
+        assert_eq!(readiness.mode, ResultSnapshotReadinessMode::PreviewOnlyGate);
+        assert!(!readiness.snapshot_persistence_allowed);
+        assert!(!readiness.result_event_write_allowed);
+        assert!(!readiness.provider_execution_allowed);
+        assert!(readiness.worker_commit_required);
+        assert_eq!(
+            readiness.proposed_snapshot.graph_node_count,
+            run.graph.nodes.len()
+        );
+        assert_eq!(
+            readiness.proposed_snapshot.evidence_count,
+            run.evidence.len()
+        );
+        assert!(!readiness.proposed_snapshot.persisted);
+        assert!(
+            readiness
+                .readiness_checks
+                .iter()
+                .any(|check| { check.id == "worker_dry_run_loaded" && check.passed })
+        );
+        assert!(readiness.readiness_checks.iter().any(|check| {
+            check.id == "durable_worker_commit_ready" && check.blocking_snapshot_persistence
+        }));
+        assert!(
+            readiness
+                .safeguards
+                .contains(&"preview_only_no_snapshot_persistence".to_string())
         );
 
         let _ = fs::remove_file(path);

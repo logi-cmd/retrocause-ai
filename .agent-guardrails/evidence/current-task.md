@@ -2520,3 +2520,89 @@ This task adds a preview-only worker result dry-run for the Pro Rust product cor
 
 - This is not a worker runtime, not a persisted result snapshot, not a hosted audit log, and not a provider result committer.
 - Result-event writes, tenant auth, quota reservations, credential vault access, durable worker leases, and idempotent commits still need to exist before live provider execution can be enabled safely.
+
+## Pro Product Core Slice 27 - Result Snapshot Readiness Gate
+
+### Scope
+
+This task adds a preview-only result snapshot readiness gate for the Pro Rust product core. The readiness payload is derived from the existing worker-result dry-run/local replay path, exposes the hosted safety blockers that still prevent persisted result snapshots, and renders those blockers in the graph-first web shell. This remains local-only and keyless: no persisted result snapshots, Postgres/Redis, hosted auth enforcement, real workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, package publishing, or live provider calls were added.
+
+### Files Updated
+
+- `pro/crates/event-store/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `ResultSnapshotReadiness`, `ResultSnapshotPreview`, readiness-check payloads, and preview-only readiness mode in `crates/event-store`.
+- Added `FileEventStore::result_snapshot_readiness()` and `result_snapshot_readiness_from_dry_run()` so snapshot readiness is explicitly derived from local replay via the worker-result dry-run path.
+- Added keyless `POST /api/runs/{run_id}/result-snapshot-readiness`.
+- Added API and event-store tests proving the readiness gate is run-scoped, uses replay/dry-run counts, keeps snapshot persistence/provider/result-event writes disabled, and exposes hosted blockers.
+- Added a graph-first web button and panel for `Check snapshot gate`, showing proposed non-persisted snapshot metadata, readiness checks, blocked persistence, and safeguards.
+- Updated Pro project state and architecture docs to record the readiness gate as a preview contract, not a persisted result snapshot or worker-owned commit path.
+
+### Commands Run
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - First result: failed because Rustfmt wanted to reflow new event-store test assertions.
+  - Fix: ran `cargo fmt --manifest-path pro/Cargo.toml --all`.
+  - Final result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - First result: failed because the new readiness payload referenced `run.challenges`, while the shared `ProRun` field is `challenge_checks`.
+  - Fix: changed the readiness snapshot count to use `run.challenge_checks.len()`.
+  - Final result: passed.
+  - API tests: `31 passed`.
+  - Domain tests: `16 passed`.
+  - Event-store tests: `5 passed`.
+  - Provider-routing tests: `10 passed`.
+  - Queue tests: `7 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API result-snapshot readiness smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8837` with temporary `RETROCAUSE_PRO_RUN_STORE_PATH` and `RETROCAUSE_PRO_EVENT_STORE_PATH`.
+  - Called `POST /api/runs/run_semiconductor_controls_001/result-snapshot-readiness`.
+  - Created a run through `POST /api/runs`.
+  - Called `POST /api/runs/{created_run_id}/result-snapshot-readiness`.
+  - Result: passed; seed readiness mode was `preview_only_gate`, seed replay event count was `4`, created run id was `run_local_000001`, created readiness replay count was `1`, snapshot persistence stayed disabled, result writes stayed disabled, provider execution stayed disabled, and the durable worker commit blocker was present.
+
+- Pro browser result-snapshot readiness smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8838` and `retrocause-pro-web.exe` on `127.0.0.1:3045`.
+  - Aborted external font requests in Playwright so inline scripts could run without network font blocking.
+  - Clicked `Check snapshot gate`.
+  - Result: passed; the readiness panel rendered `Result snapshot readiness`, `preview only gate`, `persistence off`, `Durable worker commit ready`, `preview_only_no_snapshot_persistence`, and `derives_from_worker_result_dry_run`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Result: passed. A key-shaped scan for common provider-token prefixes and API-key assignment patterns found no key-shaped tokens in the non-doc diff.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with concerns; no blocking errors.
+  - Score: `85/100 (pass-with-concerns)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because project state was synchronized to mark the result snapshot readiness gate as implemented and move the next Pro focus toward persisted snapshots only after hosted safety gates exist.
+  - Non-blocking warning: `pro/crates/event-store/src/lib.rs` changed as a state-related file. This was intentional because the event-store crate owns local replay-derived worker-result dry-run and result-snapshot readiness payloads.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is interface-changing. This slice intentionally adds keyless local `POST /api/runs/{run_id}/result-snapshot-readiness`; it does not change OSS APIs, accept credentials, enforce auth, mutate quota/billing, start workers, write result events, persist snapshots, or execute provider calls.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice does not accept, read, store, log, or return provider secrets, payment credentials, auth tokens, or user API keys. It does not enforce hosted permissions or protect hosted resources. The readiness gate is scoped by requested run id and uses only local replay/dry-run data.
+- Dependencies: no new crates, npm packages, lockfile changes, or external dependency upgrades were introduced.
+- Performance: the readiness gate reads the local replay stream through the existing worker-result dry-run path and builds an in-memory payload. It adds no provider, database, Redis, worker, quota-ledger, billing, or network load beyond one local API response.
+- Understanding: the deliberate tradeoff is to make snapshot persistence blockers visible before implementing snapshot writes. That gives the UI and API a concrete path forward while staying honest that no persisted result snapshot exists yet.
+- Continuity: reused the existing event-store crate, worker-result dry-run path, Axum state/endpoint style, web `fetchJson` helper, and compact boundary-card styling. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- This is not a persisted result snapshot, not a worker runtime, not a hosted audit log, and not a provider result committer.
+- Result snapshot persistence, result-event writes, tenant auth, quota reservations, credential vault access, durable worker leases, and idempotent commits still need to exist before live provider execution or persisted result snapshots can be enabled safely.
