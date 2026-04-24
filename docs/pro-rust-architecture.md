@@ -112,7 +112,7 @@ Current behavior:
 
 This is intentionally not a provider executor. It does not read provider keys, call models/search APIs, enqueue jobs, bill usage, or store credentials. The value is the decision vocabulary: future executors can consume the same lane and decision semantics instead of inventing hidden routing behavior inside provider adapters.
 
-`crates/provider-routing` also carries a dry provider-adapter contract and a non-executing adapter dry-run shape. The contract names the future adapter request fields, result fields, degradation states, quota guards, and partial-result rules before any provider implementation exists. The dry-run accepts a workspace id, query, provider lane, and source policy, then returns preview evidence, zero-billable usage ledger rows, visible degradation states, and safety warnings without reading credentials or calling providers. These shapes require explicit quota ownership, retry-after cooldown visibility, degraded source states, usage ledger rows, and evidence preservation before retries.
+`crates/provider-routing` also carries a dry provider-adapter contract, a non-executing adapter dry-run shape, and the first gated live-adapter candidate. The contract names the future adapter request fields, result fields, degradation states, quota guards, and partial-result rules before any provider implementation exists. The dry-run accepts a workspace id, query, provider lane, and source policy, then returns preview evidence, zero-billable usage ledger rows, visible degradation states, and safety warnings without reading credentials or calling providers. The OfoxAI model adapter candidate is registration-only: gate checks can show that dry-run, auth context, quota ownership, and event timeline previews were observed, but execution remains denied until real tenant auth, credential vault reads, quota ledger enforcement, and worker execution exist. These shapes require explicit quota ownership, retry-after cooldown visibility, degraded source states, usage ledger rows, and evidence preservation before retries.
 
 ## Queue boundary
 
@@ -145,6 +145,8 @@ Initial responsibility:
 - `GET /api/workspace/access-context`
 - `GET /api/provider-status`
 - `GET /api/provider-adapter-contract`
+- `GET /api/provider-adapter/candidates`
+- `POST /api/provider-adapter/gate-check`
 - `POST /api/provider-adapter/dry-run`
 - `GET /api/provider-route/preview`
 - `POST /api/provider-route/preview`
@@ -175,6 +177,8 @@ Initial responsibility:
 - show provider/search quota ownership, credential policy, and cooldown status through the local provider-status payload
 - render the dry provider-adapter request/result/degradation contract from `GET /api/provider-adapter-contract`
 - run a keyless provider-adapter dry-run through `POST /api/provider-adapter/dry-run`, showing zero billable units, evidence-preview count, degradation states, and calls-disabled state
+- render the gated live-adapter candidate catalog from `GET /api/provider-adapter/candidates`
+- run a denied live-adapter gate check through `POST /api/provider-adapter/gate-check`, showing which auth, quota, dry-run, event, vault, and worker gates block execution
 - create and list preview-only execution jobs through the local execution-job API
 - inspect queued job work orders through `GET /api/execution-jobs/{job_id}/work-order`, rendering route steps, routing warnings, selected lane, and execution safeguards while execution stays disabled
 - render the hosted-worker lifecycle/failure taxonomy from `GET /api/execution-lifecycle` so future execution states are visible before live adapters exist
@@ -221,6 +225,8 @@ The current `POST /api/runs` path uses `queued` runs and managed/user-provided q
 The current `GET /api/workspace/access-context` path exposes a static local preview actor and permission vocabulary. It does not authenticate, authorize, issue sessions, validate tokens, store credentials, mutate billing/quota, or protect hosted resources. Future auth work should replace this preview context with real tenant and actor resolution before any provider execution is enabled.
 
 The current `GET /api/runs/{run_id}/events` path derives a non-durable timeline from the run record. It is useful for UI and API vocabulary, but it is not an audit log, not a durable event stream, and not a worker status queue. Future hosted Pro should replace or supplement it with event-store rows once tenant/auth, worker leases, and storage boundaries exist.
+
+The current `GET /api/provider-adapter/candidates` and `POST /api/provider-adapter/gate-check` paths register and inspect a future OfoxAI model adapter candidate. They do not execute the candidate. Even if preview gates are marked observed, the gate check returns `execution_allowed=false` until real auth enforcement, credential vault access, quota ledger enforcement, and worker execution are implemented.
 
 ## Knowledge-graph UI direction
 
@@ -353,3 +359,11 @@ The run event/status vocabulary slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `GET /api/runs/{run_id}/events` proving the timeline is derived from the run record, non-durable, and includes status vocabulary plus event-store safeguards
 - a browser smoke that starts the Pro API and web shell and verifies that the run event timeline renders current status, non-durable mode, recent events, status vocabulary, and timeline safeguards
+
+The gated live-adapter candidate slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `GET /api/provider-adapter/candidates` and `POST /api/provider-adapter/gate-check` proving the OfoxAI candidate is registered but execution remains denied with explicit auth, vault, quota, and worker blockers
+- a browser smoke that starts the Pro API and web shell, runs the adapter dry-run, clicks `Check live gates`, and verifies that the live gate panel renders the OfoxAI candidate, denied execution, and blocking reasons

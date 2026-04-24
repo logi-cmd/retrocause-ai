@@ -1860,3 +1860,86 @@ This task adds a non-durable run event/status vocabulary for the Pro Rust produc
 - The event timeline is not durable and should not be treated as an audit log.
 - There is still no event store, tenant resolver, real auth, credential vault, billing/quota ledger, persisted worker lease, retry scheduler, or live source/provider call path.
 - Future hosted Pro should replace or supplement this derived timeline with event-store rows after auth, storage, and worker boundaries are real.
+
+## Pro Product Core Slice 19 - Gated Live-Adapter Candidate
+
+### Scope
+
+This task adds the first gated live-provider adapter candidate for the Pro Rust product core. The provider-routing crate now registers an OfoxAI model adapter candidate and a gate-check payload, the API exposes keyless candidate/gate-check endpoints, and the graph-first web shell renders candidate and denied gate-check panels. No provider credentials, credential vaults, live provider/search calls, auth enforcement, billing, database/Redis connections, workers, OSS runtime changes, dependency changes, or package publishing were added.
+
+### Files Updated
+
+- `pro/crates/provider-routing/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `ProviderAdapterCandidateCatalog`, `ProviderAdapterCandidate`, `ProviderAdapterGate`, `ProviderAdapterGateCheckRequest`, and `ProviderAdapterGateCheckResult`.
+- Added `provider_adapter_candidates()` with a registration-only OfoxAI model adapter candidate.
+- Added `provider_adapter_gate_check()` so preview-observed gates can be reported while live execution remains denied until real auth, vault, quota-ledger, and worker gates exist.
+- Added `GET /api/provider-adapter/candidates` and `POST /api/provider-adapter/gate-check`.
+- Added Pro web panels for the live adapter candidate and gate-check result, including explicit blocking reasons.
+- Updated Pro docs and project state so the next focus moves to graph-review comparison workflow and the real hosted boundaries required before live execution.
+
+### Commands Run
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all`
+  - Result: passed.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `22 passed`.
+  - Domain tests: `11 passed`.
+  - Provider-routing tests: `10 passed`.
+  - Queue tests: `6 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API adapter-candidate smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8817` with a temporary local run-store path.
+  - Called `GET /api/provider-adapter/candidates`.
+  - Called `POST /api/provider-adapter/gate-check` with preview gates marked observed.
+  - Result: passed; one OfoxAI candidate was returned, `execution_allowed=false`, `workspace_auth_enforced` and `credential_vault_connected` blockers were present, and warning `live_provider_execution_denied` was present.
+
+- Pro browser adapter-candidate smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8818` and `retrocause-pro-web.exe` on `127.0.0.1:3034`.
+  - Aborted external font requests in Playwright so inline scripts could run without network font blocking.
+  - Ran the adapter dry-run, clicked `Check live gates`, and verified the candidate/gate panels.
+  - Result: passed; the UI rendered `OfoxAI model adapter candidate`, `execution denied`, `Live adapter gate check`, `workspace_auth_enforced`, and `credential_vault_connected`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - A key-shaped scan for common provider-token prefixes and API-key assignment patterns found no actual key-shaped tokens in the diff.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the project state was synchronized to mark the gated OfoxAI adapter candidate as implemented and move the next Pro focus to graph-review workflow plus real hosted boundaries.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET /api/provider-adapter/candidates` and `POST /api/provider-adapter/gate-check`; it does not change OSS APIs, accept credentials, connect a vault, enforce auth, mutate billing/quota, or execute provider calls.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice explicitly does not enable provider execution. It does not accept or read provider secrets, connect a credential vault, enforce auth, mutate billing/quota, or protect hosted resources. The gate-check endpoint always returns `execution_allowed=false`.
+- Dependencies: no new crates, npm packages, lockfile changes, or version upgrades were introduced.
+- Performance: the candidate catalog and gate-check are deterministic in-process payloads. They add no provider, database, Redis, worker, credential-vault, or billing load.
+- Understanding: the deliberate tradeoff is registering a concrete OfoxAI candidate before implementing the adapter. This gives future work a named target and visible blockers without creating a fake live path.
+- Continuity: reused the provider-routing crate, Axum JSON route style, the existing web `fetchJson` helper, the adapter card styling, the earlier dry-run result state, and the run event/workspace/auth preview gates. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- The OfoxAI adapter candidate is not a live adapter.
+- The gate check is preview-only and should not be treated as real security, quota enforcement, provider connectivity, or worker readiness.
+- Future hosted Pro still needs tenant/auth enforcement, credential vault integration, a quota ledger, worker execution, durable event storage, retry scheduling, and provider SDK integration before any live calls are safe.

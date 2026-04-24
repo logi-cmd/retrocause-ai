@@ -190,6 +190,30 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "idle" }
                                 }
                             }
+                            div id="provider-adapter-candidate-panel" class="adapter-candidate-panel" {
+                                article class="quota-meter quota-meter--empty" {
+                                    div {
+                                        strong { "Live adapter candidate" }
+                                        p { "Candidate gates load from the Pro API; live provider calls stay denied." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "gated" }
+                                }
+                            }
+                            button id="live-adapter-gate-check-button" type="button" {
+                                "Check live gates"
+                            }
+                            p id="live-adapter-gate-check-status" class="console-status" {
+                                "Gate check verifies auth, quota, dry-run, and event prerequisites without calling providers."
+                            }
+                            div id="live-adapter-gate-check-result" class="adapter-gate-check-result" {
+                                article class="quota-meter quota-meter--empty" {
+                                    div {
+                                        strong { "No live gate check yet" }
+                                        p { "Run the check to see exactly why live adapter execution is still blocked." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "denied" }
+                                }
+                            }
                         }
 
                         aside class="execution-console" aria-label="Execution queue" {
@@ -451,6 +475,11 @@ fn client_script() -> &'static str {
   const byId = (id) => document.getElementById(id);
   let currentRun = seed;
   let activeNodeId = seed?.graph?.nodes?.[0]?.id || null;
+  let lastAdapterDryRun = null;
+  let workspaceAccessLoaded = false;
+  let providerStatusLoaded = Boolean(providerSeed?.entries?.length);
+  let runEventsLoaded = false;
+  let selectedAdapterCandidateId = "ofoxai_model_candidate";
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -650,6 +679,7 @@ fn client_script() -> &'static str {
   function renderWorkspaceAccess(context) {
     const panel = byId("workspace-access-panel");
     if (!panel) return;
+    workspaceAccessLoaded = Boolean(context);
     if (!context) {
       panel.innerHTML = `
         <article class="access-card access-card--empty">
@@ -705,6 +735,7 @@ fn client_script() -> &'static str {
   function renderRunEvents(timeline) {
     const panel = byId("run-event-panel");
     if (!panel) return;
+    runEventsLoaded = Boolean(timeline);
     if (!timeline) {
       panel.innerHTML = `
         <article class="event-card event-card--empty">
@@ -758,6 +789,7 @@ fn client_script() -> &'static str {
   }
 
   function renderProviderStatus(snapshot) {
+    providerStatusLoaded = Boolean(snapshot?.entries?.length);
     setText("provider-status-mode", readable(snapshot.mode || "local_alpha_no_credentials"));
     const list = byId("provider-status-list");
     if (!list) return;
@@ -824,6 +856,7 @@ fn client_script() -> &'static str {
   function renderProviderAdapterDryRun(result) {
     const panel = byId("provider-adapter-dry-run-result");
     if (!panel) return;
+    lastAdapterDryRun = result || null;
     if (!result) {
       panel.innerHTML = `
         <article class="quota-meter quota-meter--empty">
@@ -872,6 +905,97 @@ fn client_script() -> &'static str {
         <section>
           <p class="work-order-label">Warnings</p>
           <ul class="work-order-list">${warnings || "<li>No warnings returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
+  function renderProviderAdapterCandidates(catalog) {
+    const panel = byId("provider-adapter-candidate-panel");
+    if (!panel) return;
+    if (!catalog || !(catalog.candidates || []).length) {
+      panel.innerHTML = `
+        <article class="quota-meter quota-meter--empty">
+          <div>
+            <strong>Live adapter candidate</strong>
+            <p>Candidate gates load from the Pro API; live provider calls stay denied.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">gated</span>
+        </article>
+      `;
+      return;
+    }
+
+    const candidate = catalog.candidates[0];
+    selectedAdapterCandidateId = candidate.id || selectedAdapterCandidateId;
+    const gates = (candidate.required_gates || []).slice(0, 4).map((gate) => `
+      <li>
+        <strong>${escapeHtml(gate.label || gate.id)}</strong>
+        <span>${escapeHtml(readable(gate.status || "blocked"))} / ${escapeHtml(gate.owner || "owner")}</span>
+      </li>
+    `).join("");
+    const safeguards = (catalog.safeguards || []).slice(0, 3).map((guard) => `<li>${escapeHtml(guard)}</li>`).join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card adapter-card">
+        <div class="work-order-header">
+          <strong>${escapeHtml(candidate.label || "Live adapter candidate")}</strong>
+          <span class="quota-state quota-state--deferred">${candidate.execution_allowed ? "execution on" : "execution denied"}</span>
+          <p>${escapeHtml(candidate.provider_kind || "provider")} / ${escapeHtml(candidate.lane_id || "lane")}</p>
+          <small>${escapeHtml(candidate.description || "Candidate is gated before live execution.")}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Required gates</p>
+          <ol class="work-order-list">${gates || "<li>No gates returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>Live calls remain denied.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
+  function renderProviderAdapterGateCheck(result) {
+    const panel = byId("live-adapter-gate-check-result");
+    if (!panel) return;
+    if (!result) {
+      panel.innerHTML = `
+        <article class="quota-meter quota-meter--empty">
+          <div>
+            <strong>No live gate check yet</strong>
+            <p>Run the check to see exactly why live adapter execution is still blocked.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">denied</span>
+        </article>
+      `;
+      return;
+    }
+
+    const gates = (result.gates || []).slice(0, 6).map((gate) => `
+      <li>
+        <strong>${escapeHtml(gate.label || gate.id)}</strong>
+        <span>${escapeHtml(readable(gate.status || "blocked"))} / ${escapeHtml(gate.owner || "owner")}</span>
+        <small>${escapeHtml(gate.description || "Gate has no description.")}</small>
+      </li>
+    `).join("");
+    const blockers = (result.blocking_reasons || []).slice(0, 6).map((reason) => `<li>${escapeHtml(reason)}</li>`).join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card adapter-card">
+        <div class="work-order-header">
+          <strong>Live adapter gate check</strong>
+          <span class="quota-state quota-state--deferred">${result.execution_allowed ? "execution on" : "execution denied"}</span>
+          <p>${escapeHtml(readable(result.mode || "denied_preview_only"))} / ${escapeHtml(result.candidate_id || "candidate")}</p>
+          <small>${escapeHtml(result.next_required_step || "Live execution remains blocked.")}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Gate states</p>
+          <ol class="work-order-list">${gates || "<li>No gates returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Blocking reasons</p>
+          <ul class="work-order-list">${blockers || "<li>No blockers returned.</li>"}</ul>
         </section>
       </article>
     `;
@@ -1158,6 +1282,27 @@ fn client_script() -> &'static str {
     );
   }
 
+  async function runProviderAdapterGateCheck() {
+    setText("live-adapter-gate-check-status", "Checking live adapter gates...");
+    const result = await fetchJson("/api/provider-adapter/gate-check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspace_id: currentRun?.workspace_id || "workspace_web",
+        candidate_id: selectedAdapterCandidateId,
+        dry_run_observed: Boolean(lastAdapterDryRun),
+        auth_context_observed: workspaceAccessLoaded,
+        quota_owner_confirmed: providerStatusLoaded,
+        event_timeline_observed: runEventsLoaded,
+      }),
+    });
+    renderProviderAdapterGateCheck(result);
+    setText(
+      "live-adapter-gate-check-status",
+      `Gate check denied live execution for ${result.candidate_id}; ${result.blocking_reasons?.length || 0} blockers remain.`,
+    );
+  }
+
   byId("run-create-form")?.addEventListener("submit", (event) => {
     createRun(event).catch((error) => setStatus(`API error: ${error.message}`));
   });
@@ -1173,6 +1318,10 @@ fn client_script() -> &'static str {
   byId("provider-adapter-dry-run-button")?.addEventListener("click", () => {
     runProviderAdapterDryRun()
       .catch((error) => setText("provider-adapter-dry-run-status", `Dry-run error: ${error.message}`));
+  });
+  byId("live-adapter-gate-check-button")?.addEventListener("click", () => {
+    runProviderAdapterGateCheck()
+      .catch((error) => setText("live-adapter-gate-check-status", `Gate check error: ${error.message}`));
   });
   document.addEventListener("click", (event) => {
     const button = event.target.closest("[data-review-kind][data-review-id]");
@@ -1192,6 +1341,8 @@ fn client_script() -> &'static str {
   renderProviderStatus(providerSeed);
   renderProviderAdapterContract(null);
   renderProviderAdapterDryRun(null);
+  renderProviderAdapterCandidates(null);
+  renderProviderAdapterGateCheck(null);
   renderExecutionJobs([]);
   renderWorkOrder(null);
   renderExecutionLifecycle(null);
@@ -1215,6 +1366,11 @@ fn client_script() -> &'static str {
     .then(renderProviderAdapterContract)
     .catch(() => {
       renderProviderAdapterContract(null);
+    });
+  fetchJson("/api/provider-adapter/candidates")
+    .then(renderProviderAdapterCandidates)
+    .catch(() => {
+      renderProviderAdapterCandidates(null);
     });
   fetchJson("/api/execution-lifecycle")
     .then(renderExecutionLifecycle)
@@ -1794,6 +1950,12 @@ p {
   gap: 0.65rem;
 }
 
+#provider-adapter-candidate-panel,
+#live-adapter-gate-check-result {
+  display: grid;
+  gap: 0.65rem;
+}
+
 #workspace-access-panel {
   display: grid;
   gap: 0.65rem;
@@ -2157,9 +2319,14 @@ mod tests {
         assert!(page.contains("provider-adapter-panel"));
         assert!(page.contains("provider-adapter-dry-run-button"));
         assert!(page.contains("provider-adapter-dry-run-result"));
+        assert!(page.contains("provider-adapter-candidate-panel"));
+        assert!(page.contains("live-adapter-gate-check-button"));
+        assert!(page.contains("live-adapter-gate-check-result"));
         assert!(page.contains("/api/provider-status"));
         assert!(page.contains("/api/provider-adapter-contract"));
         assert!(page.contains("/api/provider-adapter/dry-run"));
+        assert!(page.contains("/api/provider-adapter/candidates"));
+        assert!(page.contains("/api/provider-adapter/gate-check"));
         assert!(page.contains("execution-job-list"));
         assert!(page.contains("execution-work-order-detail"));
         assert!(page.contains("execution-lifecycle-panel"));
@@ -2174,7 +2341,10 @@ mod tests {
         assert!(page.contains("function renderStoragePlan"));
         assert!(page.contains("function renderProviderAdapterContract"));
         assert!(page.contains("function renderProviderAdapterDryRun"));
+        assert!(page.contains("function renderProviderAdapterCandidates"));
+        assert!(page.contains("function renderProviderAdapterGateCheck"));
         assert!(page.contains("function runProviderAdapterDryRun"));
+        assert!(page.contains("function runProviderAdapterGateCheck"));
         assert!(page.contains("queue-preview-button"));
         assert!(page.contains("fetch(`${apiBase}${path}`"));
         assert!(page.contains("POST"));

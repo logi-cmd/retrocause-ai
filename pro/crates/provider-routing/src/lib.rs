@@ -59,6 +59,57 @@ pub struct ProviderAdapterDryRunResult {
     pub warnings: Vec<String>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct ProviderAdapterCandidateCatalog {
+    pub mode: ProviderAdapterCandidateMode,
+    pub execution_allowed: bool,
+    pub candidates: Vec<ProviderAdapterCandidate>,
+    pub safeguards: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ProviderAdapterCandidate {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub provider_kind: &'static str,
+    pub lane_id: &'static str,
+    pub category: LedgerCategory,
+    pub execution_allowed: bool,
+    pub required_gates: Vec<ProviderAdapterGate>,
+    pub description: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ProviderAdapterGate {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub owner: &'static str,
+    pub status: ProviderAdapterGateStatus,
+    pub description: &'static str,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ProviderAdapterGateCheckRequest {
+    pub workspace_id: Option<String>,
+    pub candidate_id: Option<String>,
+    pub dry_run_observed: bool,
+    pub auth_context_observed: bool,
+    pub quota_owner_confirmed: bool,
+    pub event_timeline_observed: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ProviderAdapterGateCheckResult {
+    pub workspace_id: String,
+    pub candidate_id: String,
+    pub mode: ProviderAdapterGateCheckMode,
+    pub execution_allowed: bool,
+    pub gates: Vec<ProviderAdapterGate>,
+    pub blocking_reasons: Vec<String>,
+    pub warnings: Vec<String>,
+    pub next_required_step: String,
+}
+
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderAdapterContractMode {
@@ -69,6 +120,25 @@ pub enum ProviderAdapterContractMode {
 #[serde(rename_all = "snake_case")]
 pub enum ProviderAdapterDryRunMode {
     DryRunOnly,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderAdapterCandidateMode {
+    GatedCandidateOnly,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderAdapterGateCheckMode {
+    DeniedPreviewOnly,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderAdapterGateStatus {
+    SatisfiedPreview,
+    Blocked,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -365,6 +435,130 @@ pub fn provider_adapter_dry_run(
     })
 }
 
+pub fn provider_adapter_candidates() -> ProviderAdapterCandidateCatalog {
+    ProviderAdapterCandidateCatalog {
+        mode: ProviderAdapterCandidateMode::GatedCandidateOnly,
+        execution_allowed: false,
+        candidates: vec![ofoxai_model_candidate()],
+        safeguards: vec![
+            "candidate_registration_only_no_live_calls".to_string(),
+            "auth_quota_dry_run_and_event_gates_required".to_string(),
+            "credential_vault_not_connected".to_string(),
+            "worker_execution_disabled".to_string(),
+        ],
+    }
+}
+
+pub fn provider_adapter_gate_check(
+    request: ProviderAdapterGateCheckRequest,
+) -> ProviderAdapterGateCheckResult {
+    let workspace_id = request
+        .workspace_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("workspace_demo")
+        .to_string();
+    let requested_candidate_id = request
+        .candidate_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("ofoxai_model_candidate")
+        .to_string();
+    let candidate_registered = requested_candidate_id == "ofoxai_model_candidate";
+
+    let gates = vec![
+        gate(
+            "adapter_dry_run_reviewed",
+            "Adapter dry-run reviewed",
+            "provider_router",
+            preview_gate_status(request.dry_run_observed),
+            "A dry-run result must be reviewed before any live adapter can be considered.",
+        ),
+        gate(
+            "workspace_auth_context_reviewed",
+            "Workspace auth context reviewed",
+            "api",
+            preview_gate_status(request.auth_context_observed),
+            "The current preview auth context must be visible, but real enforcement is still required.",
+        ),
+        gate(
+            "quota_owner_confirmed",
+            "Quota owner confirmed",
+            "provider_router",
+            preview_gate_status(request.quota_owner_confirmed),
+            "The candidate must have an explicit quota owner before execution.",
+        ),
+        gate(
+            "run_event_timeline_seen",
+            "Run event timeline seen",
+            "api",
+            preview_gate_status(request.event_timeline_observed),
+            "The run status/event vocabulary must be visible before workers emit live status.",
+        ),
+        gate(
+            "workspace_auth_enforced",
+            "Workspace auth enforced",
+            "auth_service_later",
+            ProviderAdapterGateStatus::Blocked,
+            "Real tenant and actor enforcement is not implemented yet.",
+        ),
+        gate(
+            "credential_vault_connected",
+            "Credential vault connected",
+            "worker_boundary_later",
+            ProviderAdapterGateStatus::Blocked,
+            "Provider credentials must come from a vault-owned worker boundary later.",
+        ),
+        gate(
+            "quota_ledger_connected",
+            "Quota ledger connected",
+            "billing_later",
+            ProviderAdapterGateStatus::Blocked,
+            "Billable usage and shared-pool limits are not connected yet.",
+        ),
+        gate(
+            "worker_execution_enabled",
+            "Worker execution enabled",
+            "worker_pool_later",
+            ProviderAdapterGateStatus::Blocked,
+            "No worker process is allowed to execute provider calls in this slice.",
+        ),
+    ];
+
+    let mut blocking_reasons = gates
+        .iter()
+        .filter(|gate| gate.status == ProviderAdapterGateStatus::Blocked)
+        .map(|gate| gate.id.to_string())
+        .collect::<Vec<String>>();
+    if !candidate_registered {
+        blocking_reasons.insert(0, "candidate_not_registered".to_string());
+    }
+
+    let mut warnings = vec![
+        "live_provider_execution_denied".to_string(),
+        "gate_check_is_preview_only".to_string(),
+        "no_provider_credentials_read".to_string(),
+    ];
+    if !candidate_registered {
+        warnings.push("requested_candidate_not_registered".to_string());
+    }
+
+    ProviderAdapterGateCheckResult {
+        workspace_id,
+        candidate_id: requested_candidate_id,
+        mode: ProviderAdapterGateCheckMode::DeniedPreviewOnly,
+        execution_allowed: false,
+        gates,
+        blocking_reasons,
+        warnings,
+        next_required_step:
+            "Implement real tenant auth, credential vault reads, quota ledger enforcement, and worker execution before enabling any live adapter."
+                .to_string(),
+    }
+}
+
 pub fn build_routing_preview_from_status(
     request: RoutingPreviewRequest,
     snapshot: ProviderStatusSnapshot,
@@ -462,6 +656,72 @@ fn routing_step_for(entry: &ProviderQuotaStatus, source_policy: SourcePolicy) ->
     }
 }
 
+fn ofoxai_model_candidate() -> ProviderAdapterCandidate {
+    ProviderAdapterCandidate {
+        id: "ofoxai_model_candidate",
+        label: "OfoxAI model adapter candidate",
+        provider_kind: "hosted_model",
+        lane_id: "managed_model_pool",
+        category: LedgerCategory::Model,
+        execution_allowed: false,
+        required_gates: vec![
+            gate(
+                "adapter_dry_run_reviewed",
+                "Adapter dry-run reviewed",
+                "provider_router",
+                ProviderAdapterGateStatus::Blocked,
+                "Dry-run request/result shape must be reviewed before live execution.",
+            ),
+            gate(
+                "workspace_auth_enforced",
+                "Workspace auth enforced",
+                "auth_service_later",
+                ProviderAdapterGateStatus::Blocked,
+                "Tenant and actor enforcement must exist before provider execution.",
+            ),
+            gate(
+                "quota_ledger_connected",
+                "Quota ledger connected",
+                "billing_later",
+                ProviderAdapterGateStatus::Blocked,
+                "Managed provider usage must be metered before live calls.",
+            ),
+            gate(
+                "run_event_timeline_seen",
+                "Run event timeline seen",
+                "api",
+                ProviderAdapterGateStatus::Blocked,
+                "Live workers need visible status/event vocabulary before execution.",
+            ),
+        ],
+        description: "First future managed-model candidate for extraction and graph synthesis after all live gates exist.",
+    }
+}
+
+fn preview_gate_status(observed: bool) -> ProviderAdapterGateStatus {
+    if observed {
+        ProviderAdapterGateStatus::SatisfiedPreview
+    } else {
+        ProviderAdapterGateStatus::Blocked
+    }
+}
+
+fn gate(
+    id: &'static str,
+    label: &'static str,
+    owner: &'static str,
+    status: ProviderAdapterGateStatus,
+    description: &'static str,
+) -> ProviderAdapterGate {
+    ProviderAdapterGate {
+        id,
+        label,
+        owner,
+        status,
+        description,
+    }
+}
+
 impl std::fmt::Display for RoutingPreviewError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -475,9 +735,12 @@ impl std::error::Error for RoutingPreviewError {}
 #[cfg(test)]
 mod tests {
     use super::{
-        ProviderAdapterContractMode, ProviderAdapterDryRunMode, ProviderAdapterDryRunRequest,
-        RoutingDecision, RoutingPreviewError, RoutingPreviewRequest, RoutingScenario, SourcePolicy,
-        build_routing_preview, provider_adapter_contract, provider_adapter_dry_run,
+        ProviderAdapterCandidateMode, ProviderAdapterContractMode, ProviderAdapterDryRunMode,
+        ProviderAdapterDryRunRequest, ProviderAdapterGateCheckMode,
+        ProviderAdapterGateCheckRequest, ProviderAdapterGateStatus, RoutingDecision,
+        RoutingPreviewError, RoutingPreviewRequest, RoutingScenario, SourcePolicy,
+        build_routing_preview, provider_adapter_candidates, provider_adapter_contract,
+        provider_adapter_dry_run, provider_adapter_gate_check,
     };
 
     #[test]
@@ -625,5 +888,86 @@ mod tests {
         .expect_err("blank query should fail");
 
         assert!(matches!(error, RoutingPreviewError::QueryRequired));
+    }
+
+    #[test]
+    fn adapter_candidates_register_ofoxai_without_execution() {
+        let catalog = provider_adapter_candidates();
+
+        assert_eq!(
+            catalog.mode,
+            ProviderAdapterCandidateMode::GatedCandidateOnly
+        );
+        assert!(!catalog.execution_allowed);
+        assert!(catalog.candidates.iter().any(|candidate| {
+            candidate.id == "ofoxai_model_candidate"
+                && candidate.lane_id == "managed_model_pool"
+                && !candidate.execution_allowed
+        }));
+        assert!(
+            catalog
+                .safeguards
+                .contains(&"credential_vault_not_connected".to_string())
+        );
+    }
+
+    #[test]
+    fn adapter_gate_check_denies_execution_even_when_preview_gates_are_seen() {
+        let result = provider_adapter_gate_check(ProviderAdapterGateCheckRequest {
+            workspace_id: Some(" workspace_alpha ".to_string()),
+            candidate_id: Some("ofoxai_model_candidate".to_string()),
+            dry_run_observed: true,
+            auth_context_observed: true,
+            quota_owner_confirmed: true,
+            event_timeline_observed: true,
+        });
+
+        assert_eq!(result.workspace_id, "workspace_alpha");
+        assert_eq!(result.candidate_id, "ofoxai_model_candidate");
+        assert_eq!(result.mode, ProviderAdapterGateCheckMode::DeniedPreviewOnly);
+        assert!(!result.execution_allowed);
+        assert!(
+            result
+                .blocking_reasons
+                .contains(&"workspace_auth_enforced".to_string())
+        );
+        assert!(
+            result
+                .blocking_reasons
+                .contains(&"credential_vault_connected".to_string())
+        );
+        assert!(result.gates.iter().any(|gate| {
+            gate.id == "adapter_dry_run_reviewed"
+                && gate.status == ProviderAdapterGateStatus::SatisfiedPreview
+        }));
+    }
+
+    #[test]
+    fn adapter_gate_check_reports_missing_preview_gates() {
+        let result = provider_adapter_gate_check(ProviderAdapterGateCheckRequest {
+            workspace_id: None,
+            candidate_id: Some("missing_candidate".to_string()),
+            dry_run_observed: false,
+            auth_context_observed: false,
+            quota_owner_confirmed: false,
+            event_timeline_observed: false,
+        });
+
+        assert!(!result.execution_allowed);
+        assert!(
+            result
+                .blocking_reasons
+                .contains(&"candidate_not_registered".to_string())
+        );
+        assert!(
+            result
+                .blocking_reasons
+                .contains(&"adapter_dry_run_reviewed".to_string())
+        );
+        assert!(
+            result
+                .warnings
+                .contains(&"requested_candidate_not_registered".to_string())
+        );
     }
 }

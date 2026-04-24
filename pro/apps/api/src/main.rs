@@ -13,9 +13,11 @@ use retrocause_pro_domain::{
     workspace_access_context,
 };
 use retrocause_pro_provider_routing::{
-    ProviderAdapterContract, ProviderAdapterDryRunRequest, ProviderAdapterDryRunResult,
+    ProviderAdapterCandidateCatalog, ProviderAdapterContract, ProviderAdapterDryRunRequest,
+    ProviderAdapterDryRunResult, ProviderAdapterGateCheckRequest, ProviderAdapterGateCheckResult,
     RoutingPreviewError, RoutingPreviewPlan, RoutingPreviewRequest, build_routing_preview,
-    provider_adapter_contract, provider_adapter_dry_run,
+    provider_adapter_candidates, provider_adapter_contract, provider_adapter_dry_run,
+    provider_adapter_gate_check,
 };
 use retrocause_pro_queue::{
     ExecutionJob, ExecutionJobSummary, ExecutionLifecycleSpec, ExecutionQueue, ExecutionQueueError,
@@ -78,6 +80,14 @@ fn router() -> Router {
                 .options(cors_preflight),
         )
         .route("/api/provider-adapter-contract", get(provider_adapter))
+        .route(
+            "/api/provider-adapter/candidates",
+            get(provider_adapter_candidate_catalog),
+        )
+        .route(
+            "/api/provider-adapter/gate-check",
+            post(provider_adapter_gate_check_preview).options(cors_preflight),
+        )
         .route(
             "/api/provider-adapter/dry-run",
             post(provider_adapter_dry_run_preview).options(cors_preflight),
@@ -162,6 +172,16 @@ async fn provider_route_preview(
 
 async fn provider_adapter() -> Json<ProviderAdapterContract> {
     Json(provider_adapter_contract())
+}
+
+async fn provider_adapter_candidate_catalog() -> Json<ProviderAdapterCandidateCatalog> {
+    Json(provider_adapter_candidates())
+}
+
+async fn provider_adapter_gate_check_preview(
+    Json(request): Json<ProviderAdapterGateCheckRequest>,
+) -> Json<ProviderAdapterGateCheckResult> {
+    Json(provider_adapter_gate_check(request))
 }
 
 async fn provider_adapter_dry_run_preview(
@@ -573,6 +593,50 @@ mod tests {
             payload
                 .warnings
                 .contains(&"dry_run_only_no_provider_calls".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_adapter_candidates_expose_gated_ofoxai_candidate() {
+        let payload = provider_adapter_candidate_catalog().await.0;
+
+        assert!(!payload.execution_allowed);
+        assert!(payload.candidates.iter().any(|candidate| {
+            candidate.id == "ofoxai_model_candidate"
+                && candidate.lane_id == "managed_model_pool"
+                && !candidate.execution_allowed
+        }));
+        assert!(
+            payload
+                .safeguards
+                .contains(&"worker_execution_disabled".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_adapter_gate_check_denies_live_execution() {
+        let payload = provider_adapter_gate_check_preview(Json(ProviderAdapterGateCheckRequest {
+            workspace_id: Some("workspace_test".to_string()),
+            candidate_id: Some("ofoxai_model_candidate".to_string()),
+            dry_run_observed: true,
+            auth_context_observed: true,
+            quota_owner_confirmed: true,
+            event_timeline_observed: true,
+        }))
+        .await
+        .0;
+
+        assert_eq!(payload.candidate_id, "ofoxai_model_candidate");
+        assert!(!payload.execution_allowed);
+        assert!(
+            payload
+                .blocking_reasons
+                .contains(&"workspace_auth_enforced".to_string())
+        );
+        assert!(
+            payload
+                .warnings
+                .contains(&"live_provider_execution_denied".to_string())
         );
     }
 
