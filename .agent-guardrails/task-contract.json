@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
-  "task": "Wire the Pro graph-first web shell to the Rust API create/list/detail/graph flow: add browser-side create-run controls and graph rendering from API payloads, add minimal CORS support to the Pro API for the local web origin, and synchronize Pro docs/evidence.",
+  "task": "Add the next Pro product-core slice for provider/search quota ownership: define shared Rust domain types for provider/search quota ownership and source cooldown state, expose a local keyless Pro API status endpoint, surface the status in the graph-first Pro web shell, and synchronize Pro docs/evidence. Do not add credentials, live provider calls, billing, or hosted execution.",
   "preset": "generic",
-  "createdAt": "2026-04-24T09:32:38.145Z",
+  "createdAt": "2026-04-24T10:16:56.070Z",
   "allowedPaths": [
     "pro/",
     "docs/PROJECT_STATE.md",
@@ -64,10 +64,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "9914f319-2b3d-4a29-929c-31be2ca20b41",
-    "createdAt": "2026-04-24T09:32:38.144Z",
+    "sessionId": "6f7ea7a4-8d7d-40f6-b567-3bf4f772f93c",
+    "createdAt": "2026-04-24T10:16:56.070Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Wire the Pro graph-first web shell to the Rust API create/list/detail/graph flow: add browser-side create-run controls and graph rendering from API payloads, add minimal CORS support to the Pro API for the local web origin, and synchronize Pro docs/evidence.",
+    "taskRequest": "Add the next Pro product-core slice for provider/search quota ownership: define shared Rust domain types for provider/search quota ownership and source cooldown state, expose a local keyless Pro API status endpoint, surface the status in the graph-first Pro web shell, and synchronize Pro docs/evidence. Do not add credentials, live provider calls, billing, or hosted execution.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],

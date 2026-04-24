@@ -96,6 +96,33 @@ pub struct UsageLedgerEntry {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub struct ProviderStatusSnapshot {
+    pub workspace_id: String,
+    pub mode: ProviderStatusMode,
+    pub generated_at: String,
+    pub entries: Vec<ProviderQuotaStatus>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ProviderQuotaStatus {
+    pub id: String,
+    pub label: String,
+    pub category: LedgerCategory,
+    pub quota_owner: QuotaOwner,
+    pub readiness: ProviderReadiness,
+    pub credential_policy: CredentialPolicy,
+    pub cooldown: CooldownState,
+    pub note: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct CooldownState {
+    pub state: CooldownKind,
+    pub retry_after_seconds: Option<u32>,
+    pub reason: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct VerificationStep {
     pub id: String,
     pub title: String,
@@ -199,6 +226,38 @@ pub enum StepState {
     Done,
     Watching,
     Waiting,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderStatusMode {
+    LocalAlphaNoCredentials,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderReadiness {
+    Ready,
+    NotConfigured,
+    CoolingDown,
+    Deferred,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialPolicy {
+    ManagedProLater,
+    WorkspaceManagedLater,
+    ByokLater,
+    UserEvidenceOnly,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CooldownKind {
+    Clear,
+    CoolingDown,
+    NotApplicable,
 }
 
 pub fn create_run_from_request(sequence: u64, request: CreateRunRequest) -> Result<ProRun, String> {
@@ -654,6 +713,102 @@ pub fn sample_run_summaries() -> Vec<RunSummary> {
     vec![run.summary()]
 }
 
+pub fn provider_status_snapshot() -> ProviderStatusSnapshot {
+    ProviderStatusSnapshot {
+        workspace_id: s("workspace_demo"),
+        mode: ProviderStatusMode::LocalAlphaNoCredentials,
+        generated_at: s("local-alpha-static"),
+        entries: vec![
+            ProviderQuotaStatus {
+                id: s("managed_model_pool"),
+                label: s("Managed model pool"),
+                category: LedgerCategory::Model,
+                quota_owner: QuotaOwner::ManagedPro,
+                readiness: ProviderReadiness::Deferred,
+                credential_policy: CredentialPolicy::ManagedProLater,
+                cooldown: CooldownState {
+                    state: CooldownKind::NotApplicable,
+                    retry_after_seconds: None,
+                    reason: Some(s("Hosted model execution is not connected in this slice.")),
+                },
+                note: s(
+                    "Reserved for Pro-managed model capacity after auth, billing, and queue boundaries exist.",
+                ),
+            },
+            ProviderQuotaStatus {
+                id: s("workspace_search_pool"),
+                label: s("Workspace search pool"),
+                category: LedgerCategory::Search,
+                quota_owner: QuotaOwner::Workspace,
+                readiness: ProviderReadiness::NotConfigured,
+                credential_policy: CredentialPolicy::WorkspaceManagedLater,
+                cooldown: CooldownState {
+                    state: CooldownKind::Clear,
+                    retry_after_seconds: None,
+                    reason: Some(s("No workspace search connector is configured yet.")),
+                },
+                note: s(
+                    "Future workspace-managed search quota will live behind explicit tenant controls.",
+                ),
+            },
+            ProviderQuotaStatus {
+                id: s("byok_search_lane"),
+                label: s("BYOK search lane"),
+                category: LedgerCategory::Search,
+                quota_owner: QuotaOwner::UserProvided,
+                readiness: ProviderReadiness::Deferred,
+                credential_policy: CredentialPolicy::ByokLater,
+                cooldown: CooldownState {
+                    state: CooldownKind::NotApplicable,
+                    retry_after_seconds: None,
+                    reason: Some(s(
+                        "BYOK storage and permissions are deliberately not implemented yet.",
+                    )),
+                },
+                note: s(
+                    "BYOK is tracked as a future ownership mode, not as a local credential field.",
+                ),
+            },
+            ProviderQuotaStatus {
+                id: s("uploaded_evidence_lane"),
+                label: s("Uploaded evidence lane"),
+                category: LedgerCategory::Evidence,
+                quota_owner: QuotaOwner::UserProvided,
+                readiness: ProviderReadiness::Ready,
+                credential_policy: CredentialPolicy::UserEvidenceOnly,
+                cooldown: CooldownState {
+                    state: CooldownKind::Clear,
+                    retry_after_seconds: None,
+                    reason: Some(s(
+                        "User-provided evidence does not consume hosted provider quota.",
+                    )),
+                },
+                note: s(
+                    "Local user-provided evidence can be attached without provider credentials.",
+                ),
+            },
+            ProviderQuotaStatus {
+                id: s("market_search_cooldown"),
+                label: s("Market search cooldown bucket"),
+                category: LedgerCategory::Search,
+                quota_owner: QuotaOwner::ManagedPro,
+                readiness: ProviderReadiness::CoolingDown,
+                credential_policy: CredentialPolicy::ManagedProLater,
+                cooldown: CooldownState {
+                    state: CooldownKind::CoolingDown,
+                    retry_after_seconds: Some(900),
+                    reason: Some(s(
+                        "Example cooldown state for future shared-provider pressure.",
+                    )),
+                },
+                note: s(
+                    "This static bucket lets the UI expose cooldown semantics before live routing exists.",
+                ),
+            },
+        ],
+    }
+}
+
 pub fn sample_run_by_id(run_id: &str) -> Option<ProRun> {
     let run = sample_run();
     (run.id == run_id).then_some(run)
@@ -779,8 +934,9 @@ fn generated_title(question: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        CreateRunRequest, RunStatus, create_run_from_request, sample_run, sample_run_by_id,
-        sample_run_summaries, validate_run_references,
+        CooldownKind, CreateRunRequest, ProviderReadiness, RunStatus, create_run_from_request,
+        provider_status_snapshot, sample_run, sample_run_by_id, sample_run_summaries,
+        validate_run_references,
     };
     use std::collections::HashSet;
 
@@ -866,5 +1022,28 @@ mod tests {
         .expect_err("blank question should be rejected");
 
         assert_eq!(error, "question_required");
+    }
+
+    #[test]
+    fn provider_status_snapshot_keeps_quota_ownership_explicit() {
+        let snapshot = provider_status_snapshot();
+
+        assert_eq!(snapshot.entries.len(), 5);
+        assert!(
+            snapshot
+                .entries
+                .iter()
+                .any(|entry| matches!(entry.readiness, ProviderReadiness::NotConfigured))
+        );
+        assert!(
+            snapshot
+                .entries
+                .iter()
+                .any(|entry| matches!(entry.cooldown.state, CooldownKind::CoolingDown))
+        );
+        assert!(snapshot.entries.iter().all(|entry| {
+            let combined = format!("{} {} {}", entry.id, entry.label, entry.note).to_lowercase();
+            !combined.contains("api_key") && !combined.contains("secret")
+        }));
     }
 }

@@ -11,9 +11,9 @@ The Rust rewrite lives under `pro/` inside this repository so the product and ar
 ## Current architecture goals
 
 1. Establish a clean Rust workspace boundary.
-2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, and usage ledger entries.
-3. Stand up API endpoints that expose run summaries, run detail, graph payloads, and in-memory run creation.
-4. Render a graph-first web shell from the same shared Rust payload and wire it to the local API create/read flow.
+2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, usage ledger entries, provider quota ownership, and cooldown state.
+3. Stand up API endpoints that expose run summaries, run detail, graph payloads, in-memory run creation, and keyless provider/search quota status.
+4. Render a graph-first web shell from the same shared Rust payload and wire it to the local API create/read flow plus provider-status view.
 5. Keep Pro separate from the OSS Python/FastAPI + Next.js runtime.
 
 ## Workspace layout
@@ -65,6 +65,8 @@ The first shared crate now defines:
 - challenge checks
 - source status cards
 - usage ledger entries
+- provider/search quota ownership entries
+- source cooldown state
 - verification steps
 - an owned `CreateRunRequest` builder for process-local alpha run creation
 - a canonical seed run used by both the API and the web shell
@@ -83,11 +85,12 @@ Initial responsibility:
 - `POST /api/runs`
 - `GET /api/runs/{run_id}`
 - `GET /api/runs/{run_id}/graph`
+- `GET /api/provider-status`
 - minimal local CORS headers for the separate Pro web port
 - process-local in-memory run storage shared by list/detail/graph reads
-- future home for durable run status, queue control, and saved-run access
+- future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current store is intentionally in-memory. It is useful for proving the API behavior and graph payload contract, but it is not durable storage and should not be treated as a hosted Pro data layer. The CORS behavior is likewise local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current store is intentionally in-memory. It is useful for proving the API behavior and graph payload contract, but it is not durable storage and should not be treated as a hosted Pro data layer. The provider-status endpoint is also static/keyless in this slice: it models ownership and cooldown semantics without exposing credential fields or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -97,6 +100,7 @@ Initial responsibility:
 - visualize the canonical run, including evidence anchors, challenge checks, source health, and usage ledger state
 - create new in-memory runs through `POST /api/runs`
 - reload run summaries, run detail, and graph payloads from the Pro API
+- show provider/search quota ownership, credential policy, and cooldown status through the local provider-status payload
 - establish layout, palette, and information hierarchy for the knowledge-graph experience
 
 ## Future crates after the kickoff
@@ -136,7 +140,7 @@ These are intentionally not created yet. The kickoff only adds abstraction that 
 
 Those semantics should remain explicit in both API payloads and the graph workspace UI.
 
-The current `POST /api/runs` path uses `queued` runs and managed/user-provided quota labels without calling model or search providers. Live provider credentials, BYOK, workspace quotas, and cooldown buckets remain future work.
+The current `POST /api/runs` path uses `queued` runs and managed/user-provided quota labels without calling model or search providers. The current `GET /api/provider-status` path exposes static ownership lanes for managed Pro quota, workspace-managed search quota, BYOK-later search, uploaded-evidence-only input, and an example market-search cooldown bucket. Live provider credentials, BYOK storage, workspace quotas, and real cooldown enforcement remain future work.
 
 ## Knowledge-graph UI direction
 
@@ -164,3 +168,9 @@ The in-memory run-creation slice also uses:
 - `cargo test --manifest-path pro/Cargo.toml`
 
 The web/API wiring slice additionally uses a local browser smoke that starts `retrocause-pro-api.exe` and `retrocause-pro-web.exe`, submits the web create-run form, and verifies that the page reloads the API graph payload for the created run.
+
+The provider-status slice adds focused unit coverage under:
+
+- `cargo test --manifest-path pro/Cargo.toml`
+
+The tests assert that quota ownership remains explicit, the static cooldown bucket is visible, and provider-status payloads do not contain API-key or secret-shaped fields.

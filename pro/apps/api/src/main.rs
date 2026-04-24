@@ -8,8 +8,8 @@ use axum::{
     routing::get,
 };
 use retrocause_pro_domain::{
-    CreateRunRequest, KnowledgeGraph, ProRun, RunStatus, RunSummary, create_run_from_request,
-    sample_run,
+    CreateRunRequest, KnowledgeGraph, ProRun, ProviderStatusSnapshot, RunStatus, RunSummary,
+    create_run_from_request, provider_status_snapshot, sample_run,
 };
 use serde::Serialize;
 use std::{
@@ -67,6 +67,7 @@ fn router() -> Router {
         .route("/", get(index))
         .route("/healthz", get(health))
         .route("/api/graph/seed", get(seed_graph))
+        .route("/api/provider-status", get(provider_status))
         .route(
             "/api/runs",
             get(list_runs).post(create_run).options(cors_preflight),
@@ -96,6 +97,10 @@ async fn cors_preflight() -> Response {
 
 async fn seed_graph(State(state): State<AppState>) -> Json<ProRun> {
     Json(get_run_from_state(&state, "run_semiconductor_controls_001").unwrap_or_else(sample_run))
+}
+
+async fn provider_status() -> Json<ProviderStatusSnapshot> {
+    Json(provider_status_snapshot())
 }
 
 async fn list_runs(State(state): State<AppState>) -> Json<Vec<RunSummary>> {
@@ -262,6 +267,21 @@ mod tests {
         assert_eq!(runs[0].id.as_str(), "run_semiconductor_controls_001");
         assert!(runs[0].node_count > 0);
         assert!(runs[0].edge_count > 0);
+    }
+
+    #[tokio::test]
+    async fn provider_status_exposes_keyless_quota_modes() {
+        let payload = provider_status().await.0;
+
+        assert_eq!(payload.workspace_id.as_str(), "workspace_demo");
+        assert!(payload.entries.iter().any(|entry| {
+            entry.id.as_str() == "market_search_cooldown"
+                && entry.cooldown.retry_after_seconds == Some(900)
+        }));
+        assert!(payload.entries.iter().all(|entry| {
+            let combined = format!("{} {} {}", entry.id, entry.label, entry.note).to_lowercase();
+            !combined.contains("api_key") && !combined.contains("secret")
+        }));
     }
 
     #[tokio::test]

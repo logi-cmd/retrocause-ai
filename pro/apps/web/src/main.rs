@@ -6,7 +6,7 @@ use axum::{
 use maud::{DOCTYPE, Markup, PreEscaped, html};
 use retrocause_pro_domain::{
     ChallengeStatus, EvidenceFreshness, EvidenceStance, GraphEdge, GraphNode, NodeKind, ProRun,
-    RunStatus, SourceStatus, StepState, sample_run,
+    ProviderQuotaStatus, RunStatus, SourceStatus, StepState, provider_status_snapshot, sample_run,
 };
 
 const CANVAS_WIDTH: u16 = 1220;
@@ -22,6 +22,9 @@ async fn index() -> impl IntoResponse {
 
 fn render_page(run: &ProRun, api_base: &str) -> Markup {
     let seed_json = serde_json::to_string_pretty(run).expect("serialize seed run");
+    let provider_snapshot = provider_status_snapshot();
+    let provider_json =
+        serde_json::to_string_pretty(&provider_snapshot).expect("serialize provider status");
 
     html! {
         (DOCTYPE)
@@ -123,6 +126,18 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                             }
                         }
 
+                        aside class="quota-console" aria-label="Provider quota routing" {
+                            p class="eyebrow" { "Quota routing" }
+                            strong id="provider-status-mode" {
+                                (provider_status_mode_label(provider_snapshot.mode))
+                            }
+                            div id="provider-status-list" {
+                                @for entry in &provider_snapshot.entries {
+                                    (render_provider_status(entry))
+                                }
+                            }
+                        }
+
                         aside class="evidence-dock" aria-label="Evidence anchors" {
                             p class="eyebrow" { "Evidence anchors" }
                             div id="evidence-list" {
@@ -165,6 +180,7 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                     }
                 }
                 script id="seed-run-json" type="application/json" { (PreEscaped(seed_json)) }
+                script id="provider-status-json" type="application/json" { (PreEscaped(provider_json)) }
                 script { (PreEscaped(client_script())) }
             }
         }
@@ -225,6 +241,30 @@ fn render_source_meter(source: &str, status: SourceStatus, note: &str) -> Markup
     }
 }
 
+fn render_provider_status(entry: &ProviderQuotaStatus) -> Markup {
+    html! {
+        article class="quota-meter" {
+            div {
+                strong { (entry.label.as_str()) }
+                p { (entry.note.as_str()) }
+                small {
+                    (ledger_category_label(entry.category))
+                    " / "
+                    (quota_owner_label(entry.quota_owner))
+                    " / "
+                    (credential_policy_label(entry.credential_policy))
+                }
+            }
+            span class=(format!(
+                "quota-state quota-state--{}",
+                provider_readiness_label(entry.readiness)
+            )) {
+                (provider_readiness_label(entry.readiness))
+            }
+        }
+    }
+}
+
 fn api_base() -> String {
     std::env::var("PRO_API_BASE").unwrap_or_else(|_| "http://127.0.0.1:8787".to_string())
 }
@@ -234,6 +274,7 @@ fn client_script() -> &'static str {
 (() => {
   const apiBase = document.body.dataset.apiBase || "http://127.0.0.1:8787";
   const seed = JSON.parse(document.getElementById("seed-run-json").textContent || "{}");
+  const providerSeed = JSON.parse(document.getElementById("provider-status-json").textContent || "{}");
   const byId = (id) => document.getElementById(id);
 
   function escapeHtml(value) {
@@ -358,6 +399,22 @@ fn client_script() -> &'static str {
 
   }
 
+  function renderProviderStatus(snapshot) {
+    setText("provider-status-mode", readable(snapshot.mode || "local_alpha_no_credentials"));
+    const list = byId("provider-status-list");
+    if (!list) return;
+    list.innerHTML = (snapshot.entries || []).map((entry) => `
+      <article class="quota-meter">
+        <div>
+          <strong>${escapeHtml(entry.label)}</strong>
+          <p>${escapeHtml(entry.note)}</p>
+          <small>${escapeHtml(readable(entry.category))} / ${escapeHtml(readable(entry.quota_owner))} / ${escapeHtml(readable(entry.credential_policy))}</small>
+        </div>
+        <span class="quota-state quota-state--${escapeHtml(entry.readiness)}">${escapeHtml(readable(entry.readiness))}</span>
+      </article>
+    `).join("");
+  }
+
   async function fetchJson(path, options) {
     const response = await fetch(`${apiBase}${path}`, options);
     if (!response.ok) {
@@ -416,6 +473,12 @@ fn client_script() -> &'static str {
   });
 
   renderRun(seed);
+  renderProviderStatus(providerSeed);
+  fetchJson("/api/provider-status")
+    .then(renderProviderStatus)
+    .catch(() => {
+      renderProviderStatus(providerSeed);
+    });
   refreshRuns(seed.id).catch(() => {
     setStatus(`API offline: start retrocause-pro-api at ${apiBase}`);
   });
@@ -462,6 +525,48 @@ fn source_status_label(status: SourceStatus) -> &'static str {
         SourceStatus::Verified => "verified",
         SourceStatus::Cached => "cached",
         SourceStatus::RateLimited => "rate_limited",
+    }
+}
+
+fn ledger_category_label(category: retrocause_pro_domain::LedgerCategory) -> &'static str {
+    match category {
+        retrocause_pro_domain::LedgerCategory::Model => "model",
+        retrocause_pro_domain::LedgerCategory::Search => "search",
+        retrocause_pro_domain::LedgerCategory::Evidence => "evidence",
+    }
+}
+
+fn quota_owner_label(owner: retrocause_pro_domain::QuotaOwner) -> &'static str {
+    match owner {
+        retrocause_pro_domain::QuotaOwner::ManagedPro => "managed Pro",
+        retrocause_pro_domain::QuotaOwner::Workspace => "workspace",
+        retrocause_pro_domain::QuotaOwner::UserProvided => "user provided",
+    }
+}
+
+fn credential_policy_label(policy: retrocause_pro_domain::CredentialPolicy) -> &'static str {
+    match policy {
+        retrocause_pro_domain::CredentialPolicy::ManagedProLater => "managed later",
+        retrocause_pro_domain::CredentialPolicy::WorkspaceManagedLater => "workspace later",
+        retrocause_pro_domain::CredentialPolicy::ByokLater => "BYOK later",
+        retrocause_pro_domain::CredentialPolicy::UserEvidenceOnly => "user evidence only",
+    }
+}
+
+fn provider_readiness_label(readiness: retrocause_pro_domain::ProviderReadiness) -> &'static str {
+    match readiness {
+        retrocause_pro_domain::ProviderReadiness::Ready => "ready",
+        retrocause_pro_domain::ProviderReadiness::NotConfigured => "not_configured",
+        retrocause_pro_domain::ProviderReadiness::CoolingDown => "cooling_down",
+        retrocause_pro_domain::ProviderReadiness::Deferred => "deferred",
+    }
+}
+
+fn provider_status_mode_label(mode: retrocause_pro_domain::ProviderStatusMode) -> &'static str {
+    match mode {
+        retrocause_pro_domain::ProviderStatusMode::LocalAlphaNoCredentials => {
+            "local alpha / no credentials"
+        }
     }
 }
 
@@ -549,6 +654,7 @@ body {
 .question-band,
 .focus-docket,
 .source-pulse,
+.quota-console,
 .evidence-dock,
 .command-deck,
 .seed-drawer {
@@ -821,16 +927,30 @@ p {
   gap: 0.65rem;
 }
 
+.quota-console {
+  right: 1rem;
+  top: 19.2rem;
+  width: min(380px, calc(100% - 2rem));
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
 #source-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+#provider-status-list {
   display: grid;
   gap: 0.65rem;
 }
 
 .evidence-dock {
   right: 1rem;
-  top: 19.2rem;
+  top: 35.2rem;
   width: min(360px, calc(100% - 2rem));
-  max-height: calc(100vh - 26rem);
+  max-height: calc(100vh - 42rem);
   overflow: auto;
   padding: 0.9rem;
   display: grid;
@@ -838,6 +958,16 @@ p {
 }
 
 .source-meter {
+  padding: 0.72rem;
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--panel-hard) 72%, black);
+}
+
+.quota-meter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.7rem;
+  align-items: start;
   padding: 0.72rem;
   border-radius: 8px;
   background: color-mix(in oklch, var(--panel-hard) 72%, black);
@@ -853,6 +983,7 @@ p {
 
 .evidence-chip p,
 .evidence-chip span,
+.quota-meter small,
 .verdict span,
 .focus-docket li span,
 .graph-node small,
@@ -875,6 +1006,25 @@ p {
   font-size: 0.82rem;
   margin-top: 0.22rem;
 }
+
+.quota-meter p {
+  font-size: 0.8rem;
+  margin-top: 0.22rem;
+}
+
+.quota-state {
+  border: 1px solid color-mix(in oklch, var(--text) 10%, transparent);
+  border-radius: 999px;
+  color: color-mix(in oklch, var(--text) 82%, var(--muted));
+  font-size: 0.72rem;
+  padding: 0.24rem 0.42rem;
+  white-space: nowrap;
+}
+
+.quota-state--ready { color: oklch(0.86 0.08 145); }
+.quota-state--not_configured { color: oklch(0.83 0.08 92); }
+.quota-state--cooling_down { color: var(--danger); }
+.quota-state--deferred { color: color-mix(in oklch, var(--text) 72%, var(--muted)); }
 
 .status-dot {
   width: 0.7rem;
@@ -945,6 +1095,7 @@ p {
   .question-band,
   .focus-docket,
   .source-pulse,
+  .quota-console,
   .evidence-dock,
   .command-deck,
   .seed-drawer,
@@ -995,6 +1146,8 @@ mod tests {
         assert!(page.contains("Knowledge graph operating field"));
         assert!(page.contains("graph-viewport"));
         assert!(page.contains("run-create-form"));
+        assert!(page.contains("provider-status-list"));
+        assert!(page.contains("/api/provider-status"));
         assert!(page.contains("fetch(`${apiBase}${path}`"));
         assert!(page.contains("POST"));
         assert!(page.contains("Focus queue"));

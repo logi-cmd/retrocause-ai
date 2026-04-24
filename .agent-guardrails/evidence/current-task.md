@@ -668,3 +668,79 @@ This task wires the graph-first Pro web shell to the Rust API create/list/detail
 - The API has no auth/tenant boundary yet.
 - The CORS behavior is not production-ready.
 - Provider/search routing, quota ownership enforcement, cooldown buckets, persistence, and richer graph interaction remain future Pro work.
+
+## 2026-04-24 Pro Product Core Slice 4
+
+This task adds the first provider/search quota ownership and cooldown status model for Pro. It keeps the implementation keyless and static: no credentials, no live provider calls, no billing path, and no hosted execution are introduced.
+
+### Files Updated
+
+- `pro/crates/domain/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added shared Rust domain payloads for provider/search quota status, including quota owner, credential policy, readiness, and cooldown state.
+- Added `provider_status_snapshot()` with static local-alpha lanes for managed Pro model quota, workspace search quota, BYOK-later search, uploaded-evidence-only input, and a market-search cooldown bucket.
+- Added keyless `GET /api/provider-status` in the Pro API.
+- Added a quota-routing panel in the graph-first Pro web shell and browser-side refresh from `/api/provider-status`.
+- Updated Pro docs so the next implementation step moves from modeling quota ownership to graph interaction state, durable run storage, and real routing behind the new payloads.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: contract refreshed for the provider/search quota ownership slice.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - First result: failed because new Rust code needed standard `rustfmt` wrapping.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all`
+  - Result: applied standard formatting.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `8 passed`.
+  - Domain tests: `8 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Final result: passed.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API provider-status smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8794`.
+  - Called `GET /api/provider-status`.
+  - Result: `mode=local_alpha_no_credentials`, `entries=5`, `market_search_cooldown.retry_after_seconds=900`.
+
+- Pro browser quota-panel smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8795`.
+  - Started `retrocause-pro-web.exe` on `127.0.0.1:3019` with `PRO_API_BASE=http://127.0.0.1:8795`.
+  - Opened the Pro web shell with Playwright/Chromium.
+  - Result: quota panel rendered `5` provider/search rows and displayed `local alpha no credentials`.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. The project state was intentionally synchronized to mark provider/search quota ownership modeling as done and move the next-step queue forward.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds the keyless local `GET /api/provider-status` endpoint for Pro; it does not change the OSS API surface or introduce provider credentials.
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, API keys, credential input fields, provider credentials, BYOK storage, or hosted calls were added. BYOK is represented only as a future ownership policy label.
+- Dependencies: no new packages, lockfile changes, or version upgrades were introduced.
+- Performance: the provider-status snapshot is static and tiny. The browser makes one extra GET request and falls back to the embedded static payload if the API is offline.
+- Understanding: this deliberately models ownership/cooldown semantics before building any executor, so future provider routing can inherit explicit quota labels instead of burying rate-limit behavior in adapters.
+- Continuity: this reuses the existing shared domain crate, Axum API pattern, Maud web shell, and local-alpha API/web split. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- The provider-status payload is static; it does not enforce real quota, cooldown, tenant, or billing rules yet.
+- There is still no auth/tenant boundary, persistent run store, credential vault, provider executor, or queue.
+- The browser panel is an inspectable status surface, not the final provider-management UX.
