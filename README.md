@@ -142,9 +142,9 @@ The OSS repository contains no provider secrets, and the OSS UI does not expose 
 
 OSS 仓库不包含 provider secret，OSS UI 也不暴露凭据输入框。OpenRouter 已弃用，不再属于受支持的 OSS provider surface。
 
-Future hosted model/search execution should live in the separate full-stack Rust Pro implementation, where credentials, quotas, queues, and billing can be designed deliberately.
+Hosted model/search execution belongs in the separate full-stack Rust Pro implementation under `pro/`, where credentials, quotas, queues, and billing can be designed deliberately.
 
-未来托管模型/搜索执行应放在独立的全栈 Rust Pro 实现中，这样凭据、配额、队列和计费才能被认真设计。
+未来托管模型/搜索执行应放在 `pro/` 下的独立全栈 Rust Pro 实现中，这样凭据、配额、队列和计费才能被认真设计。
 
 ## Local Workflow Features / 本地工作流功能
 
@@ -215,15 +215,15 @@ RetroCause 适合需要“解释事件原因，并检查推理链”的场景：
 - 公司或竞品复盘
 - 证据锚定解释 UX 的研究 demo
 
-## OSS vs Future Pro / OSS 与未来 Pro
+## OSS vs Pro / OSS 与 Pro
 
 **OSS:** local, inspectable analysis for individual researchers and builders. OSS includes the evidence board, source trace, challenge coverage, value harness, scenario-aware single-run briefs, local saved runs, pasted uploaded evidence, and a copyable Markdown research brief.
 
-**Future Pro:** a separate full-stack Rust product. Pro should focus on hosted reliability, durable queues, workspace storage, exports, scheduled watch topics, review workflows, source-policy controls, and a redesigned knowledge-graph-first frontend.
+**Pro:** a separate full-stack Rust product line under `pro/`. The current foundation includes a shared run/graph payload, a small Axum API, and a graph-first web shell. Future Pro work should focus on hosted reliability, durable queues, workspace storage, exports, scheduled watch topics, review workflows, source-policy controls, and a redesigned knowledge-graph-first frontend.
 
 **OSS：** 面向个人研究者和开发者，重点是本地可运行、可检查、可复制。OSS 包含证据墙、来源轨迹、反证覆盖、value harness、场景化单次简报、本地 saved runs、粘贴式 uploaded evidence、可复制 Markdown 研究简报。
 
-**未来 Pro：** 独立全栈 Rust 产品。Pro 重点是托管可靠性、持久队列、工作区存储、导出、定时主题、审阅流程、来源策略控制，以及重新设计的知识图谱优先前端。
+**Pro：** `pro/` 下的独立全栈 Rust 产品线。当前基础包括共享 run/graph payload、小型 Axum API 和知识图谱优先 web shell。后续 Pro 重点是托管可靠性、持久队列、工作区存储、导出、定时主题、审阅流程、来源策略控制，以及重新设计的知识图谱优先前端。
 
 ## License / 许可证
 

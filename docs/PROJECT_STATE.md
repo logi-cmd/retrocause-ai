@@ -8,7 +8,7 @@ RetroCause is a runnable, inspectable causal explanation product for "why did th
 
 ## Current Status
 
-The OSS version remains the only near-term implementation focus. The active OSS browser/API surface is now explicitly keyless: it keeps the inspectability workflow slices (run metadata, usage ledger, uploaded evidence, saved-run history, degraded-source rows, local/demo causal maps, source trace structures, and reviewability checks) without accepting model or hosted-search credentials. As of 2026-04-24, the current workspace and a fresh local copy both passed the full root `npm test` workflow on Windows, and a release-state audit confirmed that the latest public GitHub release is still `v0.1.0-alpha.5`. This means the project currently meets the bar for a **stable-deliverable local OSS alpha**, not a hosted service and not yet a non-alpha `v0.1.0` release.
+The OSS version is a stable-deliverable local alpha and should remain keyless. The active OSS browser/API surface keeps the inspectability workflow slices (run metadata, usage ledger, uploaded evidence, saved-run history, degraded-source rows, local/demo causal maps, source trace structures, and reviewability checks) without accepting model or hosted-search credentials. As of 2026-04-24, the current workspace and a fresh local copy both passed the full root `npm test` workflow on Windows, and a release-state audit confirmed that the latest public GitHub release is still `v0.1.0-alpha.5`. The next implementation focus has moved to the separate Rust Pro workspace under `pro/`, while OSS maintenance stays conservative.
 
 What is done:
 
@@ -35,23 +35,23 @@ What is not done:
 - stable `v0.1.0` release
 - first-time OSS release polish beyond the current cleaned bilingual README and alpha prerelease
 - hosted Solo Pro / Team Lite workflows such as durable cloud queues, team libraries, PDF/DOCX export, scheduled watch topics, review links, and saved-run comparison
-- Pro implementation work in this codebase; future Pro should be planned as a separate full-stack Rust rewrite after the OSS version is solid
+- hosted Solo Pro / Team Lite production features such as durable cloud queues, billing, exports, scheduled watch topics, review links, and saved-run comparison beyond the current Rust foundation
 
 ## Current Focus
 
-Maintain the stable-deliverable local OSS alpha, fix real user regressions conservatively, and keep hosted provider execution out of this codebase. The stabilization pass addressed the first mobile/source-trace regressions locally, started backend route-module extraction, made the homepage evidence board the canonical graph/card path while keeping older canvas components as legacy secondary surfaces, added a homepage Chinese A-share intraday sample that fills `芯原股份今天盘中为什么下跌？` while selecting the Market scenario, removed active key entry/preflight flows from the OSS browser/API surface, deprecated OpenRouter from active support, and cleaned the root README back into readable bilingual OSS onboarding. The clean-clone first-run validation was rerun successfully on 2026-04-23. The next OSS work should focus on keyless local reviewability, continued maintainability cleanup around remaining legacy canvas layout/state logic plus the large API route module, and keeping the explicit `v0.1.0` release gate in sync with real verification results.
+Maintain the stable-deliverable local OSS alpha conservatively and build Pro in the separate Rust workspace. The stabilization pass addressed the first mobile/source-trace regressions locally, started backend route-module extraction, made the homepage evidence board the canonical graph/card path while keeping older canvas components as legacy secondary surfaces, added a homepage Chinese A-share intraday sample that fills `芯原股份今天盘中为什么下跌？` while selecting the Market scenario, removed active key entry/preflight flows from the OSS browser/API surface, deprecated OpenRouter from active support, and cleaned the root README back into readable bilingual OSS onboarding. The active Pro branch now starts from a graph-first Rust foundation with a richer shared run payload and API endpoints for run list/detail/graph inspection.
 
-Current UX focus: keep the OSS version useful and inspectable before adding more Pro behavior. Validate the general Production Brief Harness across real market, policy/geopolitics, postmortem, and Chinese finance questions. Future Pro workflow depth should be designed after OSS stabilization and should be a separate full-stack Rust rewrite rather than an incremental hosted extension of this alpha codebase.
+Current UX focus: Pro should keep the knowledge graph as the primary workspace. The first Rust web shell is server-rendered and graph-first; future work should add real run creation, persistence, provider/search routing, and interactive graph review without inheriting the OSS page layout.
 
 Current source status: the active OSS browser/API surface is keyless. It returns local/demo analysis payloads, saved-run metadata, uploaded evidence, source-trace structures, and reviewability signals without asking users for model or search credentials. Earlier hosted-source and provider-preflight experiments remain historical context only; OpenRouter is deprecated and is not part of the supported OSS provider surface. The repeatable probe in `scripts/live_stability_probe.py` now exercises the keyless local OSS scenarios instead of requiring provider credentials.
 
-Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md` and has been executed through code, frontend, export, and regression cleanup. The retrieval/output strategy is captured in `docs/retrieval-and-output-strategy.md`. The SourceBroker reliability implementation plan is saved at `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md` and has been executed through documentation/full verification. The explicit non-alpha release bar now lives in `docs/oss-release-gate.md`. Pro planning now starts from `docs/pro-planning-kickoff.md` and `docs/pro-workflow-spec.md`. The local workflow slice is intentionally OSS inspectability work, not a commitment to build hosted Pro on this stack.
+Current planning status: the Production Brief Harness implementation plan is saved at `docs/superpowers/plans/2026-04-14-production-brief-harness.md` and has been executed through code, frontend, export, and regression cleanup. The retrieval/output strategy is captured in `docs/retrieval-and-output-strategy.md`. The SourceBroker reliability implementation plan is saved at `docs/superpowers/plans/2026-04-15-sourcebroker-plan.md` and has been executed through documentation/full verification. The explicit non-alpha release bar now lives in `docs/oss-release-gate.md`. Pro planning starts from `docs/pro-planning-kickoff.md`, `docs/pro-workflow-spec.md`, `docs/pro-prd.md`, and `docs/pro-rust-architecture.md`; implementation now lives under `pro/`.
 
 ## Working Rules
 
 - Keep project documentation synchronized with every behavior, API, UI, or pipeline change. At minimum, update the current task evidence note; when user-visible behavior changes, also update README or the relevant docs page.
-- Keep the shipped OSS alpha stable, and treat Pro work as planning-only unless a new task explicitly reopens OSS runtime changes.
-- Treat future Pro as a separate full-stack Rust rewrite. Do not grow this Python/Next alpha into the future hosted Pro architecture without an explicit planning reset.
+- Keep the shipped OSS alpha stable. Pro work should stay under `pro/` unless a task explicitly reopens OSS runtime changes.
+- Treat Pro as a separate full-stack Rust rewrite. Do not grow the Python/Next alpha into hosted Pro architecture.
 
 ## Done Recently
 
@@ -131,12 +131,14 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Shortened the Chinese time-sensitive market path during alpha probing; current OSS keeps the A-share path keyless/local and focused on reviewable demo behavior.
 - Rewrote the root README as readable English/Chinese OSS onboarding again after Windows mojibake reappeared, including the keyless OSS boundary, local-only saved runs/uploaded evidence, API examples, and the OSS/Future Pro boundary.
 - Cleaned root OSS metadata by restoring readable `AGENTS.md` contributor rules and replacing the mojibake `pyproject.toml` package description with an English package summary, with regression coverage for both files.
+- Landed the Rust Pro foundation on `main` and opened `codex/pro-rust-product-core` for Pro implementation work.
+- Added the first Pro product-core slice: richer shared Rust run/graph/evidence/challenge/source/usage payloads, `/api/runs`, `/api/runs/{run_id}`, `/api/runs/{run_id}/graph`, and a graph-first web shell that renders the richer payload.
 
 ## Known Gaps
 
 - The OSS product can now export a Markdown research brief, show retrieval-health states, reopen local saved runs, has a clean bilingual README, and has now passed a fresh clean-clone install/test smoke again after the latest README cleanup. This closes the first-run local-delivery gate for the current local alpha and is one input into the future non-alpha release bar.
 - Degraded-source states now have deterministic API/brief regression coverage plus browser-level source-trace dogfood for representative rate-limited/cached rows; wider visual QA across all bad-path states remains useful.
-- Direct monetization design should be deferred until OSS is solid; future Pro should be revisited as a full-stack Rust architecture rather than incremental hosted work in the current alpha stack.
+- Direct monetization design should stay behind the Pro product core. The current Pro implementation is still a Rust foundation, not a hosted paid service.
 - Provider-backed live Chinese finance validation has moved out of OSS and into the future hosted Pro line. The current OSS validation target is keyless local reviewability.
 - The repository may still contain mojibake in legacy bilingual docs, test comments, and historical notes on Windows consoles, but the root README, `AGENTS.md`, package metadata, bundled demo data, provider labels, and current homepage/live-failure copy paths have now been cleaned or guarded by tests.
 - Local browser/API E2E now verifies that the currently running backend exposes the current keyless provider catalog and does not expose OpenRouter as an active option.
@@ -145,9 +147,9 @@ Current planning status: the Production Brief Harness implementation plan is sav
 
 ## Next Step
 
-Start a new OSS stabilization task from the post-release QA findings:
+Continue Pro implementation on `codex/pro-rust-product-core`:
 
-1. keep the keyless OSS browser/API path stable and explicit, including Chinese finance demo reviewability
-2. continue the maintainability cleanup from `docs/codebase-audit.md`, next targeting legacy canvas layout/state retirement or the remaining homepage panel layout/query-flow split
-3. continue backend cleanup by moving route orchestration out of `retrocause/api/main.py` in small verified slices
-4. keep the `v0.1.0` release bar explicit in `docs/oss-release-gate.md` if new regressions or new release criteria appear
+1. add real run creation and in-memory run storage behind the current Rust API payload shape
+2. prepare provider/search quota ownership types before adding any live credentials or hosted calls
+3. add graph interaction state to the Pro web shell without inheriting the OSS evidence-board layout
+4. keep the keyless OSS browser/API path stable and avoid changing OSS runtime unless a task explicitly asks for it

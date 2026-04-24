@@ -4,7 +4,10 @@ use axum::{
     routing::get,
 };
 use maud::{DOCTYPE, Markup, PreEscaped, html};
-use retrocause_pro_domain::{GraphEdge, GraphNode, NodeKind, RunSeed, sample_run};
+use retrocause_pro_domain::{
+    ChallengeStatus, EvidenceFreshness, EvidenceStance, GraphEdge, GraphNode, NodeKind, ProRun,
+    RunStatus, SourceStatus, StepState, sample_run,
+};
 
 const CANVAS_WIDTH: u16 = 1220;
 const CANVAS_HEIGHT: u16 = 720;
@@ -17,7 +20,7 @@ async fn index() -> impl IntoResponse {
     Html(render_page(&sample_run()).into_string())
 }
 
-fn render_page(run: &RunSeed) -> Markup {
+fn render_page(run: &ProRun) -> Markup {
     let seed_json = serde_json::to_string_pretty(run).expect("serialize seed run");
 
     html! {
@@ -46,10 +49,10 @@ fn render_page(run: &RunSeed) -> Markup {
                                 }
                             }
                             div class="run-state" {
-                                span class="state-token state-token--live" { (run.run_state) }
+                                span class="state-token state-token--live" { (run_status_label(run.status)) }
                                 span class="state-token" { "confidence " (percent(run.confidence)) }
-                                span class="state-token" { (run.nodes.len()) " nodes" }
-                                span class="state-token" { (run.edges.len()) " edges" }
+                                span class="state-token" { (run.graph.nodes.len()) " nodes" }
+                                span class="state-token" { (run.graph.edges.len()) " edges" }
                             }
                         }
 
@@ -57,6 +60,7 @@ fn render_page(run: &RunSeed) -> Markup {
                             p class="eyebrow" { "Run" }
                             h2 { (run.title) }
                             p { (run.question) }
+                            strong { (run.operator_summary.headline) }
                         }
 
                         div class="graph-viewport" {
@@ -67,11 +71,11 @@ fn render_page(run: &RunSeed) -> Markup {
                                 viewBox={(format!("0 0 {} {}", CANVAS_WIDTH, CANVAS_HEIGHT))}
                                 aria-hidden="true"
                             {
-                                @for edge in &run.edges {
+                                @for edge in &run.graph.edges {
                                     (render_edge(run, edge))
                                 }
                             }
-                            @for node in &run.nodes {
+                            @for node in &run.graph.nodes {
                                 (render_node(node))
                             }
                         }
@@ -79,29 +83,52 @@ fn render_page(run: &RunSeed) -> Markup {
                         aside class="focus-docket" aria-label="Focus queue" {
                             p class="eyebrow" { "Focus queue" }
                             ol {
-                                @for step in run.next_steps {
-                                    li { (step) }
+                                @for step in &run.next_steps {
+                                    li {
+                                        span { (step_state_label(step.state)) }
+                                        strong { (step.title) }
+                                    }
                                 }
                             }
                         }
 
                         aside class="source-pulse" aria-label="Source pulse" {
                             p class="eyebrow" { "Source pulse" }
-                            @for source in &run.source_status {
+                            @for source in &run.sources {
                                 (render_source_meter(source.source, source.status, source.note))
+                            }
+                        }
+
+                        aside class="evidence-dock" aria-label="Evidence anchors" {
+                            p class="eyebrow" { "Evidence anchors" }
+                            @for evidence in run.evidence.iter().take(3) {
+                                article class="evidence-chip" {
+                                    div {
+                                        strong { (evidence.title) }
+                                        p { (evidence.excerpt) }
+                                    }
+                                    span { (evidence_stance_label(evidence.stance)) " / " (evidence_freshness_label(evidence.freshness)) }
+                                }
+                            }
+                            div class="challenge-strip" aria-label="Challenge checks" {
+                                @for challenge in &run.challenge_checks {
+                                    span { (challenge_status_label(challenge.status)) ": " (challenge.title) }
+                                }
                             }
                         }
 
                         footer class="command-deck" {
                             div class="verdict" {
                                 p class="eyebrow" { "Current read" }
-                                strong { (run.verdict) }
+                                strong { (run.operator_summary.current_read) }
+                                span { (run.operator_summary.caveat) }
                             }
                             div class="command-clusters" aria-label="Run signals" {
-                                span { (run.run_state) }
+                                span { (run_status_label(run.status)) }
                                 span { (percent(run.confidence)) " confidence" }
-                                span { (run.nodes.len()) " nodes tracked" }
-                                span { (run.edges.len()) " causal links" }
+                                span { (run.graph.nodes.len()) " nodes tracked" }
+                                span { (run.graph.edges.len()) " causal links" }
+                                span { (run.challenge_checks.len()) " challenge checks" }
                             }
                         }
 
@@ -116,13 +143,15 @@ fn render_page(run: &RunSeed) -> Markup {
     }
 }
 
-fn render_edge(run: &RunSeed, edge: &GraphEdge) -> Markup {
+fn render_edge(run: &ProRun, edge: &GraphEdge) -> Markup {
     let source = run
+        .graph
         .nodes
         .iter()
         .find(|node| node.id == edge.source)
         .expect("known source node");
     let target = run
+        .graph
         .nodes
         .iter()
         .find(|node| node.id == edge.target)
@@ -151,18 +180,19 @@ fn render_node(node: &GraphNode) -> Markup {
             }
             h3 { (node.title) }
             p { (node.summary) }
+            small { (node.evidence_ids.len()) " evidence / " (node.challenge_ids.len()) " checks" }
         }
     }
 }
 
-fn render_source_meter(source: &str, status: &str, note: &str) -> Markup {
+fn render_source_meter(source: &str, status: SourceStatus, note: &str) -> Markup {
     html! {
         article class="source-meter" {
             div {
                 strong { (source) }
                 p { (note) }
             }
-            span class=(format!("status-dot status-dot--{}", status)) {}
+            span class=(format!("status-dot status-dot--{}", source_status_label(status))) {}
         }
     }
 }
@@ -186,6 +216,58 @@ fn node_kind_label(kind: NodeKind) -> &'static str {
         NodeKind::Enabler => "enabler",
         NodeKind::Risk => "risk",
         NodeKind::Outcome => "outcome",
+    }
+}
+
+fn run_status_label(status: RunStatus) -> &'static str {
+    match status {
+        RunStatus::Queued => "queued",
+        RunStatus::Running => "running",
+        RunStatus::CoolingDown => "cooling down",
+        RunStatus::PartialLive => "partial live",
+        RunStatus::NeedsFollowup => "needs follow-up",
+        RunStatus::ReadyForReview => "ready for review",
+        RunStatus::Blocked => "blocked",
+    }
+}
+
+fn source_status_label(status: SourceStatus) -> &'static str {
+    match status {
+        SourceStatus::Verified => "verified",
+        SourceStatus::Cached => "cached",
+        SourceStatus::RateLimited => "rate_limited",
+    }
+}
+
+fn evidence_stance_label(stance: EvidenceStance) -> &'static str {
+    match stance {
+        EvidenceStance::Supports => "supports",
+        EvidenceStance::Refutes => "refutes",
+        EvidenceStance::Context => "context",
+    }
+}
+
+fn evidence_freshness_label(freshness: EvidenceFreshness) -> &'static str {
+    match freshness {
+        EvidenceFreshness::Fresh => "fresh",
+        EvidenceFreshness::Cached => "cached",
+        EvidenceFreshness::UserProvided => "user evidence",
+    }
+}
+
+fn challenge_status_label(status: ChallengeStatus) -> &'static str {
+    match status {
+        ChallengeStatus::Checked => "checked",
+        ChallengeStatus::NeedsPrimarySource => "needs primary source",
+        ChallengeStatus::MissingCounterevidence => "missing counterevidence",
+    }
+}
+
+fn step_state_label(state: StepState) -> &'static str {
+    match state {
+        StepState::Done => "done",
+        StepState::Watching => "watching",
+        StepState::Waiting => "waiting",
     }
 }
 
@@ -241,6 +323,7 @@ body {
 .question-band,
 .focus-docket,
 .source-pulse,
+.evidence-dock,
 .command-deck,
 .seed-drawer {
   position: absolute;
@@ -457,10 +540,49 @@ p {
   gap: 0.65rem;
 }
 
+.evidence-dock {
+  right: 1rem;
+  top: 19.2rem;
+  width: min(360px, calc(100% - 2rem));
+  max-height: calc(100vh - 26rem);
+  overflow: auto;
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
 .source-meter {
   padding: 0.72rem;
   border-radius: 8px;
   background: color-mix(in oklch, var(--panel-hard) 72%, black);
+}
+
+.evidence-chip {
+  display: grid;
+  gap: 0.42rem;
+  padding: 0.72rem;
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--panel-hard) 72%, black);
+}
+
+.evidence-chip p,
+.evidence-chip span,
+.verdict span,
+.focus-docket li span,
+.graph-node small,
+.challenge-strip span {
+  color: color-mix(in oklch, var(--text) 72%, var(--muted));
+  font-size: 0.78rem;
+}
+
+.challenge-strip {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.focus-docket li {
+  display: grid;
+  gap: 0.18rem;
 }
 
 .source-meter p {
@@ -537,6 +659,7 @@ p {
   .question-band,
   .focus-docket,
   .source-pulse,
+  .evidence-dock,
   .command-deck,
   .seed-drawer,
   .graph-viewport {
@@ -575,7 +698,7 @@ mod tests {
     #[test]
     fn wire_path_contains_expected_curve_command() {
         let run = sample_run();
-        let path = wire_path(&run.nodes[0], &run.nodes[1]);
+        let path = wire_path(&run.graph.nodes[0], &run.graph.nodes[1]);
         assert!(path.starts_with('M'));
         assert!(path.contains('C'));
     }
@@ -587,5 +710,7 @@ mod tests {
         assert!(page.contains("graph-viewport"));
         assert!(page.contains("Focus queue"));
         assert!(page.contains("Source pulse"));
+        assert!(page.contains("Evidence anchors"));
+        assert!(page.contains("challenge checks"));
     }
 }

@@ -417,3 +417,82 @@ This task lands the already-tested keyless OSS and Pro Rust graph foundation bra
 - Performance: the landing itself changes no runtime path beyond bringing the previously tested branch onto `main`. Pro remains a small server-rendered Rust graph shell at this stage.
 - Understanding: the main tradeoff is Git-history cleanliness versus remote safety. Because the histories were unrelated, this keeps a visible merge commit and avoids force-pushing `main`.
 - Continuity: the landing intentionally keeps the tested branch content as the source of truth. The next work should branch from `main` into a fresh Pro implementation branch.
+
+## 2026-04-24 Pro Product Core Slice 1
+
+This task starts active Pro implementation on `codex/pro-rust-product-core`. It keeps OSS runtime paths untouched and expands only the Rust Pro workspace plus synchronized docs.
+
+### Files Updated
+
+- `pro/crates/domain/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `README.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Replaced the simple Pro seed type with a richer shared `ProRun` payload that includes:
+  - run summary fields
+  - graph nodes and edges
+  - evidence anchors
+  - challenge checks
+  - source health
+  - usage ledger entries
+  - verification steps
+- Added shared validation for graph references to ensure nodes and edges only point at known evidence and challenge ids.
+- Added Pro API endpoints:
+  - `GET /api/runs`
+  - `GET /api/runs/{run_id}`
+  - `GET /api/runs/{run_id}/graph`
+  - retained `GET /api/graph/seed` as a compatibility seed endpoint
+- Updated the Pro web shell to render the richer run payload, including evidence anchors, challenge counts, source health, and operator summary while keeping the graph as the primary surface.
+- Updated current project state and Pro architecture docs to say Pro implementation has started under `pro/`, while OSS remains keyless and stable.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: contract refreshed for a Pro-only product-core slice.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed after formatting.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `4 passed`.
+  - Domain tests: `5 passed`.
+  - Web tests: `2 passed`.
+
+- `npm test`
+  - Result: passed.
+  - Included frontend lint/build, `python -m ruff check retrocause/`, full pytest, and browser E2E.
+  - Pytest result: `321 collected`, all passed.
+  - E2E result: `609 passed`, `1 skipped`, `0 failed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed after moving the `IntoResponse` trait import into the API test module.
+
+- Pro HTTP smoke:
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8791`.
+  - Started `retrocause-pro-web.exe` on `127.0.0.1:3017`.
+  - `GET /api/runs` returned `1` run.
+  - `GET /api/runs/run_semiconductor_controls_001/graph` returned `6` graph nodes and `5` graph edges.
+  - `GET /` on the Pro web shell returned HTTP `200` and included `Evidence anchors`.
+
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with concerns, `85/100`, no blocking errors.
+  - Non-blocking warnings:
+    - this slice spans 4 top-level areas because code and docs/evidence were intentionally synchronized
+    - `docs/PROJECT_STATE.md` changed because the project moved from Pro planning to Pro implementation
+    - `pro/apps/api/src/main.rs` changed public API shape by adding run list/detail/graph endpoints
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, provider credentials, BYOK fields, or hosted calls were added. This is still a static local Pro seed and API/web shell.
+- Dependencies: no dependency or lockfile changes were added in this slice.
+- Performance: payloads remain static and server-rendered, so runtime cost is minimal. The richer JSON payload is deliberately small and bounded while the domain shape is still forming.
+- Understanding: the main tradeoff is keeping static sample data while defining the real Pro payload boundary. This avoids premature persistence or provider routing before the graph/review contract is stable.
+- Continuity: this reuses the existing Rust workspace, Axum API, Maud web shell, and shared domain crate. The intentional continuity break remains the Pro frontend direction: it stays graph-first and does not inherit the OSS evidence-board layout.

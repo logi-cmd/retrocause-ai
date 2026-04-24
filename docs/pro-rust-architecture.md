@@ -1,4 +1,4 @@
-# RetroCause Pro Rust Architecture Kickoff
+# RetroCause Pro Rust Architecture
 
 Last updated: 2026-04-24
 
@@ -6,14 +6,15 @@ Last updated: 2026-04-24
 
 The OSS Python/FastAPI + Next.js app remains the inspectable local product. Pro needs a different runtime shape: queueable jobs, durable run records, explicit quota ownership, and more controlled latency under provider pressure. That is a good fit for a separate Rust codebase rather than accreting hosted concerns into the OSS stack.
 
-For the kickoff, the Rust rewrite lives under `pro/` inside this repository so the product and architecture can evolve in the open without destabilizing OSS runtime paths.
+The Rust rewrite lives under `pro/` inside this repository so the product and architecture can evolve in the open without destabilizing OSS runtime paths.
 
-## Kickoff architecture goals
+## Current architecture goals
 
 1. Establish a clean Rust workspace boundary.
-2. Define the first shared Pro domain types around a graph-first run.
-3. Stand up an API shell and a web shell that both compile and share the same seed run model.
-4. Prove the UI direction: a knowledge-graph workspace as the default Pro surface.
+2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, and usage ledger entries.
+3. Stand up API endpoints that expose run summaries, run detail, and graph payloads.
+4. Render a graph-first web shell from the same shared Rust payload.
+5. Keep Pro separate from the OSS Python/FastAPI + Next.js runtime.
 
 ## Workspace layout
 
@@ -27,7 +28,7 @@ pro/
     domain/
 ```
 
-## Stack choice for the kickoff
+## Stack choice
 
 ### API
 
@@ -43,7 +44,7 @@ Reason: small, explicit, good fit for future queue, cache, and run-record servic
 - `maud`
 - shared Rust domain crate
 
-Reason: the kickoff wants a graph-first shell that compiles quickly and keeps the first Rust web surface simple. Server-rendered HTML gives us a real interface immediately without committing to a WASM/hydration stack too early.
+Reason: the first Pro shell wants a graph-first surface that compiles quickly and keeps the Rust web path simple. Server-rendered HTML gives us a real interface immediately without committing to a WASM/hydration stack too early.
 
 This is a deliberate tradeoff:
 
@@ -54,12 +55,17 @@ If the graph workspace proves out, the next phase can move the web shell toward 
 
 ## Shared domain
 
-The first shared crate defines:
+The first shared crate now defines:
 
+- a `ProRun` payload
+- run summaries
 - graph nodes
 - graph edges
-- evidence/source status cards
-- a run summary model
+- evidence anchors
+- challenge checks
+- source status cards
+- usage ledger entries
+- verification steps
 - a canonical seed run used by both the API and the web shell
 
 This keeps the API and web kickoff honest: they render the same shape instead of drifting into two separate demos.
@@ -71,7 +77,10 @@ This keeps the API and web kickoff honest: they render the same shape instead of
 Initial responsibility:
 
 - health endpoint
-- seed graph endpoint
+- seed graph endpoint retained for compatibility
+- `GET /api/runs`
+- `GET /api/runs/{run_id}`
+- `GET /api/runs/{run_id}/graph`
 - future home for run creation, run status, queue control, and saved-run access
 
 ### `apps/web`
@@ -79,7 +88,7 @@ Initial responsibility:
 Initial responsibility:
 
 - render the graph-first Pro workspace
-- visualize a canonical run state
+- visualize the canonical run, including evidence anchors, challenge checks, source health, and usage ledger state
 - establish layout, palette, and information hierarchy for the knowledge-graph experience
 
 ## Future crates after the kickoff
