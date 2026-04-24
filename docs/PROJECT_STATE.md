@@ -41,7 +41,7 @@ What is not done:
 
 Maintain the stable-deliverable local OSS alpha conservatively and build Pro in the separate Rust workspace. The stabilization pass addressed the first mobile/source-trace regressions locally, started backend route-module extraction, made the homepage evidence board the canonical graph/card path while keeping older canvas components as legacy secondary surfaces, added a homepage Chinese A-share intraday sample that fills `芯原股份今天盘中为什么下跌？` while selecting the Market scenario, removed active key entry/preflight flows from the OSS browser/API surface, deprecated OpenRouter from active support, and cleaned the root README back into readable bilingual OSS onboarding. The active Pro branch now starts from a graph-first Rust foundation with a richer shared run payload and API endpoints for run list/detail/graph inspection.
 
-Current UX focus: Pro should keep the knowledge graph as the primary workspace. The first Rust web shell is server-rendered and graph-first; future work should add real run creation, persistence, provider/search routing, and interactive graph review without inheriting the OSS page layout.
+Current UX focus: Pro should keep the knowledge graph as the primary workspace. The first Rust web shell is server-rendered and graph-first; the Rust API now supports in-memory run creation behind the shared run payload. Future work should add web/API create-run interaction, persistence, provider/search routing, and interactive graph review without inheriting the OSS page layout.
 
 Current source status: the active OSS browser/API surface is keyless. It returns local/demo analysis payloads, saved-run metadata, uploaded evidence, source-trace structures, and reviewability signals without asking users for model or search credentials. Earlier hosted-source and provider-preflight experiments remain historical context only; OpenRouter is deprecated and is not part of the supported OSS provider surface. The repeatable probe in `scripts/live_stability_probe.py` now exercises the keyless local OSS scenarios instead of requiring provider credentials.
 
@@ -133,6 +133,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Cleaned root OSS metadata by restoring readable `AGENTS.md` contributor rules and replacing the mojibake `pyproject.toml` package description with an English package summary, with regression coverage for both files.
 - Landed the Rust Pro foundation on `main` and opened `codex/pro-rust-product-core` for Pro implementation work.
 - Added the first Pro product-core slice: richer shared Rust run/graph/evidence/challenge/source/usage payloads, `/api/runs`, `/api/runs/{run_id}`, `/api/runs/{run_id}/graph`, and a graph-first web shell that renders the richer payload.
+- Added the next Pro product-core slice: owned Rust run payload strings, a `CreateRunRequest` builder, `POST /api/runs`, and process-local in-memory run storage so list/detail/graph reads share the same created-run state.
 
 ## Known Gaps
 
@@ -149,7 +150,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 
 Continue Pro implementation on `codex/pro-rust-product-core`:
 
-1. add real run creation and in-memory run storage behind the current Rust API payload shape
+1. wire the graph-first Pro web shell to the Rust API create/list/detail/graph flow
 2. prepare provider/search quota ownership types before adding any live credentials or hosted calls
 3. add graph interaction state to the Pro web shell without inheriting the OSS evidence-board layout
 4. keep the keyless OSS browser/API path stable and avoid changing OSS runtime unless a task explicitly asks for it

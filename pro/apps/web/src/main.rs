@@ -58,9 +58,9 @@ fn render_page(run: &ProRun) -> Markup {
 
                         div class="question-band" {
                             p class="eyebrow" { "Run" }
-                            h2 { (run.title) }
-                            p { (run.question) }
-                            strong { (run.operator_summary.headline) }
+                            h2 { (run.title.as_str()) }
+                            p { (run.question.as_str()) }
+                            strong { (run.operator_summary.headline.as_str()) }
                         }
 
                         div class="graph-viewport" {
@@ -86,7 +86,7 @@ fn render_page(run: &ProRun) -> Markup {
                                 @for step in &run.next_steps {
                                     li {
                                         span { (step_state_label(step.state)) }
-                                        strong { (step.title) }
+                                        strong { (step.title.as_str()) }
                                     }
                                 }
                             }
@@ -95,7 +95,11 @@ fn render_page(run: &ProRun) -> Markup {
                         aside class="source-pulse" aria-label="Source pulse" {
                             p class="eyebrow" { "Source pulse" }
                             @for source in &run.sources {
-                                (render_source_meter(source.source, source.status, source.note))
+                                (render_source_meter(
+                                    source.source.as_str(),
+                                    source.status,
+                                    source.note.as_str()
+                                ))
                             }
                         }
 
@@ -104,15 +108,15 @@ fn render_page(run: &ProRun) -> Markup {
                             @for evidence in run.evidence.iter().take(3) {
                                 article class="evidence-chip" {
                                     div {
-                                        strong { (evidence.title) }
-                                        p { (evidence.excerpt) }
+                                        strong { (evidence.title.as_str()) }
+                                        p { (evidence.excerpt.as_str()) }
                                     }
                                     span { (evidence_stance_label(evidence.stance)) " / " (evidence_freshness_label(evidence.freshness)) }
                                 }
                             }
                             div class="challenge-strip" aria-label="Challenge checks" {
                                 @for challenge in &run.challenge_checks {
-                                    span { (challenge_status_label(challenge.status)) ": " (challenge.title) }
+                                    span { (challenge_status_label(challenge.status)) ": " (challenge.title.as_str()) }
                                 }
                             }
                         }
@@ -120,8 +124,8 @@ fn render_page(run: &ProRun) -> Markup {
                         footer class="command-deck" {
                             div class="verdict" {
                                 p class="eyebrow" { "Current read" }
-                                strong { (run.operator_summary.current_read) }
-                                span { (run.operator_summary.caveat) }
+                                strong { (run.operator_summary.current_read.as_str()) }
+                                span { (run.operator_summary.caveat.as_str()) }
                             }
                             div class="command-clusters" aria-label="Run signals" {
                                 span { (run_status_label(run.status)) }
@@ -148,13 +152,13 @@ fn render_edge(run: &ProRun, edge: &GraphEdge) -> Markup {
         .graph
         .nodes
         .iter()
-        .find(|node| node.id == edge.source)
+        .find(|node| node.id.as_str() == edge.source.as_str())
         .expect("known source node");
     let target = run
         .graph
         .nodes
         .iter()
-        .find(|node| node.id == edge.target)
+        .find(|node| node.id.as_str() == edge.target.as_str())
         .expect("known target node");
 
     let path = wire_path(source, target);
@@ -164,7 +168,7 @@ fn render_edge(run: &ProRun, edge: &GraphEdge) -> Markup {
     html! {
         path class="wire-shadow" d=(path.clone()) {}
         path class="wire" d=(path) {}
-        text class="wire-label" x=(label_x) y=(label_y) { (edge.label) }
+        text class="wire-label" x=(label_x) y=(label_y) { (edge.label.as_str()) }
     }
 }
 
@@ -178,8 +182,8 @@ fn render_node(node: &GraphNode) -> Markup {
                 p class="node-kind" { (node_kind_label(node.kind)) }
                 span { (percent(node.confidence)) }
             }
-            h3 { (node.title) }
-            p { (node.summary) }
+            h3 { (node.title.as_str()) }
+            p { (node.summary.as_str()) }
             small { (node.evidence_ids.len()) " evidence / " (node.challenge_ids.len()) " checks" }
         }
     }

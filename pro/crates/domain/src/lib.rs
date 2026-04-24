@@ -1,14 +1,14 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ProRun {
-    pub id: &'static str,
-    pub workspace_id: &'static str,
-    pub title: &'static str,
-    pub question: &'static str,
+    pub id: String,
+    pub workspace_id: String,
+    pub title: String,
+    pub question: String,
     pub status: RunStatus,
-    pub updated_at: &'static str,
+    pub updated_at: String,
     pub confidence: f32,
     pub operator_summary: OperatorSummary,
     pub graph: KnowledgeGraph,
@@ -21,13 +21,13 @@ pub struct ProRun {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct RunSummary {
-    pub id: &'static str,
-    pub workspace_id: &'static str,
-    pub title: &'static str,
-    pub question: &'static str,
+    pub id: String,
+    pub workspace_id: String,
+    pub title: String,
+    pub question: String,
     pub status: RunStatus,
     pub confidence: f32,
-    pub updated_at: &'static str,
+    pub updated_at: String,
     pub node_count: usize,
     pub edge_count: usize,
 }
@@ -40,73 +40,80 @@ pub struct KnowledgeGraph {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct GraphNode {
-    pub id: &'static str,
-    pub title: &'static str,
-    pub summary: &'static str,
+    pub id: String,
+    pub title: String,
+    pub summary: String,
     pub kind: NodeKind,
     pub confidence: f32,
     pub x: u16,
     pub y: u16,
-    pub evidence_ids: Vec<&'static str>,
-    pub challenge_ids: Vec<&'static str>,
+    pub evidence_ids: Vec<String>,
+    pub challenge_ids: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct GraphEdge {
-    pub id: &'static str,
-    pub source: &'static str,
-    pub target: &'static str,
-    pub label: &'static str,
+    pub id: String,
+    pub source: String,
+    pub target: String,
+    pub label: String,
     pub strength: f32,
-    pub evidence_ids: Vec<&'static str>,
-    pub challenge_ids: Vec<&'static str>,
+    pub evidence_ids: Vec<String>,
+    pub challenge_ids: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct EvidenceAnchor {
-    pub id: &'static str,
-    pub title: &'static str,
-    pub source: &'static str,
+    pub id: String,
+    pub title: String,
+    pub source: String,
     pub stance: EvidenceStance,
     pub freshness: EvidenceFreshness,
-    pub excerpt: &'static str,
+    pub excerpt: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ChallengeCheck {
-    pub id: &'static str,
-    pub title: &'static str,
+    pub id: String,
+    pub title: String,
     pub status: ChallengeStatus,
-    pub note: &'static str,
+    pub note: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct SourceStatusCard {
-    pub source: &'static str,
+    pub source: String,
     pub status: SourceStatus,
-    pub note: &'static str,
+    pub note: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct UsageLedgerEntry {
     pub category: LedgerCategory,
-    pub name: &'static str,
+    pub name: String,
     pub quota_owner: QuotaOwner,
     pub status: LedgerStatus,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct VerificationStep {
-    pub id: &'static str,
-    pub title: &'static str,
+    pub id: String,
+    pub title: String,
     pub state: StepState,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct OperatorSummary {
-    pub headline: &'static str,
-    pub current_read: &'static str,
-    pub caveat: &'static str,
+    pub headline: String,
+    pub current_read: String,
+    pub caveat: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct CreateRunRequest {
+    pub workspace_id: Option<String>,
+    pub title: Option<String>,
+    pub question: String,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
@@ -194,270 +201,448 @@ pub enum StepState {
     Waiting,
 }
 
-pub fn sample_run() -> ProRun {
-    ProRun {
-        id: "run_semiconductor_controls_001",
-        workspace_id: "workspace_demo",
-        title: "Semiconductor controls reaction map",
-        question: "Why did the latest semiconductor export-control update hit AI infrastructure names so sharply?",
-        status: RunStatus::ReadyForReview,
-        updated_at: "2026-04-24T03:18:00Z",
-        confidence: 0.78,
+pub fn create_run_from_request(sequence: u64, request: CreateRunRequest) -> Result<ProRun, String> {
+    let question = request.question.trim();
+    if question.is_empty() {
+        return Err("question_required".to_string());
+    }
+
+    let workspace_id = non_empty_or_default(request.workspace_id, "workspace_default");
+    let title = non_empty_or_else(request.title, || generated_title(question));
+    let run_id = format!("run_local_{sequence:06}");
+    let evidence_id = format!("{run_id}_question");
+    let challenge_id = format!("{run_id}_primary_source_check");
+
+    let run = ProRun {
+        id: run_id.clone(),
+        workspace_id,
+        title,
+        question: question.to_string(),
+        status: RunStatus::Queued,
+        updated_at: format!("local-seq-{sequence:06}"),
+        confidence: 0.2,
         operator_summary: OperatorSummary {
-            headline: "Policy shock explains the move, but demand offsets are still visible.",
-            current_read: "Tighter export-control language hit short-term demand expectations, while hyperscaler capex and domestic substitution still support the medium-term thesis.",
-            caveat: "Primary-source confirmation is still needed for the final scope of controlled SKUs.",
+            headline: "Run accepted; retrieval has not started yet.".to_string(),
+            current_read: "The Pro API has captured the question and created an inspectable graph shell for the upcoming retrieval and synthesis pipeline.".to_string(),
+            caveat: "This is an in-memory alpha run. It is not durable and it does not call model or search providers yet.".to_string(),
         },
         graph: KnowledgeGraph {
             nodes: vec![
                 GraphNode {
-                    id: "policy_update",
-                    title: "Control scope tightened",
-                    summary: "The new language expanded perceived export risk for advanced AI infrastructure sales.",
+                    id: format!("{run_id}_question_node"),
+                    title: "Question framed".to_string(),
+                    summary: "The submitted question is the starting point for the causal graph.".to_string(),
                     kind: NodeKind::Driver,
-                    confidence: 0.82,
-                    x: 96,
-                    y: 84,
-                    evidence_ids: vec!["ev_policy_release"],
-                    challenge_ids: vec!["cc_scope"],
+                    confidence: 0.35,
+                    x: 120,
+                    y: 180,
+                    evidence_ids: vec![evidence_id.clone()],
+                    challenge_ids: vec![challenge_id.clone()],
                 },
                 GraphNode {
-                    id: "customer_pause",
-                    title: "Customer pause",
-                    summary: "Buyers temporarily slowed purchasing while they parsed what still ships cleanly.",
+                    id: format!("{run_id}_evidence_node"),
+                    title: "Evidence intake pending".to_string(),
+                    summary: "Provider routing, source policy, and evidence collection are queued for the next Pro slice.".to_string(),
                     kind: NodeKind::Risk,
-                    confidence: 0.73,
-                    x: 364,
-                    y: 104,
-                    evidence_ids: vec!["ev_channel_check"],
-                    challenge_ids: vec!["cc_scope"],
+                    confidence: 0.25,
+                    x: 460,
+                    y: 210,
+                    evidence_ids: vec![evidence_id.clone()],
+                    challenge_ids: vec![challenge_id.clone()],
                 },
                 GraphNode {
-                    id: "inventory_buffer",
-                    title: "Inventory buffer",
-                    summary: "Channel and inventory already in place softened the immediate hit.",
-                    kind: NodeKind::Enabler,
-                    confidence: 0.64,
-                    x: 360,
-                    y: 308,
-                    evidence_ids: vec!["ev_company_guidance"],
-                    challenge_ids: vec!["cc_inventory"],
-                },
-                GraphNode {
-                    id: "hyperscaler_capex",
-                    title: "Hyperscaler capex intact",
-                    summary: "Cloud platform spending stayed supportive even as policy headlines worsened sentiment.",
-                    kind: NodeKind::Enabler,
-                    confidence: 0.81,
-                    x: 652,
-                    y: 130,
-                    evidence_ids: vec!["ev_capex_transcript"],
-                    challenge_ids: vec!["cc_capex"],
-                },
-                GraphNode {
-                    id: "domestic_substitution",
-                    title: "Domestic substitution bid",
-                    summary: "Local supply-chain beneficiaries regained support as substitution narratives strengthened.",
-                    kind: NodeKind::Driver,
-                    confidence: 0.69,
-                    x: 660,
-                    y: 332,
-                    evidence_ids: vec!["ev_local_supply_chain"],
-                    challenge_ids: vec!["cc_substitution"],
-                },
-                GraphNode {
-                    id: "price_reaction",
-                    title: "Sharp equity reaction",
-                    summary: "The market priced a near-term revenue slowdown faster than the longer demand offset.",
+                    id: format!("{run_id}_review_node"),
+                    title: "Review graph pending".to_string(),
+                    summary: "The run is visible now so operators can inspect status before live synthesis exists.".to_string(),
                     kind: NodeKind::Outcome,
-                    confidence: 0.78,
-                    x: 948,
-                    y: 218,
-                    evidence_ids: vec!["ev_market_move", "ev_policy_release"],
-                    challenge_ids: vec!["cc_countermove"],
+                    confidence: 0.2,
+                    x: 800,
+                    y: 180,
+                    evidence_ids: vec![evidence_id.clone()],
+                    challenge_ids: vec![challenge_id.clone()],
                 },
             ],
             edges: vec![
                 GraphEdge {
-                    id: "edge-policy-pause",
-                    source: "policy_update",
-                    target: "customer_pause",
-                    label: "raises compliance uncertainty",
+                    id: format!("{run_id}_edge_question_to_evidence"),
+                    source: format!("{run_id}_question_node"),
+                    target: format!("{run_id}_evidence_node"),
+                    label: "requires source retrieval".to_string(),
+                    strength: 0.3,
+                    evidence_ids: vec![evidence_id.clone()],
+                    challenge_ids: vec![challenge_id.clone()],
+                },
+                GraphEdge {
+                    id: format!("{run_id}_edge_evidence_to_review"),
+                    source: format!("{run_id}_evidence_node"),
+                    target: format!("{run_id}_review_node"),
+                    label: "feeds graph synthesis".to_string(),
+                    strength: 0.25,
+                    evidence_ids: vec![evidence_id.clone()],
+                    challenge_ids: vec![challenge_id.clone()],
+                },
+            ],
+        },
+        evidence: vec![EvidenceAnchor {
+            id: evidence_id,
+            title: "Submitted question".to_string(),
+            source: "User input".to_string(),
+            stance: EvidenceStance::Context,
+            freshness: EvidenceFreshness::UserProvided,
+            excerpt: question.to_string(),
+        }],
+        challenge_checks: vec![ChallengeCheck {
+            id: challenge_id,
+            title: "Attach primary evidence before review".to_string(),
+            status: ChallengeStatus::NeedsPrimarySource,
+            note: "The run is created before provider retrieval exists, so it must not be treated as a causal conclusion yet.".to_string(),
+        }],
+        sources: vec![SourceStatusCard {
+            source: "User input".to_string(),
+            status: SourceStatus::Verified,
+            note: "Question captured locally in the Pro API process.".to_string(),
+        }],
+        usage_ledger: vec![
+            UsageLedgerEntry {
+                category: LedgerCategory::Evidence,
+                name: "submitted_question".to_string(),
+                quota_owner: QuotaOwner::UserProvided,
+                status: LedgerStatus::Available,
+            },
+            UsageLedgerEntry {
+                category: LedgerCategory::Search,
+                name: "retrieval_queue".to_string(),
+                quota_owner: QuotaOwner::ManagedPro,
+                status: LedgerStatus::CoolingDown,
+            },
+            UsageLedgerEntry {
+                category: LedgerCategory::Model,
+                name: "graph_synthesis_queue".to_string(),
+                quota_owner: QuotaOwner::ManagedPro,
+                status: LedgerStatus::CoolingDown,
+            },
+        ],
+        next_steps: vec![
+            VerificationStep {
+                id: format!("{run_id}_step_sources"),
+                title: "Route the question through provider and source policy.".to_string(),
+                state: StepState::Waiting,
+            },
+            VerificationStep {
+                id: format!("{run_id}_step_evidence"),
+                title: "Attach evidence anchors before raising confidence.".to_string(),
+                state: StepState::Waiting,
+            },
+            VerificationStep {
+                id: format!("{run_id}_step_review"),
+                title: "Recompute the graph after retrieval and challenge checks finish.".to_string(),
+                state: StepState::Waiting,
+            },
+        ],
+    };
+
+    validate_run_references(&run)?;
+    Ok(run)
+}
+
+pub fn sample_run() -> ProRun {
+    ProRun {
+        id: s("run_semiconductor_controls_001"),
+        workspace_id: s("workspace_demo"),
+        title: s("Semiconductor controls reaction map"),
+        question: s(
+            "Why did the latest semiconductor export-control update hit AI infrastructure names so sharply?",
+        ),
+        status: RunStatus::ReadyForReview,
+        updated_at: s("2026-04-24T03:18:00Z"),
+        confidence: 0.78,
+        operator_summary: OperatorSummary {
+            headline: s("Policy shock explains the move, but demand offsets are still visible."),
+            current_read: s(
+                "Tighter export-control language hit short-term demand expectations, while hyperscaler capex and domestic substitution still support the medium-term thesis.",
+            ),
+            caveat: s(
+                "Primary-source confirmation is still needed for the final scope of controlled SKUs.",
+            ),
+        },
+        graph: KnowledgeGraph {
+            nodes: vec![
+                GraphNode {
+                    id: s("policy_update"),
+                    title: s("Control scope tightened"),
+                    summary: s(
+                        "The new language expanded perceived export risk for advanced AI infrastructure sales.",
+                    ),
+                    kind: NodeKind::Driver,
+                    confidence: 0.82,
+                    x: 96,
+                    y: 84,
+                    evidence_ids: vec![s("ev_policy_release")],
+                    challenge_ids: vec![s("cc_scope")],
+                },
+                GraphNode {
+                    id: s("customer_pause"),
+                    title: s("Customer pause"),
+                    summary: s(
+                        "Buyers temporarily slowed purchasing while they parsed what still ships cleanly.",
+                    ),
+                    kind: NodeKind::Risk,
+                    confidence: 0.73,
+                    x: 364,
+                    y: 104,
+                    evidence_ids: vec![s("ev_channel_check")],
+                    challenge_ids: vec![s("cc_scope")],
+                },
+                GraphNode {
+                    id: s("inventory_buffer"),
+                    title: s("Inventory buffer"),
+                    summary: s(
+                        "Channel and inventory already in place softened the immediate hit.",
+                    ),
+                    kind: NodeKind::Enabler,
+                    confidence: 0.64,
+                    x: 360,
+                    y: 308,
+                    evidence_ids: vec![s("ev_company_guidance")],
+                    challenge_ids: vec![s("cc_inventory")],
+                },
+                GraphNode {
+                    id: s("hyperscaler_capex"),
+                    title: s("Hyperscaler capex intact"),
+                    summary: s(
+                        "Cloud platform spending stayed supportive even as policy headlines worsened sentiment.",
+                    ),
+                    kind: NodeKind::Enabler,
+                    confidence: 0.81,
+                    x: 652,
+                    y: 130,
+                    evidence_ids: vec![s("ev_capex_transcript")],
+                    challenge_ids: vec![s("cc_capex")],
+                },
+                GraphNode {
+                    id: s("domestic_substitution"),
+                    title: s("Domestic substitution bid"),
+                    summary: s(
+                        "Local supply-chain beneficiaries regained support as substitution narratives strengthened.",
+                    ),
+                    kind: NodeKind::Driver,
+                    confidence: 0.69,
+                    x: 660,
+                    y: 332,
+                    evidence_ids: vec![s("ev_local_supply_chain")],
+                    challenge_ids: vec![s("cc_substitution")],
+                },
+                GraphNode {
+                    id: s("price_reaction"),
+                    title: s("Sharp equity reaction"),
+                    summary: s(
+                        "The market priced a near-term revenue slowdown faster than the longer demand offset.",
+                    ),
+                    kind: NodeKind::Outcome,
+                    confidence: 0.78,
+                    x: 948,
+                    y: 218,
+                    evidence_ids: vec![s("ev_market_move"), s("ev_policy_release")],
+                    challenge_ids: vec![s("cc_countermove")],
+                },
+            ],
+            edges: vec![
+                GraphEdge {
+                    id: s("edge-policy-pause"),
+                    source: s("policy_update"),
+                    target: s("customer_pause"),
+                    label: s("raises compliance uncertainty"),
                     strength: 0.84,
-                    evidence_ids: vec!["ev_policy_release", "ev_channel_check"],
-                    challenge_ids: vec!["cc_scope"],
+                    evidence_ids: vec![s("ev_policy_release"), s("ev_channel_check")],
+                    challenge_ids: vec![s("cc_scope")],
                 },
                 GraphEdge {
-                    id: "edge-pause-price",
-                    source: "customer_pause",
-                    target: "price_reaction",
-                    label: "drives near-term revenue fear",
+                    id: s("edge-pause-price"),
+                    source: s("customer_pause"),
+                    target: s("price_reaction"),
+                    label: s("drives near-term revenue fear"),
                     strength: 0.79,
-                    evidence_ids: vec!["ev_channel_check", "ev_market_move"],
-                    challenge_ids: vec!["cc_countermove"],
+                    evidence_ids: vec![s("ev_channel_check"), s("ev_market_move")],
+                    challenge_ids: vec![s("cc_countermove")],
                 },
                 GraphEdge {
-                    id: "edge-inventory-price",
-                    source: "inventory_buffer",
-                    target: "price_reaction",
-                    label: "limits the downside",
+                    id: s("edge-inventory-price"),
+                    source: s("inventory_buffer"),
+                    target: s("price_reaction"),
+                    label: s("limits the downside"),
                     strength: 0.56,
-                    evidence_ids: vec!["ev_company_guidance"],
-                    challenge_ids: vec!["cc_inventory"],
+                    evidence_ids: vec![s("ev_company_guidance")],
+                    challenge_ids: vec![s("cc_inventory")],
                 },
                 GraphEdge {
-                    id: "edge-capex-price",
-                    source: "hyperscaler_capex",
-                    target: "price_reaction",
-                    label: "keeps the medium-term thesis alive",
+                    id: s("edge-capex-price"),
+                    source: s("hyperscaler_capex"),
+                    target: s("price_reaction"),
+                    label: s("keeps the medium-term thesis alive"),
                     strength: 0.71,
-                    evidence_ids: vec!["ev_capex_transcript"],
-                    challenge_ids: vec!["cc_capex"],
+                    evidence_ids: vec![s("ev_capex_transcript")],
+                    challenge_ids: vec![s("cc_capex")],
                 },
                 GraphEdge {
-                    id: "edge-substitution-price",
-                    source: "domestic_substitution",
-                    target: "price_reaction",
-                    label: "supports local winners",
+                    id: s("edge-substitution-price"),
+                    source: s("domestic_substitution"),
+                    target: s("price_reaction"),
+                    label: s("supports local winners"),
                     strength: 0.67,
-                    evidence_ids: vec!["ev_local_supply_chain"],
-                    challenge_ids: vec!["cc_substitution"],
+                    evidence_ids: vec![s("ev_local_supply_chain")],
+                    challenge_ids: vec![s("cc_substitution")],
                 },
             ],
         },
         evidence: vec![
             EvidenceAnchor {
-                id: "ev_policy_release",
-                title: "Official export-control language",
-                source: "Official policy release",
+                id: s("ev_policy_release"),
+                title: s("Official export-control language"),
+                source: s("Official policy release"),
                 stance: EvidenceStance::Supports,
                 freshness: EvidenceFreshness::Fresh,
-                excerpt: "The control update widened perceived risk around advanced AI infrastructure shipments.",
+                excerpt: s(
+                    "The control update widened perceived risk around advanced AI infrastructure shipments.",
+                ),
             },
             EvidenceAnchor {
-                id: "ev_channel_check",
-                title: "Customer compliance pause",
-                source: "Market search",
+                id: s("ev_channel_check"),
+                title: s("Customer compliance pause"),
+                source: s("Market search"),
                 stance: EvidenceStance::Supports,
                 freshness: EvidenceFreshness::Cached,
-                excerpt: "Channel checks pointed to temporary purchasing pauses while buyers interpreted the rule language.",
+                excerpt: s(
+                    "Channel checks pointed to temporary purchasing pauses while buyers interpreted the rule language.",
+                ),
             },
             EvidenceAnchor {
-                id: "ev_company_guidance",
-                title: "Inventory and backlog buffer",
-                source: "Company guidance",
+                id: s("ev_company_guidance"),
+                title: s("Inventory and backlog buffer"),
+                source: s("Company guidance"),
                 stance: EvidenceStance::Context,
                 freshness: EvidenceFreshness::Cached,
-                excerpt: "The latest transcript still referenced backlog and inventory buffers that reduce immediate downside.",
+                excerpt: s(
+                    "The latest transcript still referenced backlog and inventory buffers that reduce immediate downside.",
+                ),
             },
             EvidenceAnchor {
-                id: "ev_capex_transcript",
-                title: "Hyperscaler capex support",
-                source: "Company guidance",
+                id: s("ev_capex_transcript"),
+                title: s("Hyperscaler capex support"),
+                source: s("Company guidance"),
                 stance: EvidenceStance::Supports,
                 freshness: EvidenceFreshness::Fresh,
-                excerpt: "Cloud platform commentary kept AI infrastructure spending plans intact.",
+                excerpt: s(
+                    "Cloud platform commentary kept AI infrastructure spending plans intact.",
+                ),
             },
             EvidenceAnchor {
-                id: "ev_local_supply_chain",
-                title: "Substitution narrative",
-                source: "Market search",
+                id: s("ev_local_supply_chain"),
+                title: s("Substitution narrative"),
+                source: s("Market search"),
                 stance: EvidenceStance::Context,
                 freshness: EvidenceFreshness::Fresh,
-                excerpt: "Local supply-chain beneficiaries drew renewed attention as substitution narratives strengthened.",
+                excerpt: s(
+                    "Local supply-chain beneficiaries drew renewed attention as substitution narratives strengthened.",
+                ),
             },
             EvidenceAnchor {
-                id: "ev_market_move",
-                title: "Price and sentiment reaction",
-                source: "Market search",
+                id: s("ev_market_move"),
+                title: s("Price and sentiment reaction"),
+                source: s("Market search"),
                 stance: EvidenceStance::Supports,
                 freshness: EvidenceFreshness::Fresh,
-                excerpt: "The sharp equity move appeared before detailed issuer guidance could absorb the policy shock.",
+                excerpt: s(
+                    "The sharp equity move appeared before detailed issuer guidance could absorb the policy shock.",
+                ),
             },
         ],
         challenge_checks: vec![
             ChallengeCheck {
-                id: "cc_scope",
-                title: "Does the rule actually cover the affected SKUs?",
+                id: s("cc_scope"),
+                title: s("Does the rule actually cover the affected SKUs?"),
                 status: ChallengeStatus::NeedsPrimarySource,
-                note: "Needs final primary-source mapping between controlled language and issuer product lines.",
+                note: s(
+                    "Needs final primary-source mapping between controlled language and issuer product lines.",
+                ),
             },
             ChallengeCheck {
-                id: "cc_inventory",
-                title: "Could inventory explain more of the move?",
+                id: s("cc_inventory"),
+                title: s("Could inventory explain more of the move?"),
                 status: ChallengeStatus::Checked,
-                note: "Inventory evidence explains downside limits, not the initial shock.",
+                note: s("Inventory evidence explains downside limits, not the initial shock."),
             },
             ChallengeCheck {
-                id: "cc_capex",
-                title: "Did capex guidance weaken at the same time?",
+                id: s("cc_capex"),
+                title: s("Did capex guidance weaken at the same time?"),
                 status: ChallengeStatus::Checked,
-                note: "Current capex evidence stays supportive.",
+                note: s("Current capex evidence stays supportive."),
             },
             ChallengeCheck {
-                id: "cc_substitution",
-                title: "Is substitution enough to offset lost export demand?",
+                id: s("cc_substitution"),
+                title: s("Is substitution enough to offset lost export demand?"),
                 status: ChallengeStatus::MissingCounterevidence,
-                note: "No direct counterevidence attached yet; keep this as a watch item.",
+                note: s("No direct counterevidence attached yet; keep this as a watch item."),
             },
             ChallengeCheck {
-                id: "cc_countermove",
-                title: "Was the equity move market-wide instead of policy-specific?",
+                id: s("cc_countermove"),
+                title: s("Was the equity move market-wide instead of policy-specific?"),
                 status: ChallengeStatus::Checked,
-                note: "The timing and sector concentration favor a policy-specific read.",
+                note: s("The timing and sector concentration favor a policy-specific read."),
             },
         ],
         sources: vec![
             SourceStatusCard {
-                source: "Official policy release",
+                source: s("Official policy release"),
                 status: SourceStatus::Verified,
-                note: "Primary language captured and dated.",
+                note: s("Primary language captured and dated."),
             },
             SourceStatusCard {
-                source: "Company guidance",
+                source: s("Company guidance"),
                 status: SourceStatus::Cached,
-                note: "Latest transcript is reused from the last verified run.",
+                note: s("Latest transcript is reused from the last verified run."),
             },
             SourceStatusCard {
-                source: "Market search",
+                source: s("Market search"),
                 status: SourceStatus::RateLimited,
-                note: "Fallback source pack filled the gap; live refresh is queued.",
+                note: s("Fallback source pack filled the gap; live refresh is queued."),
             },
         ],
         usage_ledger: vec![
             UsageLedgerEntry {
                 category: LedgerCategory::Model,
-                name: "graph_synthesis",
+                name: s("graph_synthesis"),
                 quota_owner: QuotaOwner::ManagedPro,
                 status: LedgerStatus::Available,
             },
             UsageLedgerEntry {
                 category: LedgerCategory::Search,
-                name: "market_search",
+                name: s("market_search"),
                 quota_owner: QuotaOwner::ManagedPro,
                 status: LedgerStatus::CoolingDown,
             },
             UsageLedgerEntry {
                 category: LedgerCategory::Evidence,
-                name: "company_guidance_cache",
+                name: s("company_guidance_cache"),
                 quota_owner: QuotaOwner::Workspace,
                 status: LedgerStatus::Cached,
             },
         ],
         next_steps: vec![
             VerificationStep {
-                id: "step_scope",
-                title: "Check whether the next official filing narrows the control scope.",
+                id: s("step_scope"),
+                title: s("Check whether the next official filing narrows the control scope."),
                 state: StepState::Waiting,
             },
             VerificationStep {
-                id: "step_capex",
-                title: "Re-run after the next hyperscaler capex transcript lands.",
+                id: s("step_capex"),
+                title: s("Re-run after the next hyperscaler capex transcript lands."),
                 state: StepState::Watching,
             },
             VerificationStep {
-                id: "step_substitution",
-                title: "Verify whether domestic substitution announcements changed the demand floor.",
+                id: s("step_substitution"),
+                title: s(
+                    "Verify whether domestic substitution announcements changed the demand floor.",
+                ),
                 state: StepState::Watching,
             },
         ],
@@ -477,13 +662,13 @@ pub fn sample_run_by_id(run_id: &str) -> Option<ProRun> {
 impl ProRun {
     pub fn summary(&self) -> RunSummary {
         RunSummary {
-            id: self.id,
-            workspace_id: self.workspace_id,
-            title: self.title,
-            question: self.question,
+            id: self.id.clone(),
+            workspace_id: self.workspace_id.clone(),
+            title: self.title.clone(),
+            question: self.question.clone(),
             status: self.status,
             confidence: self.confidence,
-            updated_at: self.updated_at,
+            updated_at: self.updated_at.clone(),
             node_count: self.graph.nodes.len(),
             edge_count: self.graph.edges.len(),
         }
@@ -495,30 +680,50 @@ pub fn validate_run_references(run: &ProRun) -> Result<(), String> {
         .graph
         .nodes
         .iter()
-        .map(|node| node.id)
+        .map(|node| node.id.as_str())
         .collect::<HashSet<_>>();
     let evidence_ids = run
         .evidence
         .iter()
-        .map(|evidence| evidence.id)
+        .map(|evidence| evidence.id.as_str())
         .collect::<HashSet<_>>();
     let challenge_ids = run
         .challenge_checks
         .iter()
-        .map(|challenge| challenge.id)
+        .map(|challenge| challenge.id.as_str())
         .collect::<HashSet<_>>();
 
     for edge in &run.graph.edges {
-        if !node_ids.contains(edge.source) || !node_ids.contains(edge.target) {
+        if !node_ids.contains(edge.source.as_str()) || !node_ids.contains(edge.target.as_str()) {
             return Err(format!("edge {} references an unknown node", edge.id));
         }
-        assert_known_references(edge.id, &edge.evidence_ids, &evidence_ids, "evidence")?;
-        assert_known_references(edge.id, &edge.challenge_ids, &challenge_ids, "challenge")?;
+        assert_known_references(
+            edge.id.as_str(),
+            &edge.evidence_ids,
+            &evidence_ids,
+            "evidence",
+        )?;
+        assert_known_references(
+            edge.id.as_str(),
+            &edge.challenge_ids,
+            &challenge_ids,
+            "challenge",
+        )?;
     }
 
     for node in &run.graph.nodes {
-        assert_known_references(node.id, &node.evidence_ids, &evidence_ids, "evidence")?;
-        assert_known_references(node.id, &node.challenge_ids, &challenge_ids, "challenge")?;
+        assert_known_references(
+            node.id.as_str(),
+            &node.evidence_ids,
+            &evidence_ids,
+            "evidence",
+        )?;
+        assert_known_references(
+            node.id.as_str(),
+            &node.challenge_ids,
+            &challenge_ids,
+            "challenge",
+        )?;
     }
 
     Ok(())
@@ -526,12 +731,12 @@ pub fn validate_run_references(run: &ProRun) -> Result<(), String> {
 
 fn assert_known_references(
     owner_id: &str,
-    refs: &[&'static str],
-    known_ids: &HashSet<&'static str>,
+    refs: &[String],
+    known_ids: &HashSet<&str>,
     label: &str,
 ) -> Result<(), String> {
     for referenced_id in refs {
-        if !known_ids.contains(referenced_id) {
+        if !known_ids.contains(referenced_id.as_str()) {
             return Err(format!(
                 "{owner_id} references unknown {label} id {referenced_id}"
             ));
@@ -540,9 +745,43 @@ fn assert_known_references(
     Ok(())
 }
 
+fn s(value: &str) -> String {
+    value.to_string()
+}
+
+fn non_empty_or_default(value: Option<String>, default: &str) -> String {
+    value
+        .and_then(|candidate| {
+            let trimmed = candidate.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        })
+        .unwrap_or_else(|| default.to_string())
+}
+
+fn non_empty_or_else(value: Option<String>, fallback: impl FnOnce() -> String) -> String {
+    value
+        .and_then(|candidate| {
+            let trimmed = candidate.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        })
+        .unwrap_or_else(fallback)
+}
+
+fn generated_title(question: &str) -> String {
+    let prefix: String = question.chars().take(72).collect();
+    if question.chars().count() > 72 {
+        format!("Run: {prefix}...")
+    } else {
+        format!("Run: {prefix}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{sample_run, sample_run_by_id, sample_run_summaries, validate_run_references};
+    use super::{
+        CreateRunRequest, RunStatus, create_run_from_request, sample_run, sample_run_by_id,
+        sample_run_summaries, validate_run_references,
+    };
     use std::collections::HashSet;
 
     #[test]
@@ -555,7 +794,7 @@ mod tests {
         assert!(!run.graph.edges.is_empty());
 
         for node in &run.graph.nodes {
-            assert!(ids.insert(node.id));
+            assert!(ids.insert(node.id.as_str()));
             assert!((0.0..=1.0).contains(&node.confidence));
         }
 
@@ -591,6 +830,41 @@ mod tests {
         let summaries = sample_run_summaries();
 
         assert_eq!(summaries.len(), 1);
-        assert_eq!(summaries[0].id, "run_semiconductor_controls_001");
+        assert_eq!(summaries[0].id.as_str(), "run_semiconductor_controls_001");
+    }
+
+    #[test]
+    fn create_run_from_request_builds_valid_in_memory_run() {
+        let run = create_run_from_request(
+            7,
+            CreateRunRequest {
+                workspace_id: Some(" workspace_alpha ".to_string()),
+                title: None,
+                question: "Why did renewal conversion fall?".to_string(),
+            },
+        )
+        .expect("valid question should create a run");
+
+        assert_eq!(run.id, "run_local_000007");
+        assert_eq!(run.workspace_id, "workspace_alpha");
+        assert_eq!(run.status, RunStatus::Queued);
+        assert!(run.title.contains("renewal conversion"));
+        assert_eq!(run.evidence[0].excerpt, "Why did renewal conversion fall?");
+        validate_run_references(&run).expect("created run references should be valid");
+    }
+
+    #[test]
+    fn create_run_from_request_rejects_blank_question() {
+        let error = create_run_from_request(
+            1,
+            CreateRunRequest {
+                workspace_id: None,
+                title: None,
+                question: "   ".to_string(),
+            },
+        )
+        .expect_err("blank question should be rejected");
+
+        assert_eq!(error, "question_required");
     }
 }

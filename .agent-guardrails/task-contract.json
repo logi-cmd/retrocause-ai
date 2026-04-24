@@ -1,14 +1,12 @@
 {
   "schemaVersion": 3,
-  "task": "Implement the first Pro Rust product-core slice: richer shared run/graph domain model, API endpoints for run list/detail/graph payloads, graph-first web shell rendering the richer payload, and synchronized Pro docs/evidence.",
+  "task": "Implement Pro in-memory run creation and storage: add a create-run request/builder in the Rust domain crate, add API state plus POST /api/runs while keeping list/detail/graph backed by the in-memory store, and synchronize Pro docs/evidence.",
   "preset": "generic",
-  "createdAt": "2026-04-24T04:23:48.635Z",
+  "createdAt": "2026-04-24T04:57:35.074Z",
   "allowedPaths": [
     "pro/",
     "docs/PROJECT_STATE.md",
     "docs/pro-rust-architecture.md",
-    "docs/pro-prd.md",
-    "README.md",
     ".agent-guardrails/"
   ],
   "requiredCommands": [
@@ -66,10 +64,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "80cac284-0cf0-451f-9ec5-746ea8d63470",
-    "createdAt": "2026-04-24T04:23:48.635Z",
+    "sessionId": "5892ec25-2b34-4131-9acd-0dc0c9a7aa41",
+    "createdAt": "2026-04-24T04:57:35.073Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Implement the first Pro Rust product-core slice: richer shared run/graph domain model, API endpoints for run list/detail/graph payloads, graph-first web shell rendering the richer payload, and synchronized Pro docs/evidence.",
+    "taskRequest": "Implement Pro in-memory run creation and storage: add a create-run request/builder in the Rust domain crate, add API state plus POST /api/runs while keeping list/detail/graph backed by the in-memory store, and synchronize Pro docs/evidence.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],

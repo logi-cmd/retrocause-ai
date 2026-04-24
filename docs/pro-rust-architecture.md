@@ -12,7 +12,7 @@ The Rust rewrite lives under `pro/` inside this repository so the product and ar
 
 1. Establish a clean Rust workspace boundary.
 2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, and usage ledger entries.
-3. Stand up API endpoints that expose run summaries, run detail, and graph payloads.
+3. Stand up API endpoints that expose run summaries, run detail, graph payloads, and in-memory run creation.
 4. Render a graph-first web shell from the same shared Rust payload.
 5. Keep Pro separate from the OSS Python/FastAPI + Next.js runtime.
 
@@ -66,6 +66,7 @@ The first shared crate now defines:
 - source status cards
 - usage ledger entries
 - verification steps
+- an owned `CreateRunRequest` builder for process-local alpha run creation
 - a canonical seed run used by both the API and the web shell
 
 This keeps the API and web kickoff honest: they render the same shape instead of drifting into two separate demos.
@@ -79,9 +80,13 @@ Initial responsibility:
 - health endpoint
 - seed graph endpoint retained for compatibility
 - `GET /api/runs`
+- `POST /api/runs`
 - `GET /api/runs/{run_id}`
 - `GET /api/runs/{run_id}/graph`
-- future home for run creation, run status, queue control, and saved-run access
+- process-local in-memory run storage shared by list/detail/graph reads
+- future home for durable run status, queue control, and saved-run access
+
+The current store is intentionally in-memory. It is useful for proving the API behavior and graph payload contract, but it is not durable storage and should not be treated as a hosted Pro data layer.
 
 ### `apps/web`
 
@@ -128,6 +133,8 @@ These are intentionally not created yet. The kickoff only adds abstraction that 
 
 Those semantics should remain explicit in both API payloads and the graph workspace UI.
 
+The current `POST /api/runs` path uses `queued` runs and managed/user-provided quota labels without calling model or search providers. Live provider credentials, BYOK, workspace quotas, and cooldown buckets remain future work.
+
 ## Knowledge-graph UI direction
 
 The Pro UI should feel like a graph command room, not a generic SaaS dashboard and not a direct carry-over from the OSS evidence board.
@@ -145,3 +152,8 @@ The kickoff web shell encodes that direction with a static graph workspace, whil
 - `cargo test --manifest-path pro/Cargo.toml`
 
 That is enough for the kickoff because there is no deployment pipeline, persistence layer, or browser runtime yet.
+
+The in-memory run-creation slice also uses:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`

@@ -399,6 +399,17 @@ This task lands the already-tested keyless OSS and Pro Rust graph foundation bra
   - Pytest result: `321 collected`, all passed.
   - E2E result: `609 passed`, `1 skipped`, `0 failed`.
 
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml" --commands-run "npm test"`
+  - Result: passed with warnings, `90/100 (safe-to-deploy)`.
+  - Tool quirk: this multi-command invocation only counted the final `npm test` command and incorrectly reported the required `cargo test --manifest-path pro/Cargo.toml` as missing even though it had already been run and passed.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with warnings, `90/100 (safe-to-deploy)`.
+  - No blocking errors and no missing required command remained.
+  - Non-blocking warnings:
+    - `docs/PROJECT_STATE.md` changed; this is intentional because the Pro implementation state and next step changed.
+    - `pro/apps/api/src/main.rs` changed the public Pro API by adding `POST /api/runs`; this is intentional and is the central behavior change of this slice.
+
 - `agent-guardrails check --base-ref HEAD~1 --commands-run "npm test" --commands-run "cargo test --manifest-path pro/Cargo.toml"`
   - First result: blocked by stale feature-branch contract scope, not by tests.
   - The stale contract did not include the full unrelated-history import surface now visible from `main`.
@@ -496,3 +507,86 @@ This task starts active Pro implementation on `codex/pro-rust-product-core`. It 
 - Performance: payloads remain static and server-rendered, so runtime cost is minimal. The richer JSON payload is deliberately small and bounded while the domain shape is still forming.
 - Understanding: the main tradeoff is keeping static sample data while defining the real Pro payload boundary. This avoids premature persistence or provider routing before the graph/review contract is stable.
 - Continuity: this reuses the existing Rust workspace, Axum API, Maud web shell, and shared domain crate. The intentional continuity break remains the Pro frontend direction: it stays graph-first and does not inherit the OSS evidence-board layout.
+
+## 2026-04-24 Pro Product Core Slice 2
+
+This task continues active Pro implementation on `codex/pro-rust-product-core`. It keeps OSS runtime paths untouched and adds the first real run-creation path inside the Rust Pro API.
+
+### Files Updated
+
+- `pro/crates/domain/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Converted Pro run/domain payload string fields from static string references to owned `String` values so user-created runs can be represented safely without leaking memory or pretending dynamic text is static data.
+- Added `CreateRunRequest` and `create_run_from_request`, producing a bounded queued run shell with user-question evidence, challenge checks, source status, usage ledger entries, and verification steps.
+- Added process-local in-memory API state for Pro runs.
+- Added `POST /api/runs`; `GET /api/runs`, `GET /api/runs/{run_id}`, and `GET /api/runs/{run_id}/graph` now read from the same in-memory store.
+- Updated the Pro web shell for the owned payload type while keeping it graph-first and still rendering the canonical sample run.
+- Updated project-state and Pro architecture docs to mark in-memory run creation as implemented and move the next Pro step to web/API create-run interaction plus provider/search quota ownership types.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: contract refreshed for the Pro in-memory run-creation slice.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - First result: failed because newly edited Rust files needed standard `rustfmt` line wrapping.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - First result: passed.
+  - API tests: `6 passed`.
+  - Domain tests: `7 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all`
+  - Result: applied standard Rust formatting.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed after formatting.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed after formatting.
+  - API tests: `6 passed`.
+  - Domain tests: `7 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- `git diff --check`
+  - Result: passed. Git only reported normal Windows CRLF normalization warnings for touched text files.
+
+- Pro API HTTP smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8792`.
+  - `GET /healthz` returned `ok`.
+  - `POST /api/runs` created `run_local_000001`.
+  - `GET /api/runs/{run_id}` returned the submitted smoke-test question.
+  - `GET /api/runs/{run_id}/graph` returned `3` graph nodes.
+  - `GET /api/runs` returned `2` runs, proving the sample and created run share the same in-memory store.
+
+- `npm test`
+  - Result: passed.
+  - Included frontend lint/build, `python -m ruff check retrocause/`, full pytest, and browser E2E.
+  - Pytest result: `321 collected`, all passed.
+  - E2E result: `609 passed`, `1 skipped`, `0 failed`.
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, provider credentials, BYOK fields, or hosted calls were added. Created runs live only in the local Pro API process memory.
+- Dependencies: no new packages, lockfile changes, or version upgrades were introduced.
+- Performance: reads and writes use a small `Arc<RwLock<HashMap<...>>>` in-process store. This is suitable for an alpha product-core slice, but it is not a multi-user hosted storage model.
+- Understanding: the main tradeoff is taking the small owned-string migration now so later provider/search/web-created runs do not need unsafe static lifetimes or memory leaks.
+- Continuity: the slice reuses the existing Rust workspace, Axum routes, Maud web shell, and shared domain crate. It intentionally avoids touching OSS runtime paths.
+
+### Remaining Risks
+
+- Runs are not durable and disappear when the Pro API process exits.
+- The Pro web shell still renders the canonical sample directly instead of creating runs through the API.
+- Provider/search routing, cooldown buckets, workspace quotas, auth, and persistence remain future Pro work.
