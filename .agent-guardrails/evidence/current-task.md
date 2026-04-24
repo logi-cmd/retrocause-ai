@@ -2437,3 +2437,86 @@ This task adds a local durable event-store and run event replay slice for the Pr
 - This is not hosted event storage, not a worker event queue, not a multi-tenant audit log, and not a provider result committer.
 - Local JSON event-store writes are suitable for the Pro foundation and developer inspection only; they are not safe for concurrent hosted production workloads.
 - Future hosted Pro still needs tenant auth, quota reservation, credential vault access, durable worker leases, idempotent result commits, and database-backed event rows before any live adapter can execute safely.
+
+## Pro Product Core Slice 26 - Worker Result Dry-Run From Local Replay
+
+### Scope
+
+This task adds a preview-only worker result dry-run for the Pro Rust product core. The dry-run uses the existing local event replay stream as input, returns proposed result-commit steps and commit checks, and renders those checks in the graph-first web shell. This remains local-only and keyless: no Postgres/Redis, hosted auth, real workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, package publishing, or live provider calls were added.
+
+### Files Updated
+
+- `pro/crates/event-store/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `WorkerResultDryRun`, proposed result-step payloads, commit-check payloads, and preview-only status enums in `crates/event-store`.
+- Added `worker_result_dry_run_from_replay()` and `FileEventStore::worker_result_dry_run()` so the result dry-run is explicitly derived from local replay events.
+- Added keyless `POST /api/runs/{run_id}/worker-result-dry-run`.
+- Added API and event-store tests proving the dry-run is run-scoped, uses replay event counts, keeps execution/provider/result-event writes disabled, and exposes safeguards.
+- Added a graph-first web button and panel for `Dry-run result commit`, showing proposed result steps, commit checks, blocked writes, and dry-run safeguards.
+- Updated Pro project state and architecture docs to record the dry-run as a preview contract, not a persisted result snapshot or worker-owned commit path.
+
+### Commands Run
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `30 passed`.
+  - Domain tests: `16 passed`.
+  - Event-store tests: `4 passed`.
+  - Provider-routing tests: `10 passed`.
+  - Queue tests: `7 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API worker-result dry-run smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8835` with temporary `RETROCAUSE_PRO_RUN_STORE_PATH` and `RETROCAUSE_PRO_EVENT_STORE_PATH`.
+  - Called `POST /api/runs/run_semiconductor_controls_001/worker-result-dry-run`.
+  - Created a run through `POST /api/runs`.
+  - Called `POST /api/runs/{created_run_id}/worker-result-dry-run`.
+  - First smoke attempt used an overly strict PowerShell filter for `writes_now=false`; the payload was correct, and the smoke was rerun with an explicit step lookup.
+  - Final result: passed; seed dry-run mode was `preview_only_local_replay`, seed replay event count was `4`, created run id was `run_local_000001`, created dry-run replay count was `1`, and result writes stayed disabled.
+
+- Pro browser worker-result dry-run smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8836` and `retrocause-pro-web.exe` on `127.0.0.1:3044`.
+  - Aborted external font requests in Playwright so inline scripts could run without network font blocking.
+  - Clicked `Dry-run result commit`.
+  - Result: passed; the worker-result panel rendered `Worker result dry-run`, `preview only local replay`, `writes off`, `Commit result events`, `preview_only_no_result_event_writes`, and `uses_local_event_replay_as_input`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Result: passed. A key-shaped scan for common provider-token prefixes and API-key assignment patterns found no key-shaped tokens in the git diff.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with concerns; no blocking errors.
+  - Score: `85/100 (pass-with-concerns)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because project state was synchronized to mark the worker-result dry-run slice as implemented and move the next Pro focus toward persisted result snapshots only after hosted safety gates exist.
+  - Non-blocking warning: `pro/crates/event-store/src/lib.rs` changed as a state-related file. This was intentional because the event-store crate owns local replay-derived worker-result dry-run payloads.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is interface-changing. This slice intentionally adds keyless local `POST /api/runs/{run_id}/worker-result-dry-run`; it does not change OSS APIs, accept credentials, enforce auth, mutate quota/billing, start workers, write result events, or execute provider calls.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice does not accept, read, store, log, or return provider secrets, payment credentials, auth tokens, or user API keys. It does not enforce hosted permissions or protect hosted resources. The dry-run is scoped by requested run id and uses only local replay events.
+- Dependencies: no new crates, npm packages, lockfile changes, or external dependency upgrades were introduced.
+- Performance: the dry-run reads the local replay stream and builds an in-memory payload. It adds no provider, database, Redis, worker, quota-ledger, billing, or network load.
+- Understanding: the deliberate tradeoff is to preview worker result commit shape from local replay before implementing worker-owned writes. That makes the next hosted commit boundary visible while staying honest that no result event is persisted.
+- Continuity: reused the existing event-store crate, Axum state/endpoint style, web `fetchJson` helper, and compact boundary-card styling. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- This is not a worker runtime, not a persisted result snapshot, not a hosted audit log, and not a provider result committer.
+- Result-event writes, tenant auth, quota reservations, credential vault access, durable worker leases, and idempotent commits still need to exist before live provider execution can be enabled safely.

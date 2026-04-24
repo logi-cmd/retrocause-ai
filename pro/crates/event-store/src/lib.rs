@@ -46,6 +46,40 @@ pub struct EventStoreReplay {
     pub safeguards: Vec<String>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkerResultDryRun {
+    pub run_id: String,
+    pub workspace_id: String,
+    pub mode: WorkerResultDryRunMode,
+    pub execution_allowed: bool,
+    pub provider_execution_allowed: bool,
+    pub result_commit_allowed: bool,
+    pub result_event_write_allowed: bool,
+    pub replay_event_count: usize,
+    pub proposed_steps: Vec<WorkerResultDryRunStep>,
+    pub commit_checks: Vec<WorkerResultCommitCheck>,
+    pub safeguards: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkerResultDryRunStep {
+    pub id: String,
+    pub label: String,
+    pub status: WorkerResultDryRunStepStatus,
+    pub depends_on_replay_events: usize,
+    pub writes_now: bool,
+    pub note: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkerResultCommitCheck {
+    pub id: String,
+    pub label: String,
+    pub passed: bool,
+    pub required_before_live_execution: bool,
+    pub note: String,
+}
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EventReplayMode {
@@ -56,6 +90,19 @@ pub enum EventReplayMode {
 #[serde(rename_all = "snake_case")]
 pub enum EventStoreEntrySource {
     DerivedRunTimelinePersistedLocally,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerResultDryRunMode {
+    PreviewOnlyLocalReplay,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerResultDryRunStepStatus {
+    PreviewOnly,
+    BlockedUntilWorkerCommit,
 }
 
 #[derive(Debug)]
@@ -109,6 +156,14 @@ impl FileEventStore {
 
     pub fn list_run_events(&self, run: &ProRun) -> Result<Vec<EventStoreEntry>, EventStoreError> {
         Ok(self.ensure_run_events(run)?.events)
+    }
+
+    pub fn worker_result_dry_run(
+        &self,
+        run: &ProRun,
+    ) -> Result<WorkerResultDryRun, EventStoreError> {
+        let replay = self.ensure_run_events(run)?;
+        Ok(worker_result_dry_run_from_replay(&replay))
     }
 
     fn persist_current_state(&self) -> Result<(), EventStoreError> {
@@ -174,6 +229,94 @@ fn replay_from_entries(run: &ProRun, events: Vec<EventStoreEntry>) -> EventStore
     }
 }
 
+pub fn worker_result_dry_run_from_replay(replay: &EventStoreReplay) -> WorkerResultDryRun {
+    let replay_event_count = replay.events.len();
+    WorkerResultDryRun {
+        run_id: replay.run_id.clone(),
+        workspace_id: replay.workspace_id.clone(),
+        mode: WorkerResultDryRunMode::PreviewOnlyLocalReplay,
+        execution_allowed: false,
+        provider_execution_allowed: false,
+        result_commit_allowed: false,
+        result_event_write_allowed: false,
+        replay_event_count,
+        proposed_steps: vec![
+            WorkerResultDryRunStep {
+                id: "read_local_replay_stream".to_string(),
+                label: "Read local replay stream".to_string(),
+                status: WorkerResultDryRunStepStatus::PreviewOnly,
+                depends_on_replay_events: replay_event_count,
+                writes_now: false,
+                note: "Use the persisted local replay stream as dry-run input.".to_string(),
+            },
+            WorkerResultDryRunStep {
+                id: "prepare_result_commit_batch".to_string(),
+                label: "Prepare result commit batch".to_string(),
+                status: WorkerResultDryRunStepStatus::PreviewOnly,
+                depends_on_replay_events: replay_event_count,
+                writes_now: false,
+                note: "Preview the result commit envelope without mutating the run.".to_string(),
+            },
+            WorkerResultDryRunStep {
+                id: "commit_result_events".to_string(),
+                label: "Commit result events".to_string(),
+                status: WorkerResultDryRunStepStatus::BlockedUntilWorkerCommit,
+                depends_on_replay_events: replay_event_count,
+                writes_now: false,
+                note: "Blocked until real worker leases, auth, quota, vault, and event writes exist."
+                    .to_string(),
+            },
+            WorkerResultDryRunStep {
+                id: "publish_review_ready_snapshot".to_string(),
+                label: "Publish review-ready snapshot".to_string(),
+                status: WorkerResultDryRunStepStatus::BlockedUntilWorkerCommit,
+                depends_on_replay_events: replay_event_count,
+                writes_now: false,
+                note: "Blocked until committed result events can update the run revision.".to_string(),
+            },
+        ],
+        commit_checks: vec![
+            WorkerResultCommitCheck {
+                id: "local_replay_loaded".to_string(),
+                label: "Local replay loaded".to_string(),
+                passed: replay_event_count > 0,
+                required_before_live_execution: true,
+                note: format!("{replay_event_count} replay event(s) available for dry-run input."),
+            },
+            WorkerResultCommitCheck {
+                id: "worker_lease_available".to_string(),
+                label: "Worker lease available".to_string(),
+                passed: false,
+                required_before_live_execution: true,
+                note: "No worker process or lease store is connected in this slice.".to_string(),
+            },
+            WorkerResultCommitCheck {
+                id: "tenant_auth_enforced".to_string(),
+                label: "Tenant auth enforced".to_string(),
+                passed: false,
+                required_before_live_execution: true,
+                note: "The current Pro shell exposes preview context only, not real auth.".to_string(),
+            },
+            WorkerResultCommitCheck {
+                id: "quota_and_vault_ready".to_string(),
+                label: "Quota and vault ready".to_string(),
+                passed: false,
+                required_before_live_execution: true,
+                note: "Provider credentials, quota reservations, and billing mutations remain disabled."
+                    .to_string(),
+            },
+        ],
+        safeguards: vec![
+            "preview_only_no_result_event_writes".to_string(),
+            "uses_local_event_replay_as_input".to_string(),
+            "no_worker_process_started".to_string(),
+            "no_provider_execution_or_secret_access".to_string(),
+            "no_quota_or_billing_mutation".to_string(),
+            "run_scoped_to_requested_run_id".to_string(),
+        ],
+    }
+}
+
 fn read_state(path: &Path) -> Result<StoredEventState, EventStoreError> {
     let raw = fs::read_to_string(path)?;
     let mut state = serde_json::from_str::<StoredEventState>(&raw)?;
@@ -221,7 +364,10 @@ impl From<serde_json::Error> for EventStoreError {
 
 #[cfg(test)]
 mod tests {
-    use super::{EventReplayMode, FileEventStore, temp_store_path};
+    use super::{
+        EventReplayMode, FileEventStore, WorkerResultDryRunMode, WorkerResultDryRunStepStatus,
+        temp_store_path,
+    };
     use retrocause_pro_domain::{CreateRunRequest, create_run_from_request, sample_run};
     use std::fs;
 
@@ -292,6 +438,43 @@ mod tests {
 
         assert_eq!(events.len(), replay.event_count);
         assert_eq!(events[0].run_id, run.id);
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn worker_result_dry_run_uses_replay_without_result_writes() {
+        let path = temp_store_path("worker-result");
+        let store = FileEventStore::open(&path).expect("event store should open");
+        let run = sample_run();
+
+        let dry_run = store
+            .worker_result_dry_run(&run)
+            .expect("worker result dry-run should build from replay");
+
+        assert_eq!(dry_run.run_id, run.id);
+        assert_eq!(dry_run.mode, WorkerResultDryRunMode::PreviewOnlyLocalReplay);
+        assert!(!dry_run.execution_allowed);
+        assert!(!dry_run.provider_execution_allowed);
+        assert!(!dry_run.result_commit_allowed);
+        assert!(!dry_run.result_event_write_allowed);
+        assert!(dry_run.replay_event_count >= 3);
+        assert!(dry_run.proposed_steps.iter().any(|step| {
+            step.id == "commit_result_events"
+                && step.status == WorkerResultDryRunStepStatus::BlockedUntilWorkerCommit
+                && !step.writes_now
+        }));
+        assert!(
+            dry_run
+                .commit_checks
+                .iter()
+                .any(|check| check.id == "local_replay_loaded" && check.passed)
+        );
+        assert!(
+            dry_run
+                .safeguards
+                .contains(&"preview_only_no_result_event_writes".to_string())
+        );
 
         let _ = fs::remove_file(path);
     }

@@ -1,11 +1,9 @@
 {
   "schemaVersion": 3,
-  "task": "Add a local durable event-store and run event replay slice for the Pro Rust product core: add a Rust event-store crate backed by a local JSON file, append seed/create-run events from the Pro API, expose read-only event-log and replay endpoints for runs, render a compact event replay panel in the graph-first web shell, and synchronize Pro docs/evidence. Keep this local-only and keyless: do not add Postgres/Redis, hosted auth, workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, or live provider calls.",
+  "task": "Add a preview-only worker result dry-run slice for the Pro Rust product core: use the existing local event replay as input, expose a keyless API endpoint that returns proposed worker result commit steps without executing providers or writing result events, render a compact result dry-run panel in the graph-first web shell, and synchronize Pro docs/evidence. Keep this local-only and keyless: do not add Postgres/Redis, hosted auth, real workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, package publishing, or live provider calls.",
   "preset": "generic",
   "createdAt": "2026-04-24T15:09:13.391Z",
   "allowedPaths": [
-    "pro/Cargo.toml",
-    "pro/Cargo.lock",
     "pro/crates/event-store/",
     "pro/apps/api/",
     "pro/apps/web/",
@@ -69,10 +67,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "9e3c7d31-300d-46ee-b309-ab62bf3e9731",
+    "sessionId": "5c6480b6-f3e0-4d9c-a7c5-worker-result-dry-run",
     "createdAt": "2026-04-24T15:09:13.391Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add a local durable event-store and run event replay slice for the Pro Rust product core: add a Rust event-store crate backed by a local JSON file, append seed/create-run events from the Pro API, expose read-only event-log and replay endpoints for runs, render a compact event replay panel in the graph-first web shell, and synchronize Pro docs/evidence. Keep this local-only and keyless: do not add Postgres/Redis, hosted auth, workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, or live provider calls.",
+    "taskRequest": "Add a preview-only worker result dry-run slice for the Pro Rust product core: use the existing local event replay as input, expose a keyless API endpoint that returns proposed worker result commit steps without executing providers or writing result events, render a compact result dry-run panel in the graph-first web shell, and synchronize Pro docs/evidence. Keep this local-only and keyless: do not add Postgres/Redis, hosted auth, real workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, package publishing, or live provider calls.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],

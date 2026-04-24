@@ -286,6 +286,21 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "planned" }
                                 }
                             }
+                            button id="worker-result-dry-run-button" type="button" {
+                                "Dry-run result commit"
+                            }
+                            p id="worker-result-dry-run-status" class="console-status" {
+                                "Result dry-run uses local replay; worker execution and result writes stay disabled."
+                            }
+                            div id="worker-result-dry-run-panel" class="commit-panel" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "Worker result dry-run" }
+                                        p { "Run a preview to inspect proposed result commit steps from local replay." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "preview" }
+                                }
+                            }
                             div id="storage-boundary-panel" class="storage-panel" {
                                 article class="queue-meter queue-meter--empty" {
                                     div {
@@ -1428,6 +1443,65 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderWorkerResultDryRun(result) {
+    const panel = byId("worker-result-dry-run-panel");
+    if (!panel) return;
+    if (!result) {
+      panel.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>Worker result dry-run</strong>
+            <p>Run a preview to inspect proposed result commit steps from local replay.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">preview</span>
+        </article>
+      `;
+      return;
+    }
+
+    const steps = (result.proposed_steps || []).map((step) => `
+      <li>
+        <strong>${escapeHtml(step.label || step.id)}</strong>
+        <span>${escapeHtml(readable(step.status || "preview_only"))} / writes now: ${step.writes_now ? "yes" : "no"}</span>
+        <small>${escapeHtml(step.id)} / replay events: ${escapeHtml(step.depends_on_replay_events || 0)} / ${escapeHtml(step.note || "No dry-run note.")}</small>
+      </li>
+    `).join("");
+    const checks = (result.commit_checks || []).map((check) => `
+      <li>
+        <strong>${escapeHtml(check.label || check.id)}</strong>
+        <span>${check.passed ? "passed" : "blocked"} / required later: ${check.required_before_live_execution ? "yes" : "no"}</span>
+        <small>${escapeHtml(check.note || "No commit check note.")}</small>
+      </li>
+    `).join("");
+    const safeguards = (result.safeguards || [])
+      .slice(0, 6)
+      .map((guard) => `<li>${escapeHtml(guard)}</li>`)
+      .join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card commit-card">
+        <div class="work-order-header">
+          <strong>Worker result dry-run</strong>
+          <span class="quota-state quota-state--deferred">${result.result_event_write_allowed ? "writes on" : "writes off"}</span>
+          <p>${escapeHtml(readable(result.mode || "preview_only_local_replay"))} / replay events: ${escapeHtml(result.replay_event_count || 0)} / result commit: ${result.result_commit_allowed ? "allowed" : "blocked"}</p>
+          <small>Run: ${escapeHtml(result.run_id || "unknown")} / Workspace: ${escapeHtml(result.workspace_id || "unknown")}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Proposed result steps</p>
+          <ol class="work-order-list">${steps || "<li>No proposed steps returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Commit checks</p>
+          <ul class="work-order-list">${checks || "<li>No commit checks returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Dry-run safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>No dry-run safeguards returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   function renderStoragePlan(plan) {
     const panel = byId("storage-boundary-panel");
     if (!panel) return;
@@ -1633,6 +1707,7 @@ fn client_script() -> &'static str {
     renderRunEvents(eventTimeline);
     renderEventReplay(eventReplay);
     renderReviewComparison(reviewComparison);
+    renderWorkerResultDryRun(null);
     await refreshRuns(run.id);
     setStatus(`Loaded ${run.id}`);
   }
@@ -1713,6 +1788,23 @@ fn client_script() -> &'static str {
     );
   }
 
+  async function runWorkerResultDryRun() {
+    const runId = currentRun?.id;
+    if (!runId) {
+      throw new Error("No run selected for result dry-run.");
+    }
+    setText("worker-result-dry-run-status", "Running worker result dry-run...");
+    const result = await fetchJson(`/api/runs/${encodeURIComponent(runId)}/worker-result-dry-run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    renderWorkerResultDryRun(result);
+    setText(
+      "worker-result-dry-run-status",
+      `Dry-run loaded from ${result.replay_event_count || 0} replay event(s); result writes remain disabled.`,
+    );
+  }
+
   byId("run-create-form")?.addEventListener("submit", (event) => {
     createRun(event).catch((error) => setStatus(`API error: ${error.message}`));
   });
@@ -1724,6 +1816,10 @@ fn client_script() -> &'static str {
   });
   byId("queue-preview-button")?.addEventListener("click", () => {
     queuePreviewJob().catch((error) => setText("execution-queue-status", `Queue error: ${error.message}`));
+  });
+  byId("worker-result-dry-run-button")?.addEventListener("click", () => {
+    runWorkerResultDryRun()
+      .catch((error) => setText("worker-result-dry-run-status", `Result dry-run error: ${error.message}`));
   });
   byId("provider-adapter-dry-run-button")?.addEventListener("click", () => {
     runProviderAdapterDryRun()
@@ -1760,6 +1856,7 @@ fn client_script() -> &'static str {
   renderExecutionLifecycle(null);
   renderWorkerLeaseBoundary(null);
   renderResultCommitBoundary(null);
+  renderWorkerResultDryRun(null);
   renderStoragePlan(null);
   renderCredentialVaultBoundary(null);
   renderQuotaLedgerBoundary(null);
@@ -2427,6 +2524,7 @@ p {
 #execution-lifecycle-panel,
 #worker-lease-panel,
 #result-commit-panel,
+#worker-result-dry-run-panel,
 #storage-boundary-panel,
 #credential-vault-panel,
 #quota-ledger-panel {
@@ -2820,6 +2918,8 @@ mod tests {
         assert!(page.contains("execution-lifecycle-panel"));
         assert!(page.contains("worker-lease-panel"));
         assert!(page.contains("result-commit-panel"));
+        assert!(page.contains("worker-result-dry-run-panel"));
+        assert!(page.contains("worker-result-dry-run-button"));
         assert!(page.contains("storage-boundary-panel"));
         assert!(page.contains("credential-vault-panel"));
         assert!(page.contains("quota-ledger-panel"));
@@ -2828,6 +2928,7 @@ mod tests {
         assert!(page.contains("/api/execution-lifecycle"));
         assert!(page.contains("/api/worker-lease-boundary"));
         assert!(page.contains("/api/result-commit-boundary"));
+        assert!(page.contains("/api/runs/${encodeURIComponent(runId)}/worker-result-dry-run"));
         assert!(page.contains("/api/storage-plan"));
         assert!(page.contains("/api/credential-vault-boundary"));
         assert!(page.contains("/api/quota-ledger-boundary"));
@@ -2836,6 +2937,8 @@ mod tests {
         assert!(page.contains("function renderExecutionLifecycle"));
         assert!(page.contains("function renderWorkerLeaseBoundary"));
         assert!(page.contains("function renderResultCommitBoundary"));
+        assert!(page.contains("function renderWorkerResultDryRun"));
+        assert!(page.contains("function runWorkerResultDryRun"));
         assert!(page.contains("function renderStoragePlan"));
         assert!(page.contains("function renderCredentialVaultBoundary"));
         assert!(page.contains("function renderQuotaLedgerBoundary"));

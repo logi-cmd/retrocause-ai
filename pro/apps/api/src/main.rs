@@ -15,7 +15,7 @@ use retrocause_pro_domain::{
     sample_run, workspace_access_context,
 };
 use retrocause_pro_event_store::{
-    EventStoreEntry, EventStoreError, EventStoreReplay, FileEventStore,
+    EventStoreEntry, EventStoreError, EventStoreReplay, FileEventStore, WorkerResultDryRun,
 };
 use retrocause_pro_provider_routing::{
     ProviderAdapterCandidateCatalog, ProviderAdapterContract, ProviderAdapterDryRunRequest,
@@ -119,6 +119,10 @@ fn router() -> Router {
         .route("/api/runs/{run_id}/events", get(get_run_events))
         .route("/api/runs/{run_id}/event-log", get(get_run_event_log))
         .route("/api/runs/{run_id}/event-replay", get(get_run_event_replay))
+        .route(
+            "/api/runs/{run_id}/worker-result-dry-run",
+            post(run_worker_result_dry_run).options(cors_preflight),
+        )
         .route(
             "/api/runs/{run_id}/review-comparison",
             get(get_run_review_comparison),
@@ -314,6 +318,21 @@ async fn get_run_event_replay(
     state
         .event_store
         .ensure_run_events(&run)
+        .map(Json)
+        .map_err(event_store_error)
+}
+
+async fn run_worker_result_dry_run(
+    State(state): State<AppState>,
+    Path(run_id): Path<String>,
+) -> Result<Json<WorkerResultDryRun>, ApiError> {
+    let run = state
+        .run_store
+        .get_run(&run_id)
+        .ok_or_else(|| not_found(run_id))?;
+    state
+        .event_store
+        .worker_result_dry_run(&run)
         .map(Json)
         .map_err(event_store_error)
 }
@@ -918,6 +937,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn worker_result_dry_run_uses_replay_without_execution_or_writes() {
+        let payload = run_worker_result_dry_run(
+            State(AppState::seeded()),
+            Path("run_semiconductor_controls_001".to_string()),
+        )
+        .await
+        .expect("known sample run")
+        .0;
+
+        assert_eq!(payload.run_id, "run_semiconductor_controls_001");
+        assert!(!payload.execution_allowed);
+        assert!(!payload.provider_execution_allowed);
+        assert!(!payload.result_commit_allowed);
+        assert!(!payload.result_event_write_allowed);
+        assert!(payload.replay_event_count >= 3);
+        assert!(
+            payload
+                .proposed_steps
+                .iter()
+                .any(|step| step.id == "commit_result_events" && !step.writes_now)
+        );
+        assert!(
+            payload
+                .safeguards
+                .contains(&"uses_local_event_replay_as_input".to_string())
+        );
+    }
+
+    #[tokio::test]
     async fn review_comparison_payload_is_derived_from_requested_run() {
         let payload = get_run_review_comparison(
             State(AppState::seeded()),
@@ -999,12 +1047,20 @@ mod tests {
         assert_eq!(comparison.run_id, created.id);
         assert_eq!(comparison.evidence_summary.added, 1);
 
-        let replay = get_run_event_replay(State(state), Path(created.id.clone()))
+        let replay = get_run_event_replay(State(state.clone()), Path(created.id.clone()))
             .await
             .expect("created run replay should be readable")
             .0;
         assert_eq!(replay.run_id, created.id);
         assert_eq!(replay.event_count, 1);
+
+        let dry_run = run_worker_result_dry_run(State(state), Path(created.id.clone()))
+            .await
+            .expect("created run worker result dry-run should be readable")
+            .0;
+        assert_eq!(dry_run.run_id, created.id);
+        assert_eq!(dry_run.replay_event_count, 1);
+        assert!(!dry_run.result_event_write_allowed);
     }
 
     #[tokio::test]

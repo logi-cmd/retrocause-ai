@@ -12,7 +12,7 @@ The Rust rewrite lives under `pro/` inside this repository so the product and ar
 
 1. Establish a clean Rust workspace boundary.
  2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, usage ledger entries, provider quota ownership, and cooldown state.
-3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, run-scoped local event replay, keyless provider/search quota status, routing previews, and preview-only execution jobs.
+3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, run-scoped local event replay, preview-only worker result dry-runs, keyless provider/search quota status, routing previews, and preview-only execution jobs.
 4. Render a graph-first web shell from the same shared Rust payload and wire it to the local API create/read flow plus provider-status view.
 5. Keep Pro separate from the OSS Python/FastAPI + Next.js runtime.
 
@@ -93,6 +93,8 @@ The result-commit and event-store boundary is deliberately preview-only in this 
 
 The run event timeline remains derived from the current `ProRun` record through `GET /api/runs/{run_id}/events`. A separate local event-store slice now persists that derived stream into a run-scoped JSON file for local replay through `GET /api/runs/{run_id}/event-log` and `GET /api/runs/{run_id}/event-replay`. This is local inspectability storage, not a hosted audit log, worker queue, or provider-result commit path.
 
+The worker result dry-run is also deliberately preview-only. It uses the local replay stream as input and returns proposed result-commit steps, commit checks, and safeguards while keeping `execution_allowed=false`, `provider_execution_allowed=false`, `result_commit_allowed=false`, and `result_event_write_allowed=false`.
+
 The review comparison payload is also deliberately derived in this slice. It compares the current run to a generated previous-checkpoint preview and reports evidence/challenge deltas so the graph-review workflow has a concrete shape before durable run history, tenant auth, or cross-run selectors exist.
 
 ## Run store boundary
@@ -123,8 +125,9 @@ Current behavior:
 - `POST /api/runs` persists the created run's initial replay stream
 - `GET /api/runs/{run_id}/event-log` returns the persisted entries for the requested run
 - `GET /api/runs/{run_id}/event-replay` returns replay metadata, durable-local mode, event count, entries, and safeguards
+- `POST /api/runs/{run_id}/worker-result-dry-run` derives proposed result commit steps from local replay without writing result events
 
-This is intentionally local-only alpha storage. It is not Postgres, Redis, a hosted tenant audit log, a worker event queue, a credential vault, or a provider result committer. The tradeoff is that read endpoints can initialize a missing local stream for a known run so restart continuity and replay UX stay deterministic; future hosted Pro should replace that with explicit worker-owned event writes once auth, quota, vault, worker leases, and result commits exist.
+This is intentionally local-only alpha storage. It is not Postgres, Redis, a hosted tenant audit log, a worker event queue, a credential vault, or a provider result committer. The tradeoff is that read endpoints can initialize a missing local stream for a known run so restart continuity and replay UX stay deterministic; the worker result dry-run can then preview the commit envelope from that replay without mutating the run. Future hosted Pro should replace that with explicit worker-owned event writes once auth, quota, vault, worker leases, and result commits exist.
 
 ## Provider routing boundary
 
@@ -173,6 +176,7 @@ Initial responsibility:
 - `GET /api/runs/{run_id}/events`
 - `GET /api/runs/{run_id}/event-log`
 - `GET /api/runs/{run_id}/event-replay`
+- `POST /api/runs/{run_id}/worker-result-dry-run`
 - `GET /api/runs/{run_id}/review-comparison`
 - `GET /api/workspace/access-context`
 - `GET /api/credential-vault-boundary`
@@ -195,11 +199,12 @@ Initial responsibility:
 - minimal local CORS headers for the separate Pro web port
 - local JSON run storage through `crates/run-store`, shared by list/detail/graph reads and surviving API restarts
 - local JSON event replay storage through `crates/event-store`, shared by seed/create-run writes plus run-scoped event-log/replay reads
+- preview-only worker result dry-runs through `crates/event-store`, derived from local replay and blocked from result-event writes
 - no-connection hosted storage migration plan through `crates/run-store`
 - local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
 - future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current run and event stores are intentionally local-file-backed. They are useful for proving the API behavior, graph payload contract, restart continuity, and local event replay, but they should not be treated as the hosted Pro data layer. The workspace access context, credential-vault boundary, quota-ledger boundary, result-commit boundary, derived run-events, local event-log/replay, review-comparison, provider-status, provider-route preview, execution-job, lifecycle, worker-lease, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, result/event commit vocabulary, run status vocabulary, replay vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, retry/idempotency semantics, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, opening database/Redis connections, enforcing auth, claiming worker leases, scheduling retries, or calling real providers. Only the local event-log/replay endpoints write derived run-scoped events to the local JSON replay file; result-commit/provider/worker routes still cannot write provider result events. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current run and event stores are intentionally local-file-backed. They are useful for proving the API behavior, graph payload contract, restart continuity, and local event replay, but they should not be treated as the hosted Pro data layer. The workspace access context, credential-vault boundary, quota-ledger boundary, result-commit boundary, derived run-events, local event-log/replay, worker result dry-run, review-comparison, provider-status, provider-route preview, execution-job, lifecycle, worker-lease, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, result/event commit vocabulary, run status vocabulary, replay vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, retry/idempotency semantics, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, opening database/Redis connections, enforcing auth, claiming worker leases, scheduling retries, or calling real providers. Only the local event-log/replay endpoints write derived run-scoped events to the local JSON replay file; result-commit/provider/worker result dry-run routes still cannot write provider result events. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -215,6 +220,7 @@ Initial responsibility:
 - render the planned result-commit/event-store boundary from `GET /api/result-commit-boundary`, showing commit stages, event write rules, partial-result reconciliation, and safeguards without writing durable events
 - render a non-durable run event timeline from `GET /api/runs/{run_id}/events`
 - render durable local event replay from `GET /api/runs/{run_id}/event-replay`, showing replay mode, event count, persisted entries, and replay safeguards
+- run a preview-only worker result dry-run through `POST /api/runs/{run_id}/worker-result-dry-run`, showing proposed result steps, commit checks, blocked writes, and dry-run safeguards
 - render a derived review-comparison panel from `GET /api/runs/{run_id}/review-comparison`, showing evidence/challenge deltas and preview safeguards
 - show provider/search quota ownership, credential policy, and cooldown status through the local provider-status payload
 - render the dry provider-adapter request/result/degradation contract from `GET /api/provider-adapter-contract`
@@ -275,7 +281,7 @@ The current `GET /api/worker-lease-boundary` path exposes planned worker-lease, 
 
 The current `GET /api/result-commit-boundary` path exposes planned result-commit stages, event write rules, partial-result reconciliation rules, and safeguards. It does not write provider result events, mutate run state, claim worker leases, read credentials, reserve quota, or call providers. Future hosted Pro should replace it with worker-owned durable result/event commits after tenant auth, quota reservations, vault access, idempotent worker commits, and storage boundaries exist.
 
-The current `GET /api/runs/{run_id}/events` path derives a non-durable timeline from the run record. `GET /api/runs/{run_id}/event-log` and `GET /api/runs/{run_id}/event-replay` persist and replay that run-scoped stream through the local JSON event-store. This is useful for local replay UX and restart continuity, but it is not a hosted audit log, not a worker status queue, and not proof that provider result commits are safe. Future hosted Pro should replace or supplement it with tenant-scoped event-store rows once auth, quota reservations, worker leases, vault access, and storage boundaries exist.
+The current `GET /api/runs/{run_id}/events` path derives a non-durable timeline from the run record. `GET /api/runs/{run_id}/event-log` and `GET /api/runs/{run_id}/event-replay` persist and replay that run-scoped stream through the local JSON event-store. `POST /api/runs/{run_id}/worker-result-dry-run` uses that replay as input and returns proposed result commit steps without result-event writes. This is useful for local replay UX, restart continuity, and commit-flow shaping, but it is not a hosted audit log, not a worker status queue, and not proof that provider result commits are safe. Future hosted Pro should replace or supplement it with tenant-scoped event-store rows once auth, quota reservations, worker leases, vault access, and storage boundaries exist.
 
 The current `GET /api/runs/{run_id}/review-comparison` path derives a previous-checkpoint preview from the requested run and reports evidence/challenge deltas. It is useful for shaping graph-review UI, but it is not a durable comparison against another tenant-scoped run. Future hosted Pro should replace the derived baseline with explicit run selection after auth and durable history exist.
 
@@ -468,3 +474,11 @@ The local event-store/replay slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `GET /api/runs/{run_id}/event-replay`, `GET /api/runs/{run_id}/event-log`, and `POST /api/runs` proving seed and created-run replay streams persist to the local JSON event store while hosted storage, workers, credentials, auth, quota, billing, and provider execution remain disabled
 - a browser smoke that starts the Pro API and web shell and verifies that the event-replay panel renders local durable mode, local-file replay, replay events, and replay safeguards
+
+The worker result dry-run slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `POST /api/runs/{run_id}/worker-result-dry-run` proving the payload is derived from local replay, exposes proposed result commit steps, and keeps execution, provider calls, result-event writes, credentials, auth, quota, and billing disabled
+- a browser smoke that starts the Pro API and web shell, clicks `Dry-run result commit`, and verifies that the worker-result panel renders preview-only local replay, blocked result writes, commit checks, and dry-run safeguards
