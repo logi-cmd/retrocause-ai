@@ -1,10 +1,12 @@
 {
   "schemaVersion": 3,
-  "task": "Add a result-commit and event-store boundary preview for the Pro Rust product core: define shared non-durable result commit, event-store write, and partial-result reconciliation payloads, expose a read-only API endpoint, render a compact result-commit panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add real event-store writes, database/Redis connections, workers, provider execution, credential access, auth enforcement, quota/billing mutation, OSS runtime changes, package dependencies, or live provider calls.",
+  "task": "Add a local durable event-store and run event replay slice for the Pro Rust product core: add a Rust event-store crate backed by a local JSON file, append seed/create-run events from the Pro API, expose read-only event-log and replay endpoints for runs, render a compact event replay panel in the graph-first web shell, and synchronize Pro docs/evidence. Keep this local-only and keyless: do not add Postgres/Redis, hosted auth, workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, or live provider calls.",
   "preset": "generic",
-  "createdAt": "2026-04-24T14:44:47.472Z",
+  "createdAt": "2026-04-24T15:09:13.391Z",
   "allowedPaths": [
-    "pro/crates/domain/",
+    "pro/Cargo.toml",
+    "pro/Cargo.lock",
+    "pro/crates/event-store/",
     "pro/apps/api/",
     "pro/apps/web/",
     "docs/PROJECT_STATE.md",
@@ -20,7 +22,7 @@
   "intendedFiles": [],
   "protectedPaths": [],
   "allowedChangeTypes": [],
-  "riskLevel": "high",
+  "riskLevel": "standard",
   "requiresReviewNotes": false,
   "validationProfile": "standard",
   "securityRequirements": [
@@ -58,6 +60,7 @@
   "rollbackNotes": "",
   "riskJustification": "",
   "autoFilledFields": [
+    "证据路径",
     "安全要求",
     "依赖要求",
     "性能要求",
@@ -66,14 +69,15 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "c1f503be-1204-4a91-b1ef-29a0a0f5e537",
-    "createdAt": "2026-04-24T14:44:47.471Z",
+    "sessionId": "9e3c7d31-300d-46ee-b309-ab62bf3e9731",
+    "createdAt": "2026-04-24T15:09:13.391Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add a result-commit and event-store boundary preview for the Pro Rust product core: define shared non-durable result commit, event-store write, and partial-result reconciliation payloads, expose a read-only API endpoint, render a compact result-commit panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add real event-store writes, database/Redis connections, workers, provider execution, credential access, auth enforcement, quota/billing mutation, OSS runtime changes, package dependencies, or live provider calls.",
+    "taskRequest": "Add a local durable event-store and run event replay slice for the Pro Rust product core: add a Rust event-store crate backed by a local JSON file, append seed/create-run events from the Pro API, expose read-only event-log and replay endpoints for runs, render a compact event replay panel in the graph-first web shell, and synchronize Pro docs/evidence. Keep this local-only and keyless: do not add Postgres/Redis, hosted auth, workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, or live provider calls.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],
     "autoFilledFields": [
+      "证据路径",
       "安全要求",
       "依赖要求",
       "性能要求",
@@ -113,7 +117,6 @@
       "Implement the smallest change that fits the contract.",
       "Run required commands: cargo test --manifest-path pro/Cargo.toml",
       "Update evidence: .agent-guardrails/evidence/current-task.md",
-      "Capture review-oriented notes before finishing.",
       "Keep security, dependency, performance, understanding, continuity concerns explicit in the evidence note and review summary.",
       "Run agent-guardrails check --review before completing the task."
     ],

@@ -3,6 +3,7 @@ members = [
     "apps/api",
     "apps/web",
     "crates/domain",
+    "crates/event-store",
     "crates/provider-routing",
     "crates/queue",
     "crates/run-store",

@@ -14,6 +14,9 @@ use retrocause_pro_domain::{
     quota_ledger_boundary, result_commit_boundary, run_event_timeline, run_review_comparison,
     sample_run, workspace_access_context,
 };
+use retrocause_pro_event_store::{
+    EventStoreEntry, EventStoreError, EventStoreReplay, FileEventStore,
+};
 use retrocause_pro_provider_routing::{
     ProviderAdapterCandidateCatalog, ProviderAdapterContract, ProviderAdapterDryRunRequest,
     ProviderAdapterDryRunResult, ProviderAdapterGateCheckRequest, ProviderAdapterGateCheckResult,
@@ -56,13 +59,23 @@ type ApiError = (StatusCode, Json<ErrorPayload>);
 #[derive(Clone)]
 struct AppState {
     run_store: FileRunStore,
+    event_store: FileEventStore,
     execution_queue: ExecutionQueue,
 }
 
 impl AppState {
-    fn open_default() -> Result<Self, RunStoreError> {
+    fn open_default() -> Result<Self, String> {
+        let run_store = FileRunStore::open_default().map_err(|error| error.to_string())?;
+        let event_store = FileEventStore::open_default().map_err(|error| error.to_string())?;
+        if let Some(seed) = run_store.get_run("run_semiconductor_controls_001") {
+            event_store
+                .ensure_run_events(&seed)
+                .map_err(|error| error.to_string())?;
+        }
+
         Ok(Self {
-            run_store: FileRunStore::open_default()?,
+            run_store,
+            event_store,
             execution_queue: ExecutionQueue::new(),
         })
     }
@@ -104,6 +117,8 @@ fn router() -> Router {
         .route("/api/runs/{run_id}", get(get_run))
         .route("/api/runs/{run_id}/graph", get(get_run_graph))
         .route("/api/runs/{run_id}/events", get(get_run_events))
+        .route("/api/runs/{run_id}/event-log", get(get_run_event_log))
+        .route("/api/runs/{run_id}/event-replay", get(get_run_event_replay))
         .route(
             "/api/runs/{run_id}/review-comparison",
             get(get_run_review_comparison),
@@ -123,7 +138,7 @@ fn router() -> Router {
         .route("/api/worker-lease-boundary", get(worker_lease))
         .route("/api/storage-plan", get(storage_plan))
         .layer(middleware::from_fn(add_cors_headers))
-        .with_state(AppState::open_default().expect("open pro run store"))
+        .with_state(AppState::open_default().expect("open pro stores"))
 }
 
 async fn index() -> &'static str {
@@ -226,6 +241,10 @@ async fn create_run(
         .run_store
         .create_run(request)
         .map_err(run_store_error)?;
+    state
+        .event_store
+        .ensure_run_events(&run)
+        .map_err(event_store_error)?;
 
     Ok((StatusCode::CREATED, Json(run)))
 }
@@ -267,6 +286,36 @@ async fn get_run_events(
         .get_run(&run_id)
         .ok_or_else(|| not_found(run_id))?;
     Ok(Json(run_event_timeline(&run)))
+}
+
+async fn get_run_event_log(
+    State(state): State<AppState>,
+    Path(run_id): Path<String>,
+) -> Result<Json<Vec<EventStoreEntry>>, ApiError> {
+    let run = state
+        .run_store
+        .get_run(&run_id)
+        .ok_or_else(|| not_found(run_id))?;
+    state
+        .event_store
+        .list_run_events(&run)
+        .map(Json)
+        .map_err(event_store_error)
+}
+
+async fn get_run_event_replay(
+    State(state): State<AppState>,
+    Path(run_id): Path<String>,
+) -> Result<Json<EventStoreReplay>, ApiError> {
+    let run = state
+        .run_store
+        .get_run(&run_id)
+        .ok_or_else(|| not_found(run_id))?;
+    state
+        .event_store
+        .ensure_run_events(&run)
+        .map(Json)
+        .map_err(event_store_error)
 }
 
 async fn get_run_review_comparison(
@@ -357,6 +406,10 @@ fn run_store_error(error: RunStoreError) -> ApiError {
     }
 }
 
+fn event_store_error(error: EventStoreError) -> ApiError {
+    internal_error(error.to_string())
+}
+
 fn routing_preview_error(error: RoutingPreviewError) -> ApiError {
     match error {
         RoutingPreviewError::QueryRequired => bad_request(error.to_string()),
@@ -442,6 +495,8 @@ mod tests {
             Self {
                 run_store: FileRunStore::open(temp_store_path())
                     .expect("test run store should open"),
+                event_store: FileEventStore::open(temp_event_store_path())
+                    .expect("test event store should open"),
                 execution_queue: ExecutionQueue::new(),
             }
         }
@@ -825,6 +880,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn event_log_payload_is_persisted_for_requested_run() {
+        let payload = get_run_event_log(
+            State(AppState::seeded()),
+            Path("run_semiconductor_controls_001".to_string()),
+        )
+        .await
+        .expect("known sample run")
+        .0;
+
+        assert!(!payload.is_empty());
+        assert_eq!(payload[0].run_id, "run_semiconductor_controls_001");
+        assert_eq!(
+            payload[0].source,
+            retrocause_pro_event_store::EventStoreEntrySource::DerivedRunTimelinePersistedLocally
+        );
+    }
+
+    #[tokio::test]
+    async fn event_replay_payload_is_local_and_durable() {
+        let payload = get_run_event_replay(
+            State(AppState::seeded()),
+            Path("run_semiconductor_controls_001".to_string()),
+        )
+        .await
+        .expect("known sample run")
+        .0;
+
+        assert_eq!(payload.run_id, "run_semiconductor_controls_001");
+        assert!(payload.durable);
+        assert!(payload.event_count >= 3);
+        assert!(
+            payload
+                .safeguards
+                .contains(&"local_file_event_store_only".to_string())
+        );
+    }
+
+    #[tokio::test]
     async fn review_comparison_payload_is_derived_from_requested_run() {
         let payload = get_run_review_comparison(
             State(AppState::seeded()),
@@ -899,12 +992,19 @@ mod tests {
         assert_eq!(events.current_status, RunStatus::Queued);
         assert_eq!(events.events.len(), 1);
 
-        let comparison = get_run_review_comparison(State(state), Path(created.id.clone()))
+        let comparison = get_run_review_comparison(State(state.clone()), Path(created.id.clone()))
             .await
             .expect("created run comparison should be readable")
             .0;
         assert_eq!(comparison.run_id, created.id);
         assert_eq!(comparison.evidence_summary.added, 1);
+
+        let replay = get_run_event_replay(State(state), Path(created.id.clone()))
+            .await
+            .expect("created run replay should be readable")
+            .0;
+        assert_eq!(replay.run_id, created.id);
+        assert_eq!(replay.event_count, 1);
     }
 
     #[tokio::test]
@@ -1029,6 +1129,18 @@ mod tests {
 
         std::env::temp_dir().join(format!(
             "retrocause-pro-api-store-{}-{nanos}.json",
+            std::process::id()
+        ))
+    }
+
+    fn temp_event_store_path() -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+
+        std::env::temp_dir().join(format!(
+            "retrocause-pro-api-event-store-{}-{nanos}.json",
             std::process::id()
         ))
     }

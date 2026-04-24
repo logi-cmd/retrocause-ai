@@ -98,6 +98,15 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "derived" }
                                 }
                             }
+                            div id="event-replay-panel" class="event-replay-panel" {
+                                article class="event-card event-card--empty" {
+                                    div {
+                                        strong { "Event replay" }
+                                        p { "Durable local event replay loads from the Pro API; hosted event storage is not connected." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "local file" }
+                                }
+                            }
                             div id="review-comparison-panel" class="review-comparison-panel" {
                                 article class="review-card review-card--empty" {
                                     div {
@@ -828,6 +837,54 @@ fn client_script() -> &'static str {
         <section>
           <p class="work-order-label">Timeline safeguards</p>
           <ul class="work-order-list">${safeguards || "<li>Timeline is derived only.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
+  function renderEventReplay(replay) {
+    const panel = byId("event-replay-panel");
+    if (!panel) return;
+    if (!replay) {
+      panel.innerHTML = `
+        <article class="event-card event-card--empty">
+          <div>
+            <strong>Event replay</strong>
+            <p>Durable local event replay loads from the Pro API; hosted event storage is not connected.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">local file</span>
+        </article>
+      `;
+      return;
+    }
+
+    const events = (replay.events || []).slice(-4).map((entry) => `
+      <li>
+        <strong>${escapeHtml(entry.event?.title || entry.id)}</strong>
+        <span>${escapeHtml(readable(entry.event?.status || "unknown"))} / seq ${escapeHtml(entry.sequence)}</span>
+        <small>${escapeHtml(entry.event?.detail || "Replay event persisted locally.")}</small>
+      </li>
+    `).join("");
+    const safeguards = (replay.safeguards || [])
+      .slice(0, 3)
+      .map((guard) => `<li>${escapeHtml(guard)}</li>`)
+      .join("");
+
+    panel.innerHTML = `
+      <article class="event-card">
+        <div class="work-order-header">
+          <strong>Event replay</strong>
+          <span class="quota-state quota-state--deferred">${replay.durable ? "local durable" : "derived"}</span>
+          <p>${escapeHtml(readable(replay.mode || "local_file_replay"))} / ${escapeHtml(replay.event_count || 0)} events</p>
+          <small>${escapeHtml(replay.generated_at || "local replay")}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Replay stream</p>
+          <ol class="work-order-list">${events || "<li>No replay events returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Replay safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>Replay remains local-only.</li>"}</ul>
         </section>
       </article>
     `;
@@ -1564,15 +1621,17 @@ fn client_script() -> &'static str {
 
   async function loadRun(runId) {
     if (!runId) return;
-    const [run, graphPayload, eventTimeline, reviewComparison] = await Promise.all([
+    const [run, graphPayload, eventTimeline, eventReplay, reviewComparison] = await Promise.all([
       fetchJson(`/api/runs/${encodeURIComponent(runId)}`),
       fetchJson(`/api/runs/${encodeURIComponent(runId)}/graph`),
       fetchJson(`/api/runs/${encodeURIComponent(runId)}/events`),
+      fetchJson(`/api/runs/${encodeURIComponent(runId)}/event-replay`),
       fetchJson(`/api/runs/${encodeURIComponent(runId)}/review-comparison`),
     ]);
     run.graph = graphPayload.graph;
     renderRun(run);
     renderRunEvents(eventTimeline);
+    renderEventReplay(eventReplay);
     renderReviewComparison(reviewComparison);
     await refreshRuns(run.id);
     setStatus(`Loaded ${run.id}`);
@@ -1689,6 +1748,7 @@ fn client_script() -> &'static str {
   renderRun(seed);
   renderWorkspaceAccess(null);
   renderRunEvents(null);
+  renderEventReplay(null);
   renderReviewComparison(null);
   renderProviderStatus(providerSeed);
   renderProviderAdapterContract(null);
@@ -1712,6 +1772,11 @@ fn client_script() -> &'static str {
     .then(renderRunEvents)
     .catch(() => {
       renderRunEvents(null);
+    });
+  fetchJson(`/api/runs/${encodeURIComponent(seed.id)}/event-replay`)
+    .then(renderEventReplay)
+    .catch(() => {
+      renderEventReplay(null);
     });
   fetchJson(`/api/runs/${encodeURIComponent(seed.id)}/review-comparison`)
     .then(renderReviewComparison)
@@ -2342,7 +2407,8 @@ p {
   gap: 0.65rem;
 }
 
-#run-event-panel {
+#run-event-panel,
+#event-replay-panel {
   display: grid;
   gap: 0.65rem;
 }
@@ -2729,6 +2795,10 @@ mod tests {
         assert!(page.contains("/api/runs/${encodeURIComponent(runId)}/events"));
         assert!(page.contains("function renderRunEvents"));
         assert!(page.contains("Run event timeline"));
+        assert!(page.contains("event-replay-panel"));
+        assert!(page.contains("/api/runs/${encodeURIComponent(runId)}/event-replay"));
+        assert!(page.contains("function renderEventReplay"));
+        assert!(page.contains("Event replay"));
         assert!(page.contains("review-comparison-panel"));
         assert!(page.contains("/api/runs/${encodeURIComponent(runId)}/review-comparison"));
         assert!(page.contains("function renderReviewComparison"));

@@ -11,8 +11,8 @@ The Rust rewrite lives under `pro/` inside this repository so the product and ar
 ## Current architecture goals
 
 1. Establish a clean Rust workspace boundary.
-2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, usage ledger entries, provider quota ownership, and cooldown state.
-3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, keyless provider/search quota status, routing previews, and preview-only execution jobs.
+ 2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, usage ledger entries, provider quota ownership, and cooldown state.
+3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, run-scoped local event replay, keyless provider/search quota status, routing previews, and preview-only execution jobs.
 4. Render a graph-first web shell from the same shared Rust payload and wire it to the local API create/read flow plus provider-status view.
 5. Keep Pro separate from the OSS Python/FastAPI + Next.js runtime.
 
@@ -26,6 +26,7 @@ pro/
     web/
   crates/
     domain/
+    event-store/
     provider-routing/
     queue/
     run-store/
@@ -90,7 +91,7 @@ The quota-ledger and billing boundary is deliberately preview-only in this slice
 
 The result-commit and event-store boundary is deliberately preview-only in this slice. It names future commit stages, event write rules, and partial-result reconciliation rules while returning `event_store_connected=false`, `commit_writes_enabled=false`, and `partial_reconciliation_enabled=false`.
 
-The run event timeline is deliberately non-durable in this slice. It is generated from the current `ProRun` record and names event/status vocabulary before an event store exists. It does not open an event-store connection, run workers, call providers, enforce auth, or mutate run state.
+The run event timeline remains derived from the current `ProRun` record through `GET /api/runs/{run_id}/events`. A separate local event-store slice now persists that derived stream into a run-scoped JSON file for local replay through `GET /api/runs/{run_id}/event-log` and `GET /api/runs/{run_id}/event-replay`. This is local inspectability storage, not a hosted audit log, worker queue, or provider-result commit path.
 
 The review comparison payload is also deliberately derived in this slice. It compares the current run to a generated previous-checkpoint preview and reports evidence/challenge deltas so the graph-review workflow has a concrete shape before durable run history, tenant auth, or cross-run selectors exist.
 
@@ -109,6 +110,21 @@ Current behavior:
 This is intentionally an alpha local store. It is not encrypted storage, not a multi-tenant database, not a credential vault, and not the final hosted Pro persistence layer. The value is the boundary: future Postgres-backed storage should replace this crate's implementation without forcing the API routes to own storage details again.
 
 `crates/run-store` also carries a no-connection hosted storage migration plan. It names the intended Postgres run/evidence/usage tables, Redis execution/cooldown queues, tenant and actor boundaries, row-level policy expectations, audit metadata, and worker-owned lease/credential responsibilities before any hosted store is connected.
+
+## Event store boundary
+
+`crates/event-store` is the first local event replay boundary. It currently provides a JSON file-backed `FileEventStore` around run-scoped event streams derived from `ProRun` records.
+
+Current behavior:
+
+- default path: `.retrocause/pro_events.json`
+- override: `RETROCAUSE_PRO_EVENT_STORE_PATH`
+- first API open persists replay events for the canonical seed run when that run exists
+- `POST /api/runs` persists the created run's initial replay stream
+- `GET /api/runs/{run_id}/event-log` returns the persisted entries for the requested run
+- `GET /api/runs/{run_id}/event-replay` returns replay metadata, durable-local mode, event count, entries, and safeguards
+
+This is intentionally local-only alpha storage. It is not Postgres, Redis, a hosted tenant audit log, a worker event queue, a credential vault, or a provider result committer. The tradeoff is that read endpoints can initialize a missing local stream for a known run so restart continuity and replay UX stay deterministic; future hosted Pro should replace that with explicit worker-owned event writes once auth, quota, vault, worker leases, and result commits exist.
 
 ## Provider routing boundary
 
@@ -155,6 +171,8 @@ Initial responsibility:
 - `GET /api/runs/{run_id}`
 - `GET /api/runs/{run_id}/graph`
 - `GET /api/runs/{run_id}/events`
+- `GET /api/runs/{run_id}/event-log`
+- `GET /api/runs/{run_id}/event-replay`
 - `GET /api/runs/{run_id}/review-comparison`
 - `GET /api/workspace/access-context`
 - `GET /api/credential-vault-boundary`
@@ -176,11 +194,12 @@ Initial responsibility:
 - `GET /api/storage-plan`
 - minimal local CORS headers for the separate Pro web port
 - local JSON run storage through `crates/run-store`, shared by list/detail/graph reads and surviving API restarts
+- local JSON event replay storage through `crates/event-store`, shared by seed/create-run writes plus run-scoped event-log/replay reads
 - no-connection hosted storage migration plan through `crates/run-store`
 - local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
 - future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The workspace access context, credential-vault boundary, quota-ledger boundary, result-commit boundary, run-events, review-comparison, provider-status, provider-route preview, execution-job, lifecycle, worker-lease, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, result/event commit vocabulary, run status vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, retry/idempotency semantics, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, writing events, opening event-store/database/Redis connections, enforcing auth, claiming worker leases, scheduling retries, or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current run and event stores are intentionally local-file-backed. They are useful for proving the API behavior, graph payload contract, restart continuity, and local event replay, but they should not be treated as the hosted Pro data layer. The workspace access context, credential-vault boundary, quota-ledger boundary, result-commit boundary, derived run-events, local event-log/replay, review-comparison, provider-status, provider-route preview, execution-job, lifecycle, worker-lease, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, result/event commit vocabulary, run status vocabulary, replay vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, retry/idempotency semantics, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, opening database/Redis connections, enforcing auth, claiming worker leases, scheduling retries, or calling real providers. Only the local event-log/replay endpoints write derived run-scoped events to the local JSON replay file; result-commit/provider/worker routes still cannot write provider result events. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -195,6 +214,7 @@ Initial responsibility:
 - render the planned quota-ledger/billing boundary from `GET /api/quota-ledger-boundary`, showing quota lanes, metering rules, and billing safeguards without writing usage or connecting payment infrastructure
 - render the planned result-commit/event-store boundary from `GET /api/result-commit-boundary`, showing commit stages, event write rules, partial-result reconciliation, and safeguards without writing durable events
 - render a non-durable run event timeline from `GET /api/runs/{run_id}/events`
+- render durable local event replay from `GET /api/runs/{run_id}/event-replay`, showing replay mode, event count, persisted entries, and replay safeguards
 - render a derived review-comparison panel from `GET /api/runs/{run_id}/review-comparison`, showing evidence/challenge deltas and preview safeguards
 - show provider/search quota ownership, credential policy, and cooldown status through the local provider-status payload
 - render the dry provider-adapter request/result/degradation contract from `GET /api/provider-adapter-contract`
@@ -214,7 +234,7 @@ Initial responsibility:
 - `crates/export`
 - `crates/evidence-store`
 
-`crates/run-store`, `crates/provider-routing`, and `crates/queue` exist today. The other crates are intentionally not created yet; each should appear only when it removes real duplication or isolates a concrete boundary.
+`crates/run-store`, `crates/event-store`, `crates/provider-routing`, and `crates/queue` exist today. The other crates are intentionally not created yet; each should appear only when it removes real duplication or isolates a concrete boundary.
 
 ## Operational architecture direction
 
@@ -253,9 +273,9 @@ The current `GET /api/quota-ledger-boundary` path exposes planned quota lanes, m
 
 The current `GET /api/worker-lease-boundary` path exposes planned worker-lease, retry, and idempotency rules. It does not start workers, claim leases, connect a lease store, schedule retries, read credentials, mutate quota/billing, or call providers. Future hosted Pro should replace it with durable lease claims, bounded retry scheduling, duplicate-call prevention, and partial-result reconciliation after tenant auth, quota reservations, vault access, and event-store writes exist.
 
-The current `GET /api/result-commit-boundary` path exposes planned result-commit stages, event write rules, partial-result reconciliation rules, and safeguards. It does not write events, open an event-store connection, mutate run state, claim worker leases, read credentials, reserve quota, or call providers. Future hosted Pro should replace it with durable event writes after tenant auth, quota reservations, vault access, idempotent worker commits, and storage boundaries exist.
+The current `GET /api/result-commit-boundary` path exposes planned result-commit stages, event write rules, partial-result reconciliation rules, and safeguards. It does not write provider result events, mutate run state, claim worker leases, read credentials, reserve quota, or call providers. Future hosted Pro should replace it with worker-owned durable result/event commits after tenant auth, quota reservations, vault access, idempotent worker commits, and storage boundaries exist.
 
-The current `GET /api/runs/{run_id}/events` path derives a non-durable timeline from the run record. It is useful for UI and API vocabulary, but it is not an audit log, not a durable event stream, and not a worker status queue. Future hosted Pro should replace or supplement it with event-store rows once tenant/auth, worker leases, and storage boundaries exist.
+The current `GET /api/runs/{run_id}/events` path derives a non-durable timeline from the run record. `GET /api/runs/{run_id}/event-log` and `GET /api/runs/{run_id}/event-replay` persist and replay that run-scoped stream through the local JSON event-store. This is useful for local replay UX and restart continuity, but it is not a hosted audit log, not a worker status queue, and not proof that provider result commits are safe. Future hosted Pro should replace or supplement it with tenant-scoped event-store rows once auth, quota reservations, worker leases, vault access, and storage boundaries exist.
 
 The current `GET /api/runs/{run_id}/review-comparison` path derives a previous-checkpoint preview from the requested run and reports evidence/challenge deltas. It is useful for shaping graph-review UI, but it is not a durable comparison against another tenant-scoped run. Future hosted Pro should replace the derived baseline with explicit run selection after auth and durable history exist.
 
@@ -440,3 +460,11 @@ The result-commit/event-store boundary slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `GET /api/result-commit-boundary` proving event-store connections, commit writes, and partial-result reconciliation stay disabled while commit stages, event write rules, and safeguards are visible
 - a browser smoke that starts the Pro API and web shell and verifies that the result-commit panel renders planned-no-writes mode, event store off, writes off, partial reconciliation off, commit stages, event write rules, and commit safeguards
+
+The local event-store/replay slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `GET /api/runs/{run_id}/event-replay`, `GET /api/runs/{run_id}/event-log`, and `POST /api/runs` proving seed and created-run replay streams persist to the local JSON event store while hosted storage, workers, credentials, auth, quota, billing, and provider execution remain disabled
+- a browser smoke that starts the Pro API and web shell and verifies that the event-replay panel renders local durable mode, local-file replay, replay events, and replay safeguards

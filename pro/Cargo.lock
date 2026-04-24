@@ -313,6 +313,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "retrocause-pro-domain",
+ "retrocause-pro-event-store",
  "retrocause-pro-provider-routing",
  "retrocause-pro-queue",
  "retrocause-pro-run-store",
@@ -325,6 +326,15 @@ name = "retrocause-pro-domain"
 version = "0.1.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "retrocause-pro-event-store"
+version = "0.1.0"
+dependencies = [
+ "retrocause-pro-domain",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

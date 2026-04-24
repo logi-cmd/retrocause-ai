@@ -2346,3 +2346,94 @@ This task adds a preview-only result-commit and event-store boundary for the Pro
 - This is not an event store, durable result committer, audit log, reconciliation engine, or worker result writer.
 - There is still no real tenant auth, quota reservation, credential vault access, durable event-store write path, worker lease ownership, retry scheduler, or live source/provider call path.
 - Future hosted Pro must implement durable event writes, idempotent worker commits, partial-result reconciliation, tenant-scoped auth, quota reservations, vault handles, and storage boundaries before any live adapter can execute safely.
+
+## Pro Product Core Slice 25 - Local Event Store/Run Event Replay
+
+### Scope
+
+This task adds a local durable event-store and run event replay slice for the Pro Rust product core. A new Rust event-store crate persists run-scoped event streams to a local JSON file, the Pro API initializes seed/create-run replay streams and exposes read-only event-log/replay endpoints, and the graph-first web shell renders a compact replay panel. This stays local-only and keyless: no Postgres/Redis, hosted auth, workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, package publishing, or live provider calls were added.
+
+### Files Updated
+
+- `pro/Cargo.toml`
+- `pro/Cargo.lock`
+- `pro/crates/event-store/Cargo.toml`
+- `pro/crates/event-store/src/lib.rs`
+- `pro/apps/api/Cargo.toml`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `crates/event-store` with `FileEventStore`, local JSON persistence, `RETROCAUSE_PRO_EVENT_STORE_PATH`, run-scoped `EventStoreEntry`, and `EventStoreReplay`.
+- Persisted a replay stream for the canonical seed run when the Pro API opens, and for every successful `POST /api/runs` create request.
+- Added `GET /api/runs/{run_id}/event-log` and `GET /api/runs/{run_id}/event-replay`.
+- Added API/unit tests proving persisted event-log and replay payloads are scoped to the requested run and created runs get one replay event.
+- Added event-store crate tests proving sample replay persistence, reopen-without-duplication, and event-log/replay consistency.
+- Added a graph-first web event-replay panel that fetches `/api/runs/{run_id}/event-replay` and renders durable local mode, local-file replay, replay stream entries, and safeguards.
+- Updated project state and Pro architecture docs to distinguish the existing derived `/events` timeline from the new local JSON replay stream, and to clarify that this is not hosted event storage or a worker/provider result commit path.
+
+### Commands Run
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `29 passed`.
+  - Domain tests: `16 passed`.
+  - Event-store tests: `3 passed`.
+  - Provider-routing tests: `10 passed`.
+  - Queue tests: `7 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API event-store/replay smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8833` with temporary `RETROCAUSE_PRO_RUN_STORE_PATH` and `RETROCAUSE_PRO_EVENT_STORE_PATH`.
+  - Called `GET /api/runs/run_semiconductor_controls_001/event-replay`.
+  - Called `GET /api/runs/run_semiconductor_controls_001/event-log`.
+  - Created a run through `POST /api/runs`.
+  - Called `GET /api/runs/{created_run_id}/event-replay`.
+  - Result: passed; seed replay mode was `local_file_replay`, durable was `true`, seed event count was `4`, created run id was `run_local_000001`, created replay event count was `1`, and the local event-store JSON file contained both the seed run id and created run id.
+
+- Pro browser event-replay smoke
+  - First attempt failed because PowerShell `Invoke-WebRequest` produced a local object-reference error while checking the web page, even though the web process was listening.
+  - Re-ran with TCP readiness checks for the API/web ports.
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8834` and `retrocause-pro-web.exe` on `127.0.0.1:3043`.
+  - Aborted external font requests in Playwright so inline scripts could run without network font blocking.
+  - Result: passed; the event-replay panel rendered `Event replay`, `local durable`, `local file replay`, `events`, and `local_file_event_store_only`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Result: passed. A key-shaped scan for common provider-token prefixes and API-key assignment patterns found no key-shaped tokens in the git diff.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with concerns; no blocking errors.
+  - Score: `75/100 (pass-with-concerns)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the project state was synchronized to mark the local event-store/replay slice as implemented and to move the next Pro focus away from the already-landed event-store boundary.
+  - Non-blocking warning: `pro/crates/event-store/Cargo.toml` and `pro/crates/event-store/src/lib.rs` are state-related files. This was intentional because the slice adds the new local JSON event-store boundary that owns persisted run-event replay state.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET /api/runs/{run_id}/event-log` and `GET /api/runs/{run_id}/event-replay`; it does not change OSS APIs, accept credentials, enforce auth, mutate quota/billing, start workers, or execute provider calls.
+  - Non-blocking warning: `pro/Cargo.toml`, `pro/apps/api/Cargo.toml`, and `pro/crates/event-store/Cargo.toml` are config/dependency files. This was intentional because the workspace now includes one internal crate; no external crates, npm dependencies, package publishing, deployment config, or hosted infrastructure changes were added.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice does not accept, read, store, log, or return provider secrets, payment credentials, auth tokens, or user API keys. It does not enforce hosted permissions or protect hosted resources. Replay is scoped by requested run id and only persists local derived run events.
+- Dependencies: one new internal workspace crate was added: `retrocause-pro-event-store`. `Cargo.lock` changed because the workspace gained that crate, but no external crate versions or npm packages were added or upgraded.
+- Performance: the local event store reads/writes one JSON file behind an in-process lock. This is acceptable for local alpha inspectability, but it is not a high-concurrency hosted store. Future hosted Pro should move event rows to a database/event log before multi-user worker writes.
+- Understanding: the deliberate tradeoff is that `event-log` and `event-replay` can initialize a missing stream for a known run from the current derived timeline. That keeps local replay deterministic after restarts, but it is not an immutable audit-log guarantee.
+- Continuity: reused existing Pro patterns: shared Rust crates, Axum state/endpoint style, local `.retrocause` defaults plus env overrides, server-rendered web panels, compact boundary-card styling, and existing run-event timeline vocabulary. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- This is not hosted event storage, not a worker event queue, not a multi-tenant audit log, and not a provider result committer.
+- Local JSON event-store writes are suitable for the Pro foundation and developer inspection only; they are not safe for concurrent hosted production workloads.
+- Future hosted Pro still needs tenant auth, quota reservation, credential vault access, durable worker leases, idempotent result commits, and database-backed event rows before any live adapter can execute safely.
