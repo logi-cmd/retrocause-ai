@@ -1,10 +1,10 @@
 {
   "schemaVersion": 3,
-  "task": "Add the next Pro graph interaction slice: make graph nodes selectable in the Rust web shell, show the selected node in a graph inspector with confidence, evidence links, and challenge links, keep state browser-local only, and synchronize Pro docs/evidence. Do not add persistence, provider calls, or OSS runtime changes.",
+  "task": "Replace the Pro API's process-local run HashMap with the first durable Rust run-store boundary: add a small pro/crates/run-store crate with a file-backed JSON run store, derive the needed domain deserialization, wire the API list/create/detail/graph routes through the store, use a local env-configurable store path, and synchronize Pro docs/evidence. Do not add provider calls, credentials, auth, billing, or OSS runtime changes.",
   "preset": "generic",
-  "createdAt": "2026-04-24T10:25:33.971Z",
+  "createdAt": "2026-04-24T10:36:36.446Z",
   "allowedPaths": [
-    "pro/apps/web/src/main.rs",
+    "pro/",
     "docs/PROJECT_STATE.md",
     "docs/pro-rust-architecture.md",
     ".agent-guardrails/"
@@ -18,7 +18,7 @@
   "intendedFiles": [],
   "protectedPaths": [],
   "allowedChangeTypes": [],
-  "riskLevel": "medium",
+  "riskLevel": "high",
   "requiresReviewNotes": false,
   "validationProfile": "standard",
   "securityRequirements": [
@@ -64,10 +64,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "0695b35d-0f5f-433d-8ff9-fb19aa8c9599",
-    "createdAt": "2026-04-24T10:25:33.971Z",
+    "sessionId": "a4863c16-d796-4e26-8318-3c11a1d4c880",
+    "createdAt": "2026-04-24T10:36:36.445Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add the next Pro graph interaction slice: make graph nodes selectable in the Rust web shell, show the selected node in a graph inspector with confidence, evidence links, and challenge links, keep state browser-local only, and synchronize Pro docs/evidence. Do not add persistence, provider calls, or OSS runtime changes.",
+    "taskRequest": "Replace the Pro API's process-local run HashMap with the first durable Rust run-store boundary: add a small pro/crates/run-store crate with a file-backed JSON run store, derive the needed domain deserialization, wire the API list/create/detail/graph routes through the store, use a local env-configurable store path, and synchronize Pro docs/evidence. Do not add provider calls, credentials, auth, billing, or OSS runtime changes.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],
@@ -111,6 +111,7 @@
       "Implement the smallest change that fits the contract.",
       "Run required commands: cargo test --manifest-path pro/Cargo.toml",
       "Update evidence: .agent-guardrails/evidence/current-task.md",
+      "Capture review-oriented notes before finishing.",
       "Keep security, dependency, performance, understanding, continuity concerns explicit in the evidence note and review summary.",
       "Run agent-guardrails check --review before completing the task."
     ],

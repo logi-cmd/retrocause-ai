@@ -808,3 +808,87 @@ This task adds the first browser-local graph interaction state for the Pro web s
 - Selection state is not persisted and does not synchronize across tabs or runs.
 - The inspector is read-only and only shows node-level evidence/challenge links; edge-level inspection and richer review workflows remain future work.
 - The current layout is still an alpha shell and will need more visual QA as the graph grows.
+
+## 2026-04-24 Pro Product Core Slice 6
+
+This task replaces the Pro API's direct process-local `HashMap` storage with the first local durable run-store boundary. It adds a small file-backed Rust crate and keeps all storage local, keyless, and alpha-scoped.
+
+### Files Updated
+
+- `pro/Cargo.toml`
+- `pro/Cargo.lock`
+- `pro/apps/api/Cargo.toml`
+- `pro/apps/api/src/main.rs`
+- `pro/crates/domain/src/lib.rs`
+- `pro/crates/run-store/Cargo.toml`
+- `pro/crates/run-store/src/lib.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `retrocause-pro-run-store`, a local JSON file-backed run-store crate.
+- Added `FileRunStore` with `list_summaries`, `get_run`, and `create_run` methods.
+- Added default local storage at `.retrocause/pro_runs.json`, with `RETROCAUSE_PRO_RUN_STORE_PATH` override.
+- Changed Pro API routes to call the run-store boundary instead of owning direct `HashMap`, `RwLock`, and sequence state.
+- Derived `Deserialize` for Pro domain payloads so run records can be serialized and restored from disk.
+- Updated Pro docs so the current storage story is local-file-backed alpha persistence, not hosted storage.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: contract refreshed for the durable run-store boundary slice.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - First result: failed because new Rust code needed standard `rustfmt` wrapping.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all`
+  - Result: applied standard formatting.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `8 passed`.
+  - Domain tests: `8 passed`.
+  - Run-store tests: `3 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API restart persistence smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8797` with a temporary `RETROCAUSE_PRO_RUN_STORE_PATH`.
+  - Created a run titled `Durable smoke`.
+  - Stopped and restarted the API process with the same store path.
+  - Loaded the created run by id.
+  - Result: `created=run_local_000001; loaded=Durable smoke; storeExists=True`.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Final result: passed.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `75/100 (pass-with-concerns)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. The project state was intentionally synchronized to mark local JSON run-store persistence as implemented and to move the next-step queue forward.
+  - Non-blocking warning: `pro/crates/run-store/Cargo.toml` and `pro/crates/run-store/src/lib.rs` are state/storage-related files. This is intentional: the task creates the first run-store boundary and moves run state out of API-owned `HashMap` storage.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface/behavior-changing file. This slice preserves the same run endpoints but changes their storage behavior so created runs survive API restarts through the local run-store file.
+  - Non-blocking warning: `pro/Cargo.toml`, `pro/apps/api/Cargo.toml`, and `pro/crates/run-store/Cargo.toml` are config changes. This is intentional and scoped to adding the new workspace crate plus API dependency; there is no package publishing or deployment change.
+  - Non-blocking warning: change size is larger than earlier slices. The size comes from adding one crate, deriving deserialization for existing domain payloads, and updating docs/evidence in the same storage-boundary slice.
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, API keys, credential fields, provider calls, or hosted execution were added. The JSON run store is local alpha storage and is not a secure document vault.
+- Dependencies: no external dependency versions were added; `serde_json` was already a workspace dependency and is now used by the new run-store crate. `pro/Cargo.lock` changed because the new crate joined the workspace.
+- Performance: the store writes the small JSON file on create. This is acceptable for the alpha run-store boundary, but it is not suitable for high-concurrency hosted use.
+- Understanding: the tradeoff is taking a simple durable boundary now instead of jumping straight to Postgres. API routes stop owning storage details, so a future database implementation can replace the crate without reshaping the route layer.
+- Continuity: this reuses the existing Pro domain payload and Axum route patterns. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- The JSON file store is local-only, single-process oriented, and not crash-atomic.
+- There is still no tenant boundary, auth, ACL, encryption, migration layer, or hosted database.
+- Future hosted Pro should move this boundary to Postgres and keep JSON only as a local/dev fallback.

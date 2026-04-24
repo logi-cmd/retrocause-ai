@@ -3,6 +3,7 @@ members = [
     "apps/api",
     "apps/web",
     "crates/domain",
+    "crates/run-store",
 ]
 resolver = "2"
 

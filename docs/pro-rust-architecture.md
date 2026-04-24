@@ -12,7 +12,7 @@ The Rust rewrite lives under `pro/` inside this repository so the product and ar
 
 1. Establish a clean Rust workspace boundary.
 2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, usage ledger entries, provider quota ownership, and cooldown state.
-3. Stand up API endpoints that expose run summaries, run detail, graph payloads, in-memory run creation, and keyless provider/search quota status.
+3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, and keyless provider/search quota status.
 4. Render a graph-first web shell from the same shared Rust payload and wire it to the local API create/read flow plus provider-status view.
 5. Keep Pro separate from the OSS Python/FastAPI + Next.js runtime.
 
@@ -26,6 +26,7 @@ pro/
     web/
   crates/
     domain/
+    run-store/
 ```
 
 ## Stack choice
@@ -73,6 +74,20 @@ The first shared crate now defines:
 
 This keeps the API and web kickoff honest: they render the same shape instead of drifting into two separate demos.
 
+## Run store boundary
+
+`crates/run-store` is the first Pro storage boundary. It currently provides a local JSON file-backed `FileRunStore` around `ProRun` records.
+
+Current behavior:
+
+- default path: `.retrocause/pro_runs.json`
+- override: `RETROCAUSE_PRO_RUN_STORE_PATH`
+- first open seeds the canonical sample run
+- created runs are written to disk and survive API process restarts
+- the API no longer owns raw `HashMap` or sequence state directly
+
+This is intentionally an alpha local store. It is not encrypted storage, not a multi-tenant database, not a credential vault, and not the final hosted Pro persistence layer. The value is the boundary: future Postgres-backed storage should replace this crate's implementation without forcing the API routes to own storage details again.
+
 ## Near-term service split
 
 ### `apps/api`
@@ -87,10 +102,10 @@ Initial responsibility:
 - `GET /api/runs/{run_id}/graph`
 - `GET /api/provider-status`
 - minimal local CORS headers for the separate Pro web port
-- process-local in-memory run storage shared by list/detail/graph reads
+- local JSON run storage through `crates/run-store`, shared by list/detail/graph reads and surviving API restarts
 - future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current store is intentionally in-memory. It is useful for proving the API behavior and graph payload contract, but it is not durable storage and should not be treated as a hosted Pro data layer. The provider-status endpoint is also static/keyless in this slice: it models ownership and cooldown semantics without exposing credential fields or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The provider-status endpoint is also static/keyless in this slice: it models ownership and cooldown semantics without exposing credential fields or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -106,13 +121,12 @@ Initial responsibility:
 
 ## Future crates after the kickoff
 
-- `crates/run-store`
 - `crates/queue`
 - `crates/provider-routing`
 - `crates/export`
 - `crates/evidence-store`
 
-These are intentionally not created yet. The kickoff only adds abstraction that removes immediate duplication between API and web.
+Only `crates/run-store` exists today. The other crates are intentionally not created yet; each should appear only when it removes real duplication or isolates a concrete boundary.
 
 ## Operational architecture direction
 
@@ -177,3 +191,10 @@ The provider-status slice adds focused unit coverage under:
 The tests assert that quota ownership remains explicit, the static cooldown bucket is visible, and provider-status payloads do not contain API-key or secret-shaped fields.
 
 The graph-interaction slice adds the same Rust test command plus a Playwright smoke that clicks a graph node and verifies that the inspector switches to the selected node while keeping only one node selected.
+
+The run-store slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API restart smoke with `RETROCAUSE_PRO_RUN_STORE_PATH` proving a created run can be read after the API process restarts

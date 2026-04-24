@@ -9,16 +9,10 @@ use axum::{
 };
 use retrocause_pro_domain::{
     CreateRunRequest, KnowledgeGraph, ProRun, ProviderStatusSnapshot, RunStatus, RunSummary,
-    create_run_from_request, provider_status_snapshot, sample_run,
+    provider_status_snapshot, sample_run,
 };
+use retrocause_pro_run_store::{FileRunStore, RunStoreError};
 use serde::Serialize;
-use std::{
-    collections::HashMap,
-    sync::{
-        Arc, RwLock,
-        atomic::{AtomicU64, Ordering},
-    },
-};
 
 #[derive(Serialize)]
 struct HealthPayload {
@@ -45,20 +39,14 @@ type ApiError = (StatusCode, Json<ErrorPayload>);
 
 #[derive(Clone)]
 struct AppState {
-    runs: Arc<RwLock<HashMap<String, ProRun>>>,
-    next_sequence: Arc<AtomicU64>,
+    run_store: FileRunStore,
 }
 
 impl AppState {
-    fn seeded() -> Self {
-        let sample = sample_run();
-        let mut runs = HashMap::new();
-        runs.insert(sample.id.clone(), sample);
-
-        Self {
-            runs: Arc::new(RwLock::new(runs)),
-            next_sequence: Arc::new(AtomicU64::new(1)),
-        }
+    fn open_default() -> Result<Self, RunStoreError> {
+        Ok(Self {
+            run_store: FileRunStore::open_default()?,
+        })
     }
 }
 
@@ -75,7 +63,7 @@ fn router() -> Router {
         .route("/api/runs/{run_id}", get(get_run))
         .route("/api/runs/{run_id}/graph", get(get_run_graph))
         .layer(middleware::from_fn(add_cors_headers))
-        .with_state(AppState::seeded())
+        .with_state(AppState::open_default().expect("open pro run store"))
 }
 
 async fn index() -> &'static str {
@@ -96,7 +84,12 @@ async fn cors_preflight() -> Response {
 }
 
 async fn seed_graph(State(state): State<AppState>) -> Json<ProRun> {
-    Json(get_run_from_state(&state, "run_semiconductor_controls_001").unwrap_or_else(sample_run))
+    Json(
+        state
+            .run_store
+            .get_run("run_semiconductor_controls_001")
+            .unwrap_or_else(sample_run),
+    )
 }
 
 async fn provider_status() -> Json<ProviderStatusSnapshot> {
@@ -104,37 +97,17 @@ async fn provider_status() -> Json<ProviderStatusSnapshot> {
 }
 
 async fn list_runs(State(state): State<AppState>) -> Json<Vec<RunSummary>> {
-    let runs = state
-        .runs
-        .read()
-        .expect("run store lock should be readable");
-    let mut summaries = runs
-        .values()
-        .map(ProRun::summary)
-        .collect::<Vec<RunSummary>>();
-
-    summaries.sort_by(|left, right| {
-        right
-            .updated_at
-            .cmp(&left.updated_at)
-            .then_with(|| left.id.cmp(&right.id))
-    });
-
-    Json(summaries)
+    Json(state.run_store.list_summaries())
 }
 
 async fn create_run(
     State(state): State<AppState>,
     Json(request): Json<CreateRunRequest>,
 ) -> Result<(StatusCode, Json<ProRun>), ApiError> {
-    let sequence = state.next_sequence.fetch_add(1, Ordering::Relaxed);
-    let run = create_run_from_request(sequence, request).map_err(bad_request)?;
-
-    state
-        .runs
-        .write()
-        .expect("run store lock should be writable")
-        .insert(run.id.clone(), run.clone());
+    let run = state
+        .run_store
+        .create_run(request)
+        .map_err(run_store_error)?;
 
     Ok((StatusCode::CREATED, Json(run)))
 }
@@ -143,7 +116,9 @@ async fn get_run(
     State(state): State<AppState>,
     Path(run_id): Path<String>,
 ) -> Result<Json<ProRun>, ApiError> {
-    get_run_from_state(&state, &run_id)
+    state
+        .run_store
+        .get_run(&run_id)
         .map(Json)
         .ok_or_else(|| not_found(run_id))
 }
@@ -152,7 +127,10 @@ async fn get_run_graph(
     State(state): State<AppState>,
     Path(run_id): Path<String>,
 ) -> Result<Json<GraphPayload>, ApiError> {
-    let run = get_run_from_state(&state, &run_id).ok_or_else(|| not_found(run_id))?;
+    let run = state
+        .run_store
+        .get_run(&run_id)
+        .ok_or_else(|| not_found(run_id))?;
     Ok(Json(GraphPayload {
         run_id: run.id,
         title: run.title,
@@ -160,15 +138,6 @@ async fn get_run_graph(
         confidence: run.confidence,
         graph: run.graph,
     }))
-}
-
-fn get_run_from_state(state: &AppState, run_id: &str) -> Option<ProRun> {
-    state
-        .runs
-        .read()
-        .expect("run store lock should be readable")
-        .get(run_id)
-        .cloned()
 }
 
 fn bad_request(error: String) -> ApiError {
@@ -179,6 +148,23 @@ fn bad_request(error: String) -> ApiError {
             run_id: None,
         }),
     )
+}
+
+fn internal_error(error: String) -> ApiError {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorPayload {
+            error,
+            run_id: None,
+        }),
+    )
+}
+
+fn run_store_error(error: RunStoreError) -> ApiError {
+    match error {
+        RunStoreError::InvalidRun(error) => bad_request(error),
+        error => internal_error(error.to_string()),
+    }
 }
 
 fn not_found(run_id: String) -> ApiError {
@@ -236,6 +222,16 @@ async fn main() {
 mod tests {
     use super::*;
     use axum::response::IntoResponse;
+    use std::path::PathBuf;
+
+    impl AppState {
+        fn seeded() -> Self {
+            Self {
+                run_store: FileRunStore::open(temp_store_path())
+                    .expect("test run store should open"),
+            }
+        }
+    }
 
     #[tokio::test]
     async fn health_payload_is_ok() {
@@ -356,5 +352,17 @@ mod tests {
         .into_response();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    fn temp_store_path() -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+
+        std::env::temp_dir().join(format!(
+            "retrocause-pro-api-store-{}-{nanos}.json",
+            std::process::id()
+        ))
     }
 }

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProRun {
     pub id: String,
     pub workspace_id: String,
@@ -19,7 +19,7 @@ pub struct ProRun {
     pub next_steps: Vec<VerificationStep>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RunSummary {
     pub id: String,
     pub workspace_id: String,
@@ -32,13 +32,13 @@ pub struct RunSummary {
     pub edge_count: usize,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct KnowledgeGraph {
     pub nodes: Vec<GraphNode>,
     pub edges: Vec<GraphEdge>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GraphNode {
     pub id: String,
     pub title: String,
@@ -51,7 +51,7 @@ pub struct GraphNode {
     pub challenge_ids: Vec<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GraphEdge {
     pub id: String,
     pub source: String,
@@ -62,7 +62,7 @@ pub struct GraphEdge {
     pub challenge_ids: Vec<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EvidenceAnchor {
     pub id: String,
     pub title: String,
@@ -72,7 +72,7 @@ pub struct EvidenceAnchor {
     pub excerpt: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChallengeCheck {
     pub id: String,
     pub title: String,
@@ -80,14 +80,14 @@ pub struct ChallengeCheck {
     pub note: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SourceStatusCard {
     pub source: String,
     pub status: SourceStatus,
     pub note: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UsageLedgerEntry {
     pub category: LedgerCategory,
     pub name: String,
@@ -95,7 +95,7 @@ pub struct UsageLedgerEntry {
     pub status: LedgerStatus,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProviderStatusSnapshot {
     pub workspace_id: String,
     pub mode: ProviderStatusMode,
@@ -103,7 +103,7 @@ pub struct ProviderStatusSnapshot {
     pub entries: Vec<ProviderQuotaStatus>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProviderQuotaStatus {
     pub id: String,
     pub label: String,
@@ -115,21 +115,21 @@ pub struct ProviderQuotaStatus {
     pub note: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CooldownState {
     pub state: CooldownKind,
     pub retry_after_seconds: Option<u32>,
     pub reason: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VerificationStep {
     pub id: String,
     pub title: String,
     pub state: StepState,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OperatorSummary {
     pub headline: String,
     pub current_read: String,
@@ -143,7 +143,7 @@ pub struct CreateRunRequest {
     pub question: String,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RunStatus {
     Queued,
@@ -155,7 +155,7 @@ pub enum RunStatus {
     Blocked,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeKind {
     Driver,
@@ -164,7 +164,7 @@ pub enum NodeKind {
     Outcome,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EvidenceStance {
     Supports,
@@ -172,7 +172,7 @@ pub enum EvidenceStance {
     Context,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EvidenceFreshness {
     Fresh,
@@ -180,7 +180,7 @@ pub enum EvidenceFreshness {
     UserProvided,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ChallengeStatus {
     Checked,
@@ -188,7 +188,7 @@ pub enum ChallengeStatus {
     MissingCounterevidence,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SourceStatus {
     Verified,
@@ -196,7 +196,7 @@ pub enum SourceStatus {
     RateLimited,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum LedgerCategory {
     Model,
@@ -204,7 +204,7 @@ pub enum LedgerCategory {
     Evidence,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum QuotaOwner {
     ManagedPro,
@@ -212,7 +212,7 @@ pub enum QuotaOwner {
     UserProvided,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum LedgerStatus {
     Available,
@@ -220,7 +220,7 @@ pub enum LedgerStatus {
     CoolingDown,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum StepState {
     Done,
@@ -228,13 +228,13 @@ pub enum StepState {
     Waiting,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderStatusMode {
     LocalAlphaNoCredentials,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderReadiness {
     Ready,
@@ -243,7 +243,7 @@ pub enum ProviderReadiness {
     Deferred,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CredentialPolicy {
     ManagedProLater,
@@ -252,7 +252,7 @@ pub enum CredentialPolicy {
     UserEvidenceOnly,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CooldownKind {
     Clear,

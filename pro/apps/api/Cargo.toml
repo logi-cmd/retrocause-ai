@@ -8,5 +8,6 @@ authors.workspace = true
 [dependencies]
 axum.workspace = true
 retrocause-pro-domain = { path = "../../crates/domain" }
+retrocause-pro-run-store = { path = "../../crates/run-store" }
 serde.workspace = true
 tokio.workspace = true
