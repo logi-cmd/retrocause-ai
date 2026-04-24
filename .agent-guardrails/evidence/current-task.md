@@ -1062,3 +1062,76 @@ This task adds the first queued execution boundary behind the Pro provider-routi
 - Queue jobs are process-local and disappear when the Pro API exits.
 - There is still no Redis/Postgres-backed queue, worker process, tenant/auth boundary, credential vault, live provider executor, or quota enforcement.
 - The graph-first Pro web shell does not yet render execution-job status; this is the next intended UI slice.
+
+## 2026-04-24 Pro Product Core Slice 9
+
+This task renders preview-only execution job status in the graph-first Pro web shell. It consumes the existing local execution-job API and keeps the behavior keyless: no provider calls, credentials, billing, auth, workers, persistence, or OSS runtime changes were added.
+
+### Files Updated
+
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added an `Execution queue` panel to the Rust Pro web shell.
+- Added a `Queue preview job` button that posts the current run question to `POST /api/execution-jobs`.
+- Added browser-side refresh from `GET /api/execution-jobs`.
+- Rendered queue job id, query, preview-only status, selected lane, and explicit `execution off` state.
+- Updated Pro docs so the queue status is now a visible web-shell capability, not just an API boundary.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: task contract refreshed for the queue-status web slice.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `13 passed`.
+  - Domain tests: `8 passed`.
+  - Provider-routing tests: `4 passed`.
+  - Queue tests: `4 passed`.
+  - Run-store tests: `3 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro browser queue-status smoke
+  - First readiness attempt failed because PowerShell `Invoke-WebRequest` reported `Object reference not set to an instance of an object` while the web process was actually alive. This was treated as an invalid readiness probe, not as a passing result.
+  - Retried with API health readiness plus Playwright page navigation.
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8802` and `retrocause-pro-web.exe` on `127.0.0.1:3023`.
+  - Clicked `#queue-preview-button`.
+  - Result: browser showed `job_local_000000`, `preview only / uploaded_evidence_lane`, and `execution off`; status text showed `Queued job_local_000000; provider execution remains disabled.`
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Checked added Pro web/doc diff lines for `api_key`, `secret`, `OPENROUTER`, `TAVILY`, `BRAVE`, and `sk-`.
+  - Result: no matching added lines.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `95/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. The project state was intentionally synchronized to mark queue status as visible in the Pro web shell and move the next-step focus to graph review interaction plus the first worker/executor contract.
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, provider credentials, key input fields, billing hooks, worker execution, or sensitive-data storage were added. The web action sends only the visible run question to the local Pro API.
+- Dependencies: no new crates, packages, lockfile changes, or version upgrades were introduced in this slice.
+- Performance: the browser now makes one small `GET /api/execution-jobs` on load and one small `POST /api/execution-jobs` when the operator clicks the button. Rendering is bounded to the four newest jobs in the panel.
+- Understanding: the tradeoff is keeping the queue UI deliberately small and explicit instead of designing a full job dashboard before workers exist. It makes the current local boundary visible without implying real provider execution.
+- Continuity: reused the existing Maud panel pattern, vanilla `fetchJson` browser helper, local API base, and queue endpoint from the prior slice. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- Queue jobs are still process-local and disappear when the Pro API exits.
+- The web shell lists queue state but does not yet stream job progress, render route-step detail, or link a job back into a completed run.
+- There is still no durable worker/executor contract, tenant/auth boundary, credential vault, quota enforcement, or live provider adapter.

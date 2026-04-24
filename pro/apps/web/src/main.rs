@@ -150,6 +150,24 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                             }
                         }
 
+                        aside class="execution-console" aria-label="Execution queue" {
+                            p class="eyebrow" { "Execution queue" }
+                            strong id="execution-queue-mode" { "preview-only" }
+                            button id="queue-preview-button" type="button" { "Queue preview job" }
+                            p id="execution-queue-status" class="console-status" {
+                                "Queue uses the current run question; execution stays disabled."
+                            }
+                            div id="execution-job-list" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "No queued preview jobs yet" }
+                                        p { "Create one to inspect the routing lane before workers exist." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "idle" }
+                                }
+                            }
+                        }
+
                         aside class="evidence-dock" aria-label="Evidence anchors" {
                             p class="eyebrow" { "Evidence anchors" }
                             div id="evidence-list" {
@@ -537,6 +555,40 @@ fn client_script() -> &'static str {
     `).join("");
   }
 
+  function renderExecutionJobs(jobs) {
+    const list = byId("execution-job-list");
+    if (!list) return;
+    if (!jobs || jobs.length === 0) {
+      list.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>No queued preview jobs yet</strong>
+            <p>Create one to inspect the routing lane before workers exist.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">idle</span>
+        </article>
+      `;
+      return;
+    }
+    list.innerHTML = jobs.slice(0, 4).map((job) => `
+      <article class="queue-meter">
+        <div>
+          <strong>${escapeHtml(job.id)}</strong>
+          <p>${escapeHtml(job.query)}</p>
+          <small>${escapeHtml(readable(job.status))} / ${escapeHtml(job.selected_lane_id || "no selected lane")}</small>
+        </div>
+        <span class="quota-state quota-state--${job.execution_allowed ? "ready" : "deferred"}">${job.execution_allowed ? "execution on" : "execution off"}</span>
+      </article>
+    `).join("");
+  }
+
+  async function refreshExecutionJobs() {
+    const jobs = await fetchJson("/api/execution-jobs");
+    renderExecutionJobs(jobs);
+    setText("execution-queue-mode", `${jobs.length} preview job${jobs.length === 1 ? "" : "s"}`);
+    return jobs;
+  }
+
   async function fetchJson(path, options) {
     const response = await fetch(`${apiBase}${path}`, options);
     if (!response.ok) {
@@ -584,6 +636,23 @@ fn client_script() -> &'static str {
     await loadRun(created.id);
   }
 
+  async function queuePreviewJob() {
+    const question = currentRun?.question || byId("run-question-input")?.value || "";
+    setText("execution-queue-status", "Queueing preview job...");
+    const job = await fetchJson("/api/execution-jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspace_id: currentRun?.workspace_id || "workspace_web",
+        query: question,
+        scenario: "auto",
+        source_policy: "balanced",
+      }),
+    });
+    setText("execution-queue-status", `Queued ${job.id}; provider execution remains disabled.`);
+    await refreshExecutionJobs();
+  }
+
   byId("run-create-form")?.addEventListener("submit", (event) => {
     createRun(event).catch((error) => setStatus(`API error: ${error.message}`));
   });
@@ -593,14 +662,21 @@ fn client_script() -> &'static str {
   byId("run-picker")?.addEventListener("change", (event) => {
     loadRun(event.target.value).catch((error) => setStatus(`API error: ${error.message}`));
   });
+  byId("queue-preview-button")?.addEventListener("click", () => {
+    queuePreviewJob().catch((error) => setText("execution-queue-status", `Queue error: ${error.message}`));
+  });
 
   renderRun(seed);
   renderProviderStatus(providerSeed);
+  renderExecutionJobs([]);
   fetchJson("/api/provider-status")
     .then(renderProviderStatus)
     .catch(() => {
       renderProviderStatus(providerSeed);
     });
+  refreshExecutionJobs().catch(() => {
+    setText("execution-queue-status", `Queue API offline: start retrocause-pro-api at ${apiBase}`);
+  });
   refreshRuns(seed.id).catch(() => {
     setStatus(`API offline: start retrocause-pro-api at ${apiBase}`);
   });
@@ -778,6 +854,7 @@ body {
 .focus-docket,
 .source-pulse,
 .quota-console,
+.execution-console,
 .evidence-dock,
 .command-deck,
 .seed-drawer {
@@ -1107,6 +1184,26 @@ p {
   gap: 0.65rem;
 }
 
+.execution-console {
+  right: 1rem;
+  top: 35.2rem;
+  width: min(380px, calc(100% - 2rem));
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.execution-console button {
+  border: 1px solid color-mix(in oklch, var(--accent) 32%, transparent);
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--accent) 82%, black);
+  color: oklch(0.16 0.016 148);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.62rem 0.8rem;
+}
+
 #source-list {
   display: grid;
   gap: 0.65rem;
@@ -1117,11 +1214,16 @@ p {
   gap: 0.65rem;
 }
 
+#execution-job-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
 .evidence-dock {
   right: 1rem;
-  top: 35.2rem;
+  top: 49.2rem;
   width: min(360px, calc(100% - 2rem));
-  max-height: calc(100vh - 42rem);
+  max-height: 18rem;
   overflow: auto;
   padding: 0.9rem;
   display: grid;
@@ -1144,6 +1246,16 @@ p {
   background: color-mix(in oklch, var(--panel-hard) 72%, black);
 }
 
+.queue-meter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.7rem;
+  align-items: start;
+  padding: 0.72rem;
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--panel-hard) 72%, black);
+}
+
 .evidence-chip {
   display: grid;
   gap: 0.42rem;
@@ -1155,6 +1267,7 @@ p {
 .evidence-chip p,
 .evidence-chip span,
 .quota-meter small,
+.queue-meter small,
 .verdict span,
 .focus-docket li span,
 .graph-node small,
@@ -1179,6 +1292,11 @@ p {
 }
 
 .quota-meter p {
+  font-size: 0.8rem;
+  margin-top: 0.22rem;
+}
+
+.queue-meter p {
   font-size: 0.8rem;
   margin-top: 0.22rem;
 }
@@ -1268,6 +1386,7 @@ p {
   .focus-docket,
   .source-pulse,
   .quota-console,
+  .execution-console,
   .evidence-dock,
   .command-deck,
   .seed-drawer,
@@ -1323,6 +1442,9 @@ mod tests {
         assert!(page.contains("run-create-form"));
         assert!(page.contains("provider-status-list"));
         assert!(page.contains("/api/provider-status"));
+        assert!(page.contains("execution-job-list"));
+        assert!(page.contains("/api/execution-jobs"));
+        assert!(page.contains("queue-preview-button"));
         assert!(page.contains("fetch(`${apiBase}${path}`"));
         assert!(page.contains("POST"));
         assert!(page.contains("Focus queue"));

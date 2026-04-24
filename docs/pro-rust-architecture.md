@@ -151,6 +151,7 @@ Initial responsibility:
 - create new in-memory runs through `POST /api/runs`
 - reload run summaries, run detail, and graph payloads from the Pro API
 - show provider/search quota ownership, credential policy, and cooldown status through the local provider-status payload
+- create and list preview-only execution jobs through the local execution-job API
 - keep a browser-local selected-node state and graph inspector for evidence/challenge links
 - establish layout, palette, and information hierarchy for the knowledge-graph experience
 
@@ -200,7 +201,7 @@ The Pro UI should feel like a graph command room, not a generic SaaS dashboard a
 - visible source states and challenge status
 - no gradient-heavy AI dashboard styling
 
-The kickoff web shell encodes that direction with a graph workspace that now supports browser-local node selection and an inspector for the active node's evidence/challenge links. Advanced interaction such as persisted layout state, graph editing, multi-select, and review workflows remains later work.
+The kickoff web shell encodes that direction with a graph workspace that now supports browser-local node selection, an inspector for the active node's evidence/challenge links, provider quota status, and preview-only execution-job status. Advanced interaction such as persisted layout state, graph editing, multi-select, and review workflows remains later work.
 
 The current web shell is still intentionally lightweight: server-rendered HTML plus a small browser script for local API calls and DOM refresh. It is enough to prove the Pro run loop without committing to the eventual interactive graph client stack.
 
@@ -245,3 +246,10 @@ The queue-boundary slice adds:
 - `cargo test --manifest-path pro/Cargo.toml`
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `POST /api/execution-jobs`, `GET /api/execution-jobs`, and `GET /api/execution-jobs/{job_id}` proving created jobs stay preview-only, do not allow execution, and expose the selected local routing lane
+
+The queue-status web slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- a browser smoke that starts the Pro API and web shell, clicks `Queue preview job`, and verifies that the execution queue panel shows a `job_local_*` preview job with execution off
