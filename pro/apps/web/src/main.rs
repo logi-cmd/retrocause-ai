@@ -157,6 +157,21 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "dry" }
                                 }
                             }
+                            button id="provider-adapter-dry-run-button" type="button" {
+                                "Dry-run adapter"
+                            }
+                            p id="provider-adapter-dry-run-status" class="console-status" {
+                                "Dry-run uses the current run question; provider calls stay disabled."
+                            }
+                            div id="provider-adapter-dry-run-result" class="adapter-dry-run-result" {
+                                article class="quota-meter quota-meter--empty" {
+                                    div {
+                                        strong { "No adapter dry-run yet" }
+                                        p { "Run one to inspect evidence, quota, and degradation shape before live providers exist." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "idle" }
+                                }
+                            }
                         }
 
                         aside class="execution-console" aria-label="Execution queue" {
@@ -678,6 +693,62 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderProviderAdapterDryRun(result) {
+    const panel = byId("provider-adapter-dry-run-result");
+    if (!panel) return;
+    if (!result) {
+      panel.innerHTML = `
+        <article class="quota-meter quota-meter--empty">
+          <div>
+            <strong>No adapter dry-run yet</strong>
+            <p>Run one to inspect evidence, quota, and degradation shape before live providers exist.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">idle</span>
+        </article>
+      `;
+      return;
+    }
+
+    const evidenceCount = (result.evidence_preview || []).length;
+    const usageItems = (result.usage_ledger_preview || []).slice(0, 3).map((row) => `
+      <li>
+        <strong>${escapeHtml(row.lane_id)}</strong>
+        <span>${escapeHtml(readable(row.quota_owner))} / billable units: ${escapeHtml(row.billable_units)}</span>
+        <small>${escapeHtml(row.note || "No usage note.")}</small>
+      </li>
+    `).join("");
+    const degradationItems = (result.degradation_states || []).slice(0, 3).map((state) => `
+      <li>
+        <strong>${escapeHtml(state.id)}</strong>
+        <span>${escapeHtml(readable(state.status))} / ${escapeHtml(readable(state.retry_policy))}</span>
+      </li>
+    `).join("");
+    const warnings = (result.warnings || []).slice(0, 4).map((warning) => `<li>${escapeHtml(warning)}</li>`).join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card adapter-card">
+        <div class="work-order-header">
+          <strong>Provider adapter dry run</strong>
+          <span class="quota-state quota-state--deferred">${result.execution_allowed ? "calls on" : "calls off"}</span>
+          <p>${escapeHtml(readable(result.mode || "dry_run_only"))}</p>
+          <small>Lane: ${escapeHtml(result.provider_lane_id || "none")} / evidence preview: ${evidenceCount}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Usage preview</p>
+          <ol class="work-order-list">${usageItems || "<li>No usage rows returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Degradation preview</p>
+          <ul class="work-order-list">${degradationItems || "<li>No degradation states returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Warnings</p>
+          <ul class="work-order-list">${warnings || "<li>No warnings returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   function renderExecutionJobs(jobs) {
     const list = byId("execution-job-list");
     if (!list) return;
@@ -937,6 +1008,26 @@ fn client_script() -> &'static str {
     await inspectWorkOrder(job.id);
   }
 
+  async function runProviderAdapterDryRun() {
+    const question = currentRun?.question || byId("run-question-input")?.value || "";
+    setText("provider-adapter-dry-run-status", "Running adapter dry-run...");
+    const result = await fetchJson("/api/provider-adapter/dry-run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspace_id: currentRun?.workspace_id || "workspace_web",
+        query: question,
+        provider_lane_id: "uploaded_evidence_lane",
+        source_policy: "balanced",
+      }),
+    });
+    renderProviderAdapterDryRun(result);
+    setText(
+      "provider-adapter-dry-run-status",
+      `Dry-run loaded for ${result.provider_lane_id}; provider calls remain disabled.`,
+    );
+  }
+
   byId("run-create-form")?.addEventListener("submit", (event) => {
     createRun(event).catch((error) => setStatus(`API error: ${error.message}`));
   });
@@ -948,6 +1039,10 @@ fn client_script() -> &'static str {
   });
   byId("queue-preview-button")?.addEventListener("click", () => {
     queuePreviewJob().catch((error) => setText("execution-queue-status", `Queue error: ${error.message}`));
+  });
+  byId("provider-adapter-dry-run-button")?.addEventListener("click", () => {
+    runProviderAdapterDryRun()
+      .catch((error) => setText("provider-adapter-dry-run-status", `Dry-run error: ${error.message}`));
   });
   document.addEventListener("click", (event) => {
     const button = event.target.closest("[data-review-kind][data-review-id]");
@@ -964,6 +1059,7 @@ fn client_script() -> &'static str {
   renderRun(seed);
   renderProviderStatus(providerSeed);
   renderProviderAdapterContract(null);
+  renderProviderAdapterDryRun(null);
   renderExecutionJobs([]);
   renderWorkOrder(null);
   renderExecutionLifecycle(null);
@@ -1522,6 +1618,7 @@ p {
   gap: 0.65rem;
 }
 
+.quota-console button,
 .execution-console button {
   border: 1px solid color-mix(in oklch, var(--accent) 32%, transparent);
   border-radius: 8px;
@@ -1544,6 +1641,11 @@ p {
 }
 
 #provider-adapter-panel {
+  display: grid;
+  gap: 0.65rem;
+}
+
+#provider-adapter-dry-run-result {
   display: grid;
   gap: 0.65rem;
 }
@@ -1875,8 +1977,11 @@ mod tests {
         assert!(page.contains("run-create-form"));
         assert!(page.contains("provider-status-list"));
         assert!(page.contains("provider-adapter-panel"));
+        assert!(page.contains("provider-adapter-dry-run-button"));
+        assert!(page.contains("provider-adapter-dry-run-result"));
         assert!(page.contains("/api/provider-status"));
         assert!(page.contains("/api/provider-adapter-contract"));
+        assert!(page.contains("/api/provider-adapter/dry-run"));
         assert!(page.contains("execution-job-list"));
         assert!(page.contains("execution-work-order-detail"));
         assert!(page.contains("execution-lifecycle-panel"));
@@ -1890,6 +1995,8 @@ mod tests {
         assert!(page.contains("function renderExecutionLifecycle"));
         assert!(page.contains("function renderStoragePlan"));
         assert!(page.contains("function renderProviderAdapterContract"));
+        assert!(page.contains("function renderProviderAdapterDryRun"));
+        assert!(page.contains("function runProviderAdapterDryRun"));
         assert!(page.contains("queue-preview-button"));
         assert!(page.contains("fetch(`${apiBase}${path}`"));
         assert!(page.contains("POST"));

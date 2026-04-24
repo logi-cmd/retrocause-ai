@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
-  "task": "Add a non-executing hosted provider adapter contract for the Pro Rust product core: define adapter request/result/degradation/quota/cooldown/partial-result semantics in the provider-routing crate, expose it through a keyless API endpoint, render a compact adapter contract panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, workers, database/Redis connections, OSS runtime changes, or package dependencies.",
+  "task": "Add a non-executing provider adapter dry-run shape for the Pro Rust product core: define dry-run request/result payloads in the provider-routing crate, expose a keyless POST API endpoint, add a compact dry-run action/result in the graph-first web shell, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, workers, database/Redis connections, OSS runtime changes, or package dependencies.",
   "preset": "generic",
-  "createdAt": "2026-04-24T12:10:46.813Z",
+  "createdAt": "2026-04-24T12:18:50.341Z",
   "allowedPaths": [
     "pro/crates/provider-routing/",
     "pro/apps/api/",
@@ -66,10 +66,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "5382d74c-afaf-41c4-8095-872346b3209b",
-    "createdAt": "2026-04-24T12:10:46.812Z",
+    "sessionId": "3878b81b-4c87-462a-987a-8f69e76f389a",
+    "createdAt": "2026-04-24T12:18:50.339Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add a non-executing hosted provider adapter contract for the Pro Rust product core: define adapter request/result/degradation/quota/cooldown/partial-result semantics in the provider-routing crate, expose it through a keyless API endpoint, render a compact adapter contract panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, workers, database/Redis connections, OSS runtime changes, or package dependencies.",
+    "taskRequest": "Add a non-executing provider adapter dry-run shape for the Pro Rust product core: define dry-run request/result payloads in the provider-routing crate, expose a keyless POST API endpoint, add a compact dry-run action/result in the graph-first web shell, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, workers, database/Redis connections, OSS runtime changes, or package dependencies.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],

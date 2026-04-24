@@ -1624,3 +1624,82 @@ This task adds the first non-executing hosted provider adapter contract for the 
 - The provider adapter contract is not a live adapter or dry-run executor yet.
 - There is still no workspace/auth boundary, credential vault integration, provider SDK, billing/quota ledger, durable status events, or live source/provider call path.
 - Future hosted Pro needs an adapter dry-run shape before any real provider execution is enabled.
+
+## Pro Product Core Slice 16 - Provider Adapter Dry-Run Shape
+
+### Scope
+
+This task adds a non-executing provider adapter dry-run shape for the Pro Rust product core. The provider-routing crate now owns the dry-run request/result payload, the API exposes it through a keyless POST endpoint, and the graph-first web shell can run the dry-run for the current graph question. No provider credentials, live provider calls, auth, billing, workers, database/Redis connections, OSS runtime changes, dependency changes, or package publishing were added.
+
+### Files Updated
+
+- `pro/crates/provider-routing/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `ProviderAdapterDryRunRequest`, `ProviderAdapterDryRunResult`, `ProviderAdapterDryRunMode`, `ProviderAdapterEvidencePreview`, and `ProviderAdapterUsagePreview`.
+- Added `provider_adapter_dry_run()` so a workspace/query/lane/source-policy request returns preview evidence, zero-billable usage ledger rows, selected lane ownership, degradation states, and dry-run warnings.
+- Added `POST /api/provider-adapter/dry-run`.
+- Added a Pro web `Dry-run adapter` action and result panel that shows dry-run-only mode, calls-disabled state, zero billable units, evidence-preview count, and degradation states.
+- Updated Pro docs and project state so the next focus moves to workspace/auth boundary, durable event/status vocabulary, and a future live adapter candidate behind explicit gates.
+
+### Commands Run
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `18 passed`.
+  - Domain tests: `8 passed`.
+  - Provider-routing tests: `7 passed`.
+  - Queue tests: `6 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API dry-run smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8811` with a temporary local run-store path.
+  - Called `POST /api/provider-adapter/dry-run`.
+  - Result: passed; `mode=dry_run_only`, `provider_lane_id=uploaded_evidence_lane`, `execution_allowed=false`, `billable_units=0`, warning `dry_run_only_no_provider_calls` exists, and degradation `provider_rate_limited` exists.
+
+- Pro browser dry-run smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8812` and `retrocause-pro-web.exe` on `127.0.0.1:3031`.
+  - Aborted external font requests in Playwright so inline scripts could run without network font blocking.
+  - Clicked `#provider-adapter-dry-run-button`.
+  - Result: passed; the dry-run panel rendered `dry run only`, `calls off`, `uploaded_evidence_lane`, `billable units: 0`, and `provider_rate_limited`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - A broad scan for words such as `secret` intentionally matched documentation statements saying secrets are not read.
+  - A key-shaped scan for common provider-token prefixes and API-key assignment patterns found no actual key-shaped tokens in the diff.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the project state was synchronized to mark the dry-run shape as implemented and move the next Pro focus to workspace/auth and durable status vocabulary.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `POST /api/provider-adapter/dry-run`; it does not change OSS APIs, accept credentials, bill usage, or execute provider calls.
+
+### Risk / Tradeoff Notes
+
+- Security: the dry-run accepts only workspace id, query, lane id, and source policy. It does not accept, read, store, log, or return provider secrets or API keys. Auth remains future work and is not simulated as real protection in this slice.
+- Dependencies: no new crates, npm packages, lockfile changes, or version upgrades were introduced.
+- Performance: the dry-run is deterministic and in-process. It reuses the existing provider-status/routing-preview data and returns a small JSON payload, so there is no provider, database, Redis, worker, or queue load impact.
+- Understanding: the tradeoff is making adapter result shape testable before live execution. That gives future provider work a concrete contract for evidence previews, usage ledger rows, degradation states, and warnings without pretending the live path exists.
+- Continuity: reused the provider-routing crate, routing-preview error handling, Axum JSON route style, web `fetchJson` helper, and existing quota/adapter card styling. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- The dry-run is not a live provider adapter and does not prove provider connectivity, model output quality, or search-result quality.
+- There is still no workspace/auth boundary, credential vault integration, billing/quota ledger, durable status events, real worker process, retry scheduler, or live source/provider call path.
+- Future hosted Pro must add explicit auth and quota gates before any live adapter can execute provider calls.

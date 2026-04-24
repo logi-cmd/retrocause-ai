@@ -5,15 +5,16 @@ use axum::{
     http::{HeaderMap, HeaderValue, Request, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
 };
 use retrocause_pro_domain::{
     CreateRunRequest, KnowledgeGraph, ProRun, ProviderStatusSnapshot, RunStatus, RunSummary,
     provider_status_snapshot, sample_run,
 };
 use retrocause_pro_provider_routing::{
-    ProviderAdapterContract, RoutingPreviewError, RoutingPreviewPlan, RoutingPreviewRequest,
-    build_routing_preview, provider_adapter_contract,
+    ProviderAdapterContract, ProviderAdapterDryRunRequest, ProviderAdapterDryRunResult,
+    RoutingPreviewError, RoutingPreviewPlan, RoutingPreviewRequest, build_routing_preview,
+    provider_adapter_contract, provider_adapter_dry_run,
 };
 use retrocause_pro_queue::{
     ExecutionJob, ExecutionJobSummary, ExecutionLifecycleSpec, ExecutionQueue, ExecutionQueueError,
@@ -75,6 +76,10 @@ fn router() -> Router {
                 .options(cors_preflight),
         )
         .route("/api/provider-adapter-contract", get(provider_adapter))
+        .route(
+            "/api/provider-adapter/dry-run",
+            post(provider_adapter_dry_run_preview).options(cors_preflight),
+        )
         .route(
             "/api/runs",
             get(list_runs).post(create_run).options(cors_preflight),
@@ -150,6 +155,14 @@ async fn provider_route_preview(
 
 async fn provider_adapter() -> Json<ProviderAdapterContract> {
     Json(provider_adapter_contract())
+}
+
+async fn provider_adapter_dry_run_preview(
+    Json(request): Json<ProviderAdapterDryRunRequest>,
+) -> Result<Json<ProviderAdapterDryRunResult>, ApiError> {
+    provider_adapter_dry_run(request)
+        .map(Json)
+        .map_err(routing_preview_error)
 }
 
 async fn list_runs(State(state): State<AppState>) -> Json<Vec<RunSummary>> {
@@ -501,6 +514,29 @@ mod tests {
             payload
                 .partial_result_rules
                 .contains(&"preserve_successful_evidence_before_retry".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_adapter_dry_run_exposes_zero_billable_preview() {
+        let payload = provider_adapter_dry_run_preview(Json(ProviderAdapterDryRunRequest {
+            workspace_id: Some("workspace_test".to_string()),
+            query: "Why did AI infrastructure names move?".to_string(),
+            provider_lane_id: Some("uploaded_evidence_lane".to_string()),
+            source_policy: None,
+        }))
+        .await
+        .expect("valid dry-run request")
+        .0;
+
+        assert_eq!(payload.workspace_id, "workspace_test");
+        assert_eq!(payload.provider_lane_id, "uploaded_evidence_lane");
+        assert!(!payload.execution_allowed);
+        assert_eq!(payload.usage_ledger_preview[0].billable_units, 0);
+        assert!(
+            payload
+                .warnings
+                .contains(&"dry_run_only_no_provider_calls".to_string())
         );
     }
 

@@ -36,10 +36,39 @@ pub struct ProviderAdapterContract {
     pub partial_result_rules: Vec<String>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct ProviderAdapterDryRunRequest {
+    pub workspace_id: Option<String>,
+    pub query: String,
+    pub provider_lane_id: Option<String>,
+    pub source_policy: Option<SourcePolicy>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ProviderAdapterDryRunResult {
+    pub workspace_id: String,
+    pub query: String,
+    pub provider_lane_id: String,
+    pub source_policy: SourcePolicy,
+    pub mode: ProviderAdapterDryRunMode,
+    pub execution_allowed: bool,
+    pub partial_result_available: bool,
+    pub evidence_preview: Vec<ProviderAdapterEvidencePreview>,
+    pub usage_ledger_preview: Vec<ProviderAdapterUsagePreview>,
+    pub degradation_states: Vec<ProviderAdapterDegradation>,
+    pub warnings: Vec<String>,
+}
+
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderAdapterContractMode {
     DryContractOnly,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderAdapterDryRunMode {
+    DryRunOnly,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -56,6 +85,25 @@ pub struct ProviderAdapterDegradation {
     pub status: &'static str,
     pub retry_policy: &'static str,
     pub preserves_partial_results: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ProviderAdapterEvidencePreview {
+    pub id: String,
+    pub title: String,
+    pub source: String,
+    pub status: String,
+    pub excerpt: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ProviderAdapterUsagePreview {
+    pub lane_id: String,
+    pub category: LedgerCategory,
+    pub quota_owner: QuotaOwner,
+    pub billable_units: u32,
+    pub cooldown_retry_after_seconds: Option<u32>,
+    pub note: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -233,6 +281,90 @@ pub fn provider_adapter_contract() -> ProviderAdapterContract {
     }
 }
 
+pub fn provider_adapter_dry_run(
+    request: ProviderAdapterDryRunRequest,
+) -> Result<ProviderAdapterDryRunResult, RoutingPreviewError> {
+    let source_policy = request.source_policy.unwrap_or(SourcePolicy::Balanced);
+    let snapshot = provider_status_snapshot();
+    let route_plan = build_routing_preview_from_status(
+        RoutingPreviewRequest {
+            workspace_id: request.workspace_id.clone(),
+            query: request.query.clone(),
+            scenario: None,
+            source_policy: Some(source_policy),
+        },
+        snapshot,
+    )?;
+
+    let provider_lane_id = request
+        .provider_lane_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| route_plan.selected_lane_id.clone())
+        .unwrap_or_else(|| "no_selectable_lane".to_string());
+    let route_step = route_plan
+        .steps
+        .iter()
+        .find(|step| step.lane_id == provider_lane_id);
+    let contract = provider_adapter_contract();
+    let mut warnings = vec![
+        "dry_run_only_no_provider_calls".to_string(),
+        "provider_credentials_not_read".to_string(),
+        "usage_ledger_preview_only".to_string(),
+    ];
+    warnings.extend(route_plan.warnings.clone());
+    if route_step.is_none() {
+        warnings.push("provider_lane_not_in_route_preview".to_string());
+    }
+
+    Ok(ProviderAdapterDryRunResult {
+        workspace_id: route_plan.workspace_id,
+        query: route_plan.query.clone(),
+        provider_lane_id: provider_lane_id.clone(),
+        source_policy,
+        mode: ProviderAdapterDryRunMode::DryRunOnly,
+        execution_allowed: false,
+        partial_result_available: true,
+        evidence_preview: vec![
+            ProviderAdapterEvidencePreview {
+                id: "dry_run_query".to_string(),
+                title: "Operator question captured".to_string(),
+                source: "operator_question".to_string(),
+                status: "preview_only".to_string(),
+                excerpt: format!("Dry-run captured query: {}", route_plan.query),
+            },
+            ProviderAdapterEvidencePreview {
+                id: "dry_run_adapter_shape".to_string(),
+                title: "Adapter evidence placeholder".to_string(),
+                source: provider_lane_id.clone(),
+                status: "not_executed".to_string(),
+                excerpt: "Future adapters must return normalized evidence with source status before graph synthesis.".to_string(),
+            },
+        ],
+        usage_ledger_preview: vec![ProviderAdapterUsagePreview {
+            lane_id: provider_lane_id,
+            category: route_step
+                .map(|step| step.category)
+                .unwrap_or(LedgerCategory::Search),
+            quota_owner: route_step
+                .map(|step| step.quota_owner)
+                .unwrap_or(QuotaOwner::ManagedPro),
+            billable_units: 0,
+            cooldown_retry_after_seconds: route_step.and_then(|step| step.retry_after_seconds),
+            note: "Dry run only; no provider calls, no credential reads, and no billable usage."
+                .to_string(),
+        }],
+        degradation_states: contract
+            .degradation_states
+            .into_iter()
+            .filter(|state| matches!(state.id, "provider_rate_limited" | "source_limited"))
+            .collect(),
+        warnings,
+    })
+}
+
 pub fn build_routing_preview_from_status(
     request: RoutingPreviewRequest,
     snapshot: ProviderStatusSnapshot,
@@ -343,8 +475,9 @@ impl std::error::Error for RoutingPreviewError {}
 #[cfg(test)]
 mod tests {
     use super::{
-        ProviderAdapterContractMode, RoutingDecision, RoutingPreviewError, RoutingPreviewRequest,
-        RoutingScenario, SourcePolicy, build_routing_preview, provider_adapter_contract,
+        ProviderAdapterContractMode, ProviderAdapterDryRunMode, ProviderAdapterDryRunRequest,
+        RoutingDecision, RoutingPreviewError, RoutingPreviewRequest, RoutingScenario, SourcePolicy,
+        build_routing_preview, provider_adapter_contract, provider_adapter_dry_run,
     };
 
     #[test]
@@ -446,5 +579,51 @@ mod tests {
                 .partial_result_rules
                 .contains(&"surface_degraded_source_states_to_review_ui".to_string())
         );
+    }
+
+    #[test]
+    fn adapter_dry_run_returns_zero_billable_preview_without_execution() {
+        let result = provider_adapter_dry_run(ProviderAdapterDryRunRequest {
+            workspace_id: Some(" workspace_alpha ".to_string()),
+            query: "Why did AI infrastructure names move?".to_string(),
+            provider_lane_id: Some("uploaded_evidence_lane".to_string()),
+            source_policy: Some(SourcePolicy::Balanced),
+        })
+        .expect("dry run should build");
+
+        assert_eq!(result.workspace_id, "workspace_alpha");
+        assert_eq!(result.provider_lane_id, "uploaded_evidence_lane");
+        assert_eq!(result.mode, ProviderAdapterDryRunMode::DryRunOnly);
+        assert!(!result.execution_allowed);
+        assert!(result.partial_result_available);
+        assert_eq!(result.usage_ledger_preview[0].billable_units, 0);
+        assert_eq!(
+            result.usage_ledger_preview[0].quota_owner,
+            retrocause_pro_domain::QuotaOwner::UserProvided
+        );
+        assert!(
+            result
+                .warnings
+                .contains(&"dry_run_only_no_provider_calls".to_string())
+        );
+        assert!(
+            result
+                .degradation_states
+                .iter()
+                .any(|state| state.id == "provider_rate_limited")
+        );
+    }
+
+    #[test]
+    fn adapter_dry_run_rejects_blank_query() {
+        let error = provider_adapter_dry_run(ProviderAdapterDryRunRequest {
+            workspace_id: None,
+            query: "   ".to_string(),
+            provider_lane_id: None,
+            source_policy: None,
+        })
+        .expect_err("blank query should fail");
+
+        assert!(matches!(error, RoutingPreviewError::QueryRequired));
     }
 }

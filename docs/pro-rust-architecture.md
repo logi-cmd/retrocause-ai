@@ -106,7 +106,7 @@ Current behavior:
 
 This is intentionally not a provider executor. It does not read provider keys, call models/search APIs, enqueue jobs, bill usage, or store credentials. The value is the decision vocabulary: future executors can consume the same lane and decision semantics instead of inventing hidden routing behavior inside provider adapters.
 
-`crates/provider-routing` also carries a dry provider-adapter contract. It names the future adapter request fields, result fields, degradation states, quota guards, and partial-result rules before any provider implementation exists. The contract requires explicit quota ownership, retry-after cooldown visibility, degraded source states, usage ledger rows, and evidence preservation before retries.
+`crates/provider-routing` also carries a dry provider-adapter contract and a non-executing adapter dry-run shape. The contract names the future adapter request fields, result fields, degradation states, quota guards, and partial-result rules before any provider implementation exists. The dry-run accepts a workspace id, query, provider lane, and source policy, then returns preview evidence, zero-billable usage ledger rows, visible degradation states, and safety warnings without reading credentials or calling providers. These shapes require explicit quota ownership, retry-after cooldown visibility, degraded source states, usage ledger rows, and evidence preservation before retries.
 
 ## Queue boundary
 
@@ -137,6 +137,7 @@ Initial responsibility:
 - `GET /api/runs/{run_id}/graph`
 - `GET /api/provider-status`
 - `GET /api/provider-adapter-contract`
+- `POST /api/provider-adapter/dry-run`
 - `GET /api/provider-route/preview`
 - `POST /api/provider-route/preview`
 - `GET /api/execution-jobs`
@@ -163,6 +164,7 @@ Initial responsibility:
 - reload run summaries, run detail, and graph payloads from the Pro API
 - show provider/search quota ownership, credential policy, and cooldown status through the local provider-status payload
 - render the dry provider-adapter request/result/degradation contract from `GET /api/provider-adapter-contract`
+- run a keyless provider-adapter dry-run through `POST /api/provider-adapter/dry-run`, showing zero billable units, evidence-preview count, degradation states, and calls-disabled state
 - create and list preview-only execution jobs through the local execution-job API
 - inspect queued job work orders through `GET /api/execution-jobs/{job_id}/work-order`, rendering route steps, routing warnings, selected lane, and execution safeguards while execution stays disabled
 - render the hosted-worker lifecycle/failure taxonomy from `GET /api/execution-lifecycle` so future execution states are visible before live adapters exist
@@ -313,3 +315,11 @@ The provider-adapter contract slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `GET /api/provider-adapter-contract` proving the contract stays non-executing while naming request/result fields, quota guards, degradation states, and partial-result rules
 - a browser smoke that starts the Pro API and web shell and verifies that the adapter contract panel renders provider lane fields, rate-limit degradation, and calls-disabled state
+
+The provider-adapter dry-run slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `POST /api/provider-adapter/dry-run` proving the dry-run stays non-executing, returns zero billable units, preserves explicit provider lane/quota ownership, and exposes degradation warnings
+- a browser smoke that starts the Pro API and web shell, clicks `Dry-run adapter`, and verifies that the adapter dry-run panel renders dry-run-only mode, calls-disabled state, zero billable units, and degradation states
