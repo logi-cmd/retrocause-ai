@@ -2102,3 +2102,82 @@ This task adds a keyless credential-vault boundary preview for the Pro Rust prod
 - This is not a credential vault and should not be treated as one.
 - There is still no real tenant auth, credential encryption, secret rotation, scoped worker lease, quota ledger, billing boundary, durable event storage, retry scheduler, or live source/provider call path.
 - Future hosted Pro must implement real vault-backed metadata and worker-scoped secret access before any live adapter can execute provider calls.
+
+## Pro Product Core Slice 22 - Quota Ledger/Billing Boundary Preview
+
+### Scope
+
+This task adds a preview-only quota-ledger and billing boundary for the Pro Rust product core. The shared domain crate now defines quota lanes, metering rules, rate-limit rules, billing decision mode, and safeguards; the API exposes a read-only boundary endpoint; and the graph-first web shell renders a compact quota-ledger panel. No payment provider integration, quota reservation, ledger mutation, billable usage emission, live provider calls, credential handling, auth enforcement, database/Redis/event-store connections, workers, OSS runtime changes, dependency changes, or package publishing were added.
+
+### Files Updated
+
+- `pro/crates/domain/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `QuotaLedgerBoundary`, quota lanes, metering rules, rate-limit rules, and billing/quota accounting enums.
+- Added `quota_ledger_boundary()` returning `planned_no_mutation`, `ledger_mutation_enabled=false`, `payment_provider_connected=false`, and no billable lanes.
+- Added `GET /api/quota-ledger-boundary`.
+- Added a Pro web quota-ledger panel that renders quota lanes, metering rules, and safeguards without enabling ledger writes or payment infrastructure.
+- Updated Pro project state and architecture docs so maintainers can see this is a no-mutation boundary contract, not a billing system.
+
+### Commands Run
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - First result: failed because Rustfmt wanted to reflow one domain-test assertion.
+  - Fix: ran `cargo fmt --manifest-path pro/Cargo.toml --all`.
+  - Final result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `25 passed`.
+  - Domain tests: `15 passed`.
+  - Provider-routing tests: `10 passed`.
+  - Queue tests: `6 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API quota-ledger smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8825` with a temporary local run-store path.
+  - Called `GET /api/quota-ledger-boundary`.
+  - Result: passed; mode was `planned_no_mutation`, `ledger_mutation_enabled=false`, `payment_provider_connected=false`, four quota lanes were returned, and safeguard `no_billing_mutation_in_this_slice` was present.
+
+- Pro browser quota-ledger smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8826` and `retrocause-pro-web.exe` on `127.0.0.1:3039`.
+  - Aborted external font requests in Playwright so inline scripts could run without network font blocking.
+  - Result: passed; the quota-ledger panel rendered `Quota ledger boundary`, `planned no mutation`, `ledger mutation off`, `payment provider: off`, `managed_model_pool`, and `no_billing_mutation_in_this_slice`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - A key-shaped scan for common provider-token prefixes and API-key assignment patterns found no actual key-shaped tokens in the non-doc diff.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the project state was synchronized to mark the quota-ledger/billing boundary preview as implemented and move the next Pro focus toward worker lease/retry-scheduler boundaries.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET /api/quota-ledger-boundary`; it does not change OSS APIs, accept credentials, connect payment infrastructure, mutate billing/quota, enforce auth, or execute provider calls.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice explicitly does not implement billing, quota enforcement, or provider execution. It does not accept payment credentials, provider credentials, secrets, tokens, auth material, or user API keys. It does not enforce permissions or protect hosted resources.
+- Dependencies: no new crates, npm packages, lockfile changes, or version upgrades were introduced.
+- Performance: the endpoint returns one static in-process payload and the browser renders one compact panel. It adds no provider, database, Redis, event-store, worker, billing, quota-ledger, or payment-provider load.
+- Understanding: the deliberate tradeoff is naming quota/billing semantics before writing ledger rows. This gives live-adapter work a visible gate without pretending the current local Pro shell can charge, reserve quota, or enforce limits.
+- Continuity: reused the shared domain crate, Axum read-only endpoint style, web `fetchJson` helper, and existing compact boundary-card styling. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- This is not a quota ledger, billing engine, rate limiter, or payment integration.
+- There is still no real tenant auth, quota reservation, usage write path, billing policy, payment provider connection, credential vault, scoped worker lease, durable event storage, retry scheduler, or live source/provider call path.
+- Future hosted Pro must implement quota reservations and billing checks behind tenant auth, vault access, event storage, and worker leases before any live adapter can execute billable provider calls.

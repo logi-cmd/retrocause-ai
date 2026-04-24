@@ -138,6 +138,47 @@ pub struct CredentialVaultBoundary {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct QuotaLedgerBoundary {
+    pub mode: QuotaLedgerMode,
+    pub ledger_mutation_enabled: bool,
+    pub payment_provider_connected: bool,
+    pub billing_decision: BillingDecisionMode,
+    pub quota_lanes: Vec<QuotaLedgerLane>,
+    pub metering_rules: Vec<QuotaMeteringRule>,
+    pub rate_limit_rules: Vec<QuotaRateLimitRule>,
+    pub safeguards: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct QuotaLedgerLane {
+    pub id: String,
+    pub label: String,
+    pub quota_owner: QuotaOwner,
+    pub category: LedgerCategory,
+    pub accounting_status: QuotaAccountingStatus,
+    pub metered_unit: String,
+    pub billable_now: bool,
+    pub note: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct QuotaMeteringRule {
+    pub id: String,
+    pub lane_id: String,
+    pub billable_now: bool,
+    pub requirement: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct QuotaRateLimitRule {
+    pub id: String,
+    pub lane_id: String,
+    pub window: String,
+    pub retry_policy: String,
+    pub enforcement: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CredentialClass {
     pub id: String,
     pub label: String,
@@ -450,6 +491,26 @@ pub enum CredentialVisibility {
 pub enum CredentialRotationStatus {
     Planned,
     NotConnected,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum QuotaLedgerMode {
+    PlannedNoMutation,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BillingDecisionMode {
+    PreviewDenied,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum QuotaAccountingStatus {
+    PreviewOnly,
+    FutureLedgerOnly,
+    BlockedUntilBilling,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -1178,6 +1239,113 @@ pub fn credential_vault_boundary() -> CredentialVaultBoundary {
     }
 }
 
+pub fn quota_ledger_boundary() -> QuotaLedgerBoundary {
+    QuotaLedgerBoundary {
+        mode: QuotaLedgerMode::PlannedNoMutation,
+        ledger_mutation_enabled: false,
+        payment_provider_connected: false,
+        billing_decision: BillingDecisionMode::PreviewDenied,
+        quota_lanes: vec![
+            QuotaLedgerLane {
+                id: s("managed_model_pool"),
+                label: s("Managed model quota pool"),
+                quota_owner: QuotaOwner::ManagedPro,
+                category: LedgerCategory::Model,
+                accounting_status: QuotaAccountingStatus::FutureLedgerOnly,
+                metered_unit: s("model_request_or_token"),
+                billable_now: false,
+                note: s(
+                    "Future hosted model calls need tenant auth, vault handles, worker leases, and quota-ledger writes before use.",
+                ),
+            },
+            QuotaLedgerLane {
+                id: s("workspace_search_pool"),
+                label: s("Workspace search quota pool"),
+                quota_owner: QuotaOwner::Workspace,
+                category: LedgerCategory::Search,
+                accounting_status: QuotaAccountingStatus::FutureLedgerOnly,
+                metered_unit: s("search_request"),
+                billable_now: false,
+                note: s(
+                    "Future workspace search connectors need workspace ownership and rate-limit accounting before execution.",
+                ),
+            },
+            QuotaLedgerLane {
+                id: s("uploaded_evidence_lane"),
+                label: s("Uploaded evidence lane"),
+                quota_owner: QuotaOwner::UserProvided,
+                category: LedgerCategory::Evidence,
+                accounting_status: QuotaAccountingStatus::PreviewOnly,
+                metered_unit: s("evidence_item"),
+                billable_now: false,
+                note: s(
+                    "User-provided evidence can be inspected locally, but it does not emit provider billable units.",
+                ),
+            },
+            QuotaLedgerLane {
+                id: s("live_provider_execution"),
+                label: s("Live provider execution gate"),
+                quota_owner: QuotaOwner::ManagedPro,
+                category: LedgerCategory::Model,
+                accounting_status: QuotaAccountingStatus::BlockedUntilBilling,
+                metered_unit: s("provider_call"),
+                billable_now: false,
+                note: s(
+                    "Live execution is denied until billing policy, quota ledger mutation, auth, vault, event, and worker gates exist.",
+                ),
+            },
+        ],
+        metering_rules: vec![
+            QuotaMeteringRule {
+                id: s("no_billable_units_in_preview"),
+                lane_id: s("managed_model_pool"),
+                billable_now: false,
+                requirement: s(
+                    "Preview endpoints may display intended usage shape, but must not write billable units.",
+                ),
+            },
+            QuotaMeteringRule {
+                id: s("uploaded_evidence_not_billed"),
+                lane_id: s("uploaded_evidence_lane"),
+                billable_now: false,
+                requirement: s(
+                    "User-provided evidence remains inspectable input, not platform model or search usage.",
+                ),
+            },
+            QuotaMeteringRule {
+                id: s("provider_calls_require_worker_ledger_event"),
+                lane_id: s("live_provider_execution"),
+                billable_now: false,
+                requirement: s(
+                    "A live provider call must have an authorized actor, worker lease, vault handle, quota reservation, and event-store row first.",
+                ),
+            },
+        ],
+        rate_limit_rules: vec![
+            QuotaRateLimitRule {
+                id: s("managed_model_pool_default_window"),
+                lane_id: s("managed_model_pool"),
+                window: s("future:per_workspace_per_minute"),
+                retry_policy: s("surface retry-after and preserve partial evidence"),
+                enforcement: s("not_enforced_preview_only"),
+            },
+            QuotaRateLimitRule {
+                id: s("workspace_search_pool_default_window"),
+                lane_id: s("workspace_search_pool"),
+                window: s("future:connector_policy_window"),
+                retry_policy: s("degrade source row and avoid hidden retries"),
+                enforcement: s("not_enforced_preview_only"),
+            },
+        ],
+        safeguards: vec![
+            s("no_billing_mutation_in_this_slice"),
+            s("no_payment_provider_connection"),
+            s("no_quota_ledger_write_or_reservation"),
+            s("provider_execution_requires_auth_vault_quota_event_worker_gates"),
+        ],
+    }
+}
+
 pub fn run_event_timeline(run: &ProRun) -> RunEventTimeline {
     let mut events = Vec::new();
     push_run_event(
@@ -1756,11 +1924,12 @@ fn status_vocabulary_entry(
 mod tests {
     use super::{
         CooldownKind, CreateRunRequest, CredentialStorageStatus, CredentialVaultMode,
-        ProviderReadiness, ReviewComparisonMode, ReviewDeltaKind, RunEventKind, RunEventSource,
-        RunStatus, WorkspaceEnforcementMode, WorkspacePermissionStatus, create_run_from_request,
-        credential_vault_boundary, provider_status_snapshot, run_event_timeline,
-        run_review_comparison, run_status_vocabulary, sample_run, sample_run_by_id,
-        sample_run_summaries, validate_run_references, workspace_access_context,
+        ProviderReadiness, QuotaAccountingStatus, QuotaLedgerMode, QuotaOwner,
+        ReviewComparisonMode, ReviewDeltaKind, RunEventKind, RunEventSource, RunStatus,
+        WorkspaceEnforcementMode, WorkspacePermissionStatus, create_run_from_request,
+        credential_vault_boundary, provider_status_snapshot, quota_ledger_boundary,
+        run_event_timeline, run_review_comparison, run_status_vocabulary, sample_run,
+        sample_run_by_id, sample_run_summaries, validate_run_references, workspace_access_context,
     };
     use std::collections::HashSet;
 
@@ -1934,6 +2103,39 @@ mod tests {
                 .iter()
                 .all(|item| !item.purpose.contains("sk-") && !item.label.contains("sk-"))
         );
+    }
+
+    #[test]
+    fn quota_ledger_boundary_is_preview_only_and_non_billing() {
+        let boundary = quota_ledger_boundary();
+
+        assert_eq!(boundary.mode, QuotaLedgerMode::PlannedNoMutation);
+        assert!(!boundary.ledger_mutation_enabled);
+        assert!(!boundary.payment_provider_connected);
+        assert!(boundary.quota_lanes.iter().any(|lane| {
+            lane.id == "managed_model_pool"
+                && lane.quota_owner == QuotaOwner::ManagedPro
+                && lane.accounting_status == QuotaAccountingStatus::FutureLedgerOnly
+                && !lane.billable_now
+        }));
+        assert!(boundary.quota_lanes.iter().any(|lane| {
+            lane.id == "uploaded_evidence_lane"
+                && lane.quota_owner == QuotaOwner::UserProvided
+                && lane.accounting_status == QuotaAccountingStatus::PreviewOnly
+                && !lane.billable_now
+        }));
+        assert!(boundary.metering_rules.iter().any(|rule| rule.id
+            == "provider_calls_require_worker_ledger_event"
+            && !rule.billable_now));
+        assert!(
+            boundary
+                .safeguards
+                .contains(&"no_billing_mutation_in_this_slice".to_string())
+        );
+        assert!(boundary.quota_lanes.iter().all(|lane| {
+            let combined = format!("{} {} {}", lane.id, lane.label, lane.note).to_lowercase();
+            !combined.contains("sk-") && !combined.contains("api_key")
+        }));
     }
 
     #[test]

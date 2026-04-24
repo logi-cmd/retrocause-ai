@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
-  "task": "Add a credential-vault boundary preview for the Pro Rust product core: define shared keyless credential vault boundary payloads, expose a read-only API endpoint, render a compact vault-boundary panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not store, accept, read, log, or echo provider credentials; do not add live provider calls, auth enforcement, billing, database/Redis/event-store connections, workers, OSS runtime changes, or package dependencies.",
+  "task": "Add a quota-ledger and billing boundary preview for the Pro Rust product core: define shared keyless quota ledger/billing boundary payloads, expose a read-only API endpoint, render a compact quota-ledger panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add payment provider integration, billing mutation, live provider calls, credential handling, auth enforcement, database/Redis/event-store connections, workers, OSS runtime changes, or package dependencies.",
   "preset": "generic",
-  "createdAt": "2026-04-24T14:06:02.346Z",
+  "createdAt": "2026-04-24T14:17:22.134Z",
   "allowedPaths": [
     "pro/crates/domain/",
     "pro/apps/api/",
@@ -66,10 +66,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "163e1eb5-7ed7-453d-965e-3725408a350d",
-    "createdAt": "2026-04-24T14:06:02.345Z",
+    "sessionId": "c68091af-bce9-405f-b3e5-08eb4ee8021e",
+    "createdAt": "2026-04-24T14:17:22.133Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add a credential-vault boundary preview for the Pro Rust product core: define shared keyless credential vault boundary payloads, expose a read-only API endpoint, render a compact vault-boundary panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not store, accept, read, log, or echo provider credentials; do not add live provider calls, auth enforcement, billing, database/Redis/event-store connections, workers, OSS runtime changes, or package dependencies.",
+    "taskRequest": "Add a quota-ledger and billing boundary preview for the Pro Rust product core: define shared keyless quota ledger/billing boundary payloads, expose a read-only API endpoint, render a compact quota-ledger panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add payment provider integration, billing mutation, live provider calls, credential handling, auth enforcement, database/Redis/event-store connections, workers, OSS runtime changes, or package dependencies.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],

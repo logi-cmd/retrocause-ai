@@ -9,9 +9,10 @@ use axum::{
 };
 use retrocause_pro_domain::{
     CreateRunRequest, CredentialVaultBoundary, KnowledgeGraph, ProRun, ProviderStatusSnapshot,
-    RunEventTimeline, RunReviewComparison, RunStatus, RunSummary, WorkspaceAccessContext,
-    credential_vault_boundary, provider_status_snapshot, run_event_timeline, run_review_comparison,
-    sample_run, workspace_access_context,
+    QuotaLedgerBoundary, RunEventTimeline, RunReviewComparison, RunStatus, RunSummary,
+    WorkspaceAccessContext, credential_vault_boundary, provider_status_snapshot,
+    quota_ledger_boundary, run_event_timeline, run_review_comparison, sample_run,
+    workspace_access_context,
 };
 use retrocause_pro_provider_routing::{
     ProviderAdapterCandidateCatalog, ProviderAdapterContract, ProviderAdapterDryRunRequest,
@@ -74,6 +75,7 @@ fn router() -> Router {
         .route("/api/graph/seed", get(seed_graph))
         .route("/api/workspace/access-context", get(workspace_access))
         .route("/api/credential-vault-boundary", get(credential_vault))
+        .route("/api/quota-ledger-boundary", get(quota_ledger))
         .route("/api/provider-status", get(provider_status))
         .route(
             "/api/provider-route/preview",
@@ -154,6 +156,10 @@ async fn workspace_access() -> Json<WorkspaceAccessContext> {
 
 async fn credential_vault() -> Json<CredentialVaultBoundary> {
     Json(credential_vault_boundary())
+}
+
+async fn quota_ledger() -> Json<QuotaLedgerBoundary> {
+    Json(quota_ledger_boundary())
 }
 
 async fn provider_status() -> Json<ProviderStatusSnapshot> {
@@ -512,6 +518,31 @@ mod tests {
             payload
                 .safeguards
                 .contains(&"no_secret_values_in_requests_or_responses".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn quota_ledger_exposes_non_billing_boundary_preview() {
+        let payload = quota_ledger().await.0;
+
+        assert!(!payload.ledger_mutation_enabled);
+        assert!(!payload.payment_provider_connected);
+        assert!(
+            payload
+                .quota_lanes
+                .iter()
+                .any(|item| item.id == "managed_model_pool" && !item.billable_now)
+        );
+        assert!(
+            payload
+                .metering_rules
+                .iter()
+                .any(|rule| rule.id == "no_billable_units_in_preview" && !rule.billable_now)
+        );
+        assert!(
+            payload
+                .safeguards
+                .contains(&"no_billing_mutation_in_this_slice".to_string())
         );
     }
 

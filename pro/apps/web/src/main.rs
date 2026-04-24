@@ -277,6 +277,15 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "planned" }
                                 }
                             }
+                            div id="quota-ledger-panel" class="ledger-panel" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "Quota ledger boundary" }
+                                        p { "Ledger and billing rules load from the Pro API; no billable usage is written." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "planned" }
+                                }
+                            }
                         }
 
                         aside class="evidence-dock" aria-label="Evidence anchors" {
@@ -1325,6 +1334,64 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderQuotaLedgerBoundary(boundary) {
+    const panel = byId("quota-ledger-panel");
+    if (!panel) return;
+    if (!boundary) {
+      panel.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>Quota ledger boundary</strong>
+            <p>Ledger and billing rules load from the Pro API; no billable usage is written.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">planned</span>
+        </article>
+      `;
+      return;
+    }
+
+    const lanes = (boundary.quota_lanes || []).slice(0, 5).map((lane) => `
+      <li>
+        <strong>${escapeHtml(lane.label)}</strong>
+        <span>${escapeHtml(readable(lane.quota_owner))} / ${escapeHtml(readable(lane.accounting_status))} / billable: ${lane.billable_now ? "yes" : "no"}</span>
+        <small>${escapeHtml(lane.id)}: ${escapeHtml(lane.note)}</small>
+      </li>
+    `).join("");
+    const metering = (boundary.metering_rules || []).slice(0, 4).map((rule) => `
+      <li>
+        <strong>${escapeHtml(rule.id)}</strong>
+        <span>${escapeHtml(rule.lane_id)} / billable: ${rule.billable_now ? "yes" : "no"}</span>
+        <small>${escapeHtml(rule.requirement)}</small>
+      </li>
+    `).join("");
+    const safeguards = (boundary.safeguards || [])
+      .slice(0, 4)
+      .map((guard) => `<li>${escapeHtml(guard)}</li>`)
+      .join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card ledger-card">
+        <div class="work-order-header">
+          <strong>Quota ledger boundary</strong>
+          <span class="quota-state quota-state--deferred">${boundary.ledger_mutation_enabled ? "ledger mutation on" : "ledger mutation off"}</span>
+          <p>${escapeHtml(readable(boundary.mode || "planned_no_mutation"))} / payment provider: ${boundary.payment_provider_connected ? "on" : "off"} / billing: ${escapeHtml(readable(boundary.billing_decision || "preview_denied"))}</p>
+        </div>
+        <section>
+          <p class="work-order-label">Quota lanes</p>
+          <ol class="work-order-list">${lanes || "<li>No quota lanes returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Metering rules</p>
+          <ul class="work-order-list">${metering || "<li>No metering rules returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Billing safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>No billing safeguards returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   async function refreshExecutionJobs() {
     const jobs = await fetchJson("/api/execution-jobs");
     renderExecutionJobs(jobs);
@@ -1488,6 +1555,7 @@ fn client_script() -> &'static str {
   renderExecutionLifecycle(null);
   renderStoragePlan(null);
   renderCredentialVaultBoundary(null);
+  renderQuotaLedgerBoundary(null);
   fetchJson("/api/workspace/access-context")
     .then(renderWorkspaceAccess)
     .catch(() => {
@@ -1532,6 +1600,11 @@ fn client_script() -> &'static str {
     .then(renderCredentialVaultBoundary)
     .catch(() => {
       renderCredentialVaultBoundary(null);
+    });
+  fetchJson("/api/quota-ledger-boundary")
+    .then(renderQuotaLedgerBoundary)
+    .catch(() => {
+      renderQuotaLedgerBoundary(null);
     });
   refreshExecutionJobs().catch(() => {
     setText("execution-queue-status", `Queue API offline: start retrocause-pro-api at ${apiBase}`);
@@ -2130,7 +2203,8 @@ p {
 #execution-work-order-detail,
 #execution-lifecycle-panel,
 #storage-boundary-panel,
-#credential-vault-panel {
+#credential-vault-panel,
+#quota-ledger-panel {
   display: grid;
   gap: 0.65rem;
 }
@@ -2182,6 +2256,10 @@ p {
 
 .vault-card {
   background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.52 0.07 310));
+}
+
+.ledger-card {
+  background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.62 0.07 75));
 }
 
 .adapter-card {
@@ -2505,16 +2583,19 @@ mod tests {
         assert!(page.contains("execution-lifecycle-panel"));
         assert!(page.contains("storage-boundary-panel"));
         assert!(page.contains("credential-vault-panel"));
+        assert!(page.contains("quota-ledger-panel"));
         assert!(page.contains("/api/execution-jobs"));
         assert!(page.contains("/work-order"));
         assert!(page.contains("/api/execution-lifecycle"));
         assert!(page.contains("/api/storage-plan"));
         assert!(page.contains("/api/credential-vault-boundary"));
+        assert!(page.contains("/api/quota-ledger-boundary"));
         assert!(page.contains("data-work-order-job-id"));
         assert!(page.contains("function renderWorkOrder"));
         assert!(page.contains("function renderExecutionLifecycle"));
         assert!(page.contains("function renderStoragePlan"));
         assert!(page.contains("function renderCredentialVaultBoundary"));
+        assert!(page.contains("function renderQuotaLedgerBoundary"));
         assert!(page.contains("function renderProviderAdapterContract"));
         assert!(page.contains("function renderProviderAdapterDryRun"));
         assert!(page.contains("function renderProviderAdapterCandidates"));
