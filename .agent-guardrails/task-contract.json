@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
-  "task": "Add the next preview-only Pro Rust result snapshot readiness gate: derive a non-persisting snapshot-readiness payload from the existing worker-result dry-run/local replay path, expose a keyless API endpoint, render a compact graph-first web panel, and synchronize Pro docs/evidence. Keep this local-only and keyless: do not add actual persisted result snapshots, Postgres/Redis, hosted auth enforcement, real workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, package publishing, or live provider calls.",
+  "task": "Add the next preview-only Pro Rust worker result commit intent gate: derive a non-writing worker-owned commit-intent payload from the existing result snapshot readiness/local replay path, expose a keyless API endpoint, render a compact graph-first web panel with idempotency and hosted gate blockers, and synchronize Pro docs/evidence. Keep this local-only and keyless: do not add persisted snapshots, real result-event writes, Postgres/Redis, hosted auth enforcement, real workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, package publishing, or live provider calls.",
   "preset": "generic",
-  "createdAt": "2026-04-24T16:06:00.000Z",
+  "createdAt": "2026-04-25T00:28:00.000Z",
   "allowedPaths": [
     "pro/crates/event-store/",
     "pro/apps/api/",
@@ -45,6 +45,7 @@
   "acceptanceCriteria": [],
   "nonGoals": [
     "No persisted result snapshots",
+    "No real result-event writes",
     "No provider calls",
     "No credential access",
     "No auth enforcement",
@@ -52,33 +53,25 @@
     "No OSS runtime changes"
   ],
   "expectedBehaviorChanges": [
-    "Pro API exposes a keyless preview-only result snapshot readiness endpoint.",
-    "Pro web shell renders the readiness blockers and safeguards from the current run."
+    "Pro API exposes a keyless preview-only worker result commit intent endpoint.",
+    "Pro web shell renders commit idempotency requirements, rejected write steps, and hosted blockers from the current run."
   ],
   "userVisibleEffects": [
-    "The Pro graph-first shell can show why persisted result snapshots are still blocked."
+    "The Pro graph-first shell can show the future worker-owned commit envelope and why it is still rejected."
   ],
-  "intendedSymbols": [],
   "expectedPublicSurfaceChanges": [
-    "POST /api/runs/{run_id}/result-snapshot-readiness"
+    "POST /api/runs/{run_id}/worker-result-commit-intent"
   ],
-  "expectedBoundaryExceptions": [],
   "expectedTestTargets": [
     "cargo test --manifest-path pro/Cargo.toml"
   ],
-  "productionProfile": "",
-  "nfrRequirements": [],
-  "expectedLoadSensitivePaths": [],
-  "expectedConcurrencyImpact": "",
-  "observabilityRequirements": [],
-  "rollbackNotes": "",
-  "riskJustification": "This is a preview-only contract surface. It intentionally makes persistence blockers visible without creating a write path or enabling hosted execution.",
+  "riskJustification": "This is a preview-only contract surface. It intentionally makes future worker-owned commit prerequisites visible without creating a write path or enabling hosted execution.",
   "session": {
     "version": 1,
-    "sessionId": "5c6480b6-f3e0-4d9c-a7c5-result-snapshot-readiness",
-    "createdAt": "2026-04-24T16:06:00.000Z",
+    "sessionId": "5c6480b6-f3e0-4d9c-a7c5-worker-result-commit-intent",
+    "createdAt": "2026-04-25T00:28:00.000Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add the next preview-only Pro Rust result snapshot readiness gate: derive a non-persisting snapshot-readiness payload from the existing worker-result dry-run/local replay path, expose a keyless API endpoint, render a compact graph-first web panel, and synchronize Pro docs/evidence. Keep this local-only and keyless: do not add actual persisted result snapshots, Postgres/Redis, hosted auth enforcement, real workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, package publishing, or live provider calls.",
+    "taskRequest": "Add the next preview-only Pro Rust worker result commit intent gate: derive a non-writing worker-owned commit-intent payload from the existing result snapshot readiness/local replay path, expose a keyless API endpoint, render a compact graph-first web panel with idempotency and hosted gate blockers, and synchronize Pro docs/evidence. Keep this local-only and keyless: do not add persisted snapshots, real result-event writes, Postgres/Redis, hosted auth enforcement, real workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, package publishing, or live provider calls.",
     "contractSource": "manual-scope-after-plan-mismatch",
     "selectedFiles": [],
     "changedFiles": [],
@@ -109,7 +102,6 @@
       "Keep security, dependency, performance, understanding, and continuity concerns explicit in the evidence note and review summary.",
       "Finish with agent-guardrails check --review before handing off or merging."
     ],
-    "riskSignals": [],
     "archaeologyNotes": [
       "The automated guardrails plan inferred generic src/routes paths; the contract was manually narrowed to the Rust Pro workspace paths actually used by this repository."
     ],
@@ -118,7 +110,6 @@
       "Run required commands: cargo test --manifest-path pro/Cargo.toml",
       "Update evidence: .agent-guardrails/evidence/current-task.md",
       "Run agent-guardrails check --review before completing the task."
-    ],
-    "roughIntent": null
+    ]
   }
 }

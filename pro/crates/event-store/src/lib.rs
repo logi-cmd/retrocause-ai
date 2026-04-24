@@ -116,6 +116,42 @@ pub struct ResultSnapshotReadinessCheck {
     pub note: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkerResultCommitIntent {
+    pub run_id: String,
+    pub workspace_id: String,
+    pub mode: WorkerResultCommitIntentMode,
+    pub status: WorkerResultCommitIntentStatus,
+    pub commit_allowed: bool,
+    pub result_event_write_allowed: bool,
+    pub snapshot_persistence_allowed: bool,
+    pub provider_execution_allowed: bool,
+    pub idempotency_key_required: bool,
+    pub idempotency_key_preview: String,
+    pub worker_lease_required: bool,
+    pub readiness_check_count: usize,
+    pub blocking_checks: Vec<WorkerResultCommitBlocker>,
+    pub event_writes: Vec<WorkerResultCommitEventWrite>,
+    pub safeguards: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkerResultCommitBlocker {
+    pub id: String,
+    pub label: String,
+    pub note: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkerResultCommitEventWrite {
+    pub id: String,
+    pub event_kind: String,
+    pub owner: String,
+    pub allowed_now: bool,
+    pub idempotency_required: bool,
+    pub note: String,
+}
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EventReplayMode {
@@ -145,6 +181,18 @@ pub enum WorkerResultDryRunStepStatus {
 #[serde(rename_all = "snake_case")]
 pub enum ResultSnapshotReadinessMode {
     PreviewOnlyGate,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerResultCommitIntentMode {
+    PreviewOnlyFromSnapshotReadiness,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerResultCommitIntentStatus {
+    RejectedUntilHostedGates,
 }
 
 #[derive(Debug)]
@@ -214,6 +262,14 @@ impl FileEventStore {
     ) -> Result<ResultSnapshotReadiness, EventStoreError> {
         let dry_run = self.worker_result_dry_run(run)?;
         Ok(result_snapshot_readiness_from_dry_run(run, &dry_run))
+    }
+
+    pub fn worker_result_commit_intent(
+        &self,
+        run: &ProRun,
+    ) -> Result<WorkerResultCommitIntent, EventStoreError> {
+        let readiness = self.result_snapshot_readiness(run)?;
+        Ok(worker_result_commit_intent_from_readiness(run, &readiness))
     }
 
     fn persist_current_state(&self) -> Result<(), EventStoreError> {
@@ -450,6 +506,77 @@ pub fn result_snapshot_readiness_from_dry_run(
     }
 }
 
+pub fn worker_result_commit_intent_from_readiness(
+    run: &ProRun,
+    readiness: &ResultSnapshotReadiness,
+) -> WorkerResultCommitIntent {
+    let blocking_checks = readiness
+        .readiness_checks
+        .iter()
+        .filter(|check| check.blocking_snapshot_persistence || !check.passed)
+        .map(|check| WorkerResultCommitBlocker {
+            id: check.id.clone(),
+            label: check.label.clone(),
+            note: check.note.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    WorkerResultCommitIntent {
+        run_id: run.id.clone(),
+        workspace_id: run.workspace_id.clone(),
+        mode: WorkerResultCommitIntentMode::PreviewOnlyFromSnapshotReadiness,
+        status: WorkerResultCommitIntentStatus::RejectedUntilHostedGates,
+        commit_allowed: false,
+        result_event_write_allowed: false,
+        snapshot_persistence_allowed: false,
+        provider_execution_allowed: false,
+        idempotency_key_required: true,
+        idempotency_key_preview: format!("preview:{}:{}:result_commit", run.id, run.updated_at),
+        worker_lease_required: true,
+        readiness_check_count: readiness.readiness_checks.len(),
+        blocking_checks,
+        event_writes: vec![
+            WorkerResultCommitEventWrite {
+                id: "append_worker_result_events".to_string(),
+                event_kind: "worker_result_events".to_string(),
+                owner: "future_hosted_worker".to_string(),
+                allowed_now: false,
+                idempotency_required: true,
+                note: "Would append result events only after worker lease, auth, quota, and vault gates pass."
+                    .to_string(),
+            },
+            WorkerResultCommitEventWrite {
+                id: "persist_result_snapshot_revision".to_string(),
+                event_kind: "result_snapshot_revision".to_string(),
+                owner: "future_hosted_worker".to_string(),
+                allowed_now: false,
+                idempotency_required: true,
+                note: "Would persist a new snapshot revision after result events commit idempotently."
+                    .to_string(),
+            },
+            WorkerResultCommitEventWrite {
+                id: "publish_review_ready_status".to_string(),
+                event_kind: "run_status_update".to_string(),
+                owner: "future_hosted_worker".to_string(),
+                allowed_now: false,
+                idempotency_required: true,
+                note: "Would publish review-ready status only after durable snapshot persistence."
+                    .to_string(),
+            },
+        ],
+        safeguards: vec![
+            "preview_only_commit_intent_rejected".to_string(),
+            "derived_from_result_snapshot_readiness".to_string(),
+            "idempotency_key_is_preview_only".to_string(),
+            "no_result_event_writes".to_string(),
+            "no_snapshot_persistence".to_string(),
+            "no_provider_execution_or_secret_access".to_string(),
+            "no_quota_or_billing_mutation".to_string(),
+            "run_scoped_to_requested_run_id".to_string(),
+        ],
+    }
+}
+
 fn read_state(path: &Path) -> Result<StoredEventState, EventStoreError> {
     let raw = fs::read_to_string(path)?;
     let mut state = serde_json::from_str::<StoredEventState>(&raw)?;
@@ -498,8 +625,9 @@ impl From<serde_json::Error> for EventStoreError {
 #[cfg(test)]
 mod tests {
     use super::{
-        EventReplayMode, FileEventStore, ResultSnapshotReadinessMode, WorkerResultDryRunMode,
-        WorkerResultDryRunStepStatus, temp_store_path,
+        EventReplayMode, FileEventStore, ResultSnapshotReadinessMode, WorkerResultCommitIntentMode,
+        WorkerResultCommitIntentStatus, WorkerResultDryRunMode, WorkerResultDryRunStepStatus,
+        temp_store_path,
     };
     use retrocause_pro_domain::{CreateRunRequest, create_run_from_request, sample_run};
     use std::fs;
@@ -650,6 +778,54 @@ mod tests {
             readiness
                 .safeguards
                 .contains(&"preview_only_no_snapshot_persistence".to_string())
+        );
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn worker_result_commit_intent_is_rejected_until_hosted_gates_exist() {
+        let path = temp_store_path("worker-result-commit-intent");
+        let store = FileEventStore::open(&path).expect("event store should open");
+        let run = sample_run();
+
+        let intent = store
+            .worker_result_commit_intent(&run)
+            .expect("commit intent should build from readiness");
+
+        assert_eq!(intent.run_id, run.id);
+        assert_eq!(
+            intent.mode,
+            WorkerResultCommitIntentMode::PreviewOnlyFromSnapshotReadiness
+        );
+        assert_eq!(
+            intent.status,
+            WorkerResultCommitIntentStatus::RejectedUntilHostedGates
+        );
+        assert!(!intent.commit_allowed);
+        assert!(!intent.result_event_write_allowed);
+        assert!(!intent.snapshot_persistence_allowed);
+        assert!(!intent.provider_execution_allowed);
+        assert!(intent.idempotency_key_required);
+        assert!(intent.idempotency_key_preview.contains(run.id.as_str()));
+        assert!(intent.worker_lease_required);
+        assert!(intent.readiness_check_count >= 4);
+        assert!(
+            intent
+                .blocking_checks
+                .iter()
+                .any(|check| { check.id == "durable_worker_commit_ready" })
+        );
+        assert!(
+            intent
+                .event_writes
+                .iter()
+                .all(|write| { !write.allowed_now && write.idempotency_required })
+        );
+        assert!(
+            intent
+                .safeguards
+                .contains(&"preview_only_commit_intent_rejected".to_string())
         );
 
         let _ = fs::remove_file(path);

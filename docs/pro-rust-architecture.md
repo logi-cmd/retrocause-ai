@@ -1,6 +1,6 @@
 # RetroCause Pro Rust Architecture
 
-Last updated: 2026-04-24
+Last updated: 2026-04-25
 
 ## Why a separate Rust workspace
 
@@ -12,7 +12,7 @@ The Rust rewrite lives under `pro/` inside this repository so the product and ar
 
 1. Establish a clean Rust workspace boundary.
  2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, usage ledger entries, provider quota ownership, and cooldown state.
-3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, run-scoped local event replay, preview-only worker result dry-runs, result snapshot readiness gates, keyless provider/search quota status, routing previews, and preview-only execution jobs.
+3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, run-scoped local event replay, preview-only worker result dry-runs, result snapshot readiness gates, worker result commit intents, keyless provider/search quota status, routing previews, and preview-only execution jobs.
 4. Render a graph-first web shell from the same shared Rust payload and wire it to the local API create/read flow plus provider-status view.
 5. Keep Pro separate from the OSS Python/FastAPI + Next.js runtime.
 
@@ -97,6 +97,8 @@ The worker result dry-run is also deliberately preview-only. It uses the local r
 
 The result snapshot readiness gate is also deliberately preview-only. It derives a proposed non-persisted snapshot from the worker-result dry-run/local replay path, reports the hosted safety checks that still block persistence, and keeps `snapshot_persistence_allowed=false`, `result_event_write_allowed=false`, and `provider_execution_allowed=false`.
 
+The worker result commit intent is also deliberately preview-only. It derives a rejected commit envelope from result snapshot readiness, exposes the preview idempotency key, future event writes, hosted blockers, and commit safeguards, and keeps `commit_allowed=false`, `result_event_write_allowed=false`, `snapshot_persistence_allowed=false`, and `provider_execution_allowed=false`.
+
 The review comparison payload is also deliberately derived in this slice. It compares the current run to a generated previous-checkpoint preview and reports evidence/challenge deltas so the graph-review workflow has a concrete shape before durable run history, tenant auth, or cross-run selectors exist.
 
 ## Run store boundary
@@ -129,8 +131,9 @@ Current behavior:
 - `GET /api/runs/{run_id}/event-replay` returns replay metadata, durable-local mode, event count, entries, and safeguards
 - `POST /api/runs/{run_id}/worker-result-dry-run` derives proposed result commit steps from local replay without writing result events
 - `POST /api/runs/{run_id}/result-snapshot-readiness` derives a non-persisting snapshot readiness gate from the worker result dry-run without writing result events
+- `POST /api/runs/{run_id}/worker-result-commit-intent` derives a rejected worker-owned commit intent from snapshot readiness without writing result events or persisting snapshots
 
-This is intentionally local-only alpha storage. It is not Postgres, Redis, a hosted tenant audit log, a worker event queue, a credential vault, or a provider result committer. The tradeoff is that read endpoints can initialize a missing local stream for a known run so restart continuity and replay UX stay deterministic; the worker result dry-run can then preview the commit envelope from that replay without mutating the run. Future hosted Pro should replace that with explicit worker-owned event writes once auth, quota, vault, worker leases, and result commits exist.
+This is intentionally local-only alpha storage. It is not Postgres, Redis, a hosted tenant audit log, a worker event queue, a credential vault, or a provider result committer. The tradeoff is that read endpoints can initialize a missing local stream for a known run so restart continuity and replay UX stay deterministic; the worker result dry-run, snapshot readiness gate, and commit intent can then preview the commit envelope from that replay without mutating the run. Future hosted Pro should replace that with explicit worker-owned event writes once auth, quota, vault, worker leases, and result commits exist.
 
 ## Provider routing boundary
 
@@ -181,6 +184,7 @@ Initial responsibility:
 - `GET /api/runs/{run_id}/event-replay`
 - `POST /api/runs/{run_id}/worker-result-dry-run`
 - `POST /api/runs/{run_id}/result-snapshot-readiness`
+- `POST /api/runs/{run_id}/worker-result-commit-intent`
 - `GET /api/runs/{run_id}/review-comparison`
 - `GET /api/workspace/access-context`
 - `GET /api/credential-vault-boundary`
@@ -205,11 +209,12 @@ Initial responsibility:
 - local JSON event replay storage through `crates/event-store`, shared by seed/create-run writes plus run-scoped event-log/replay reads
 - preview-only worker result dry-runs through `crates/event-store`, derived from local replay and blocked from result-event writes
 - preview-only result snapshot readiness gates through `crates/event-store`, derived from worker result dry-runs and blocked from snapshot persistence
+- preview-only worker result commit intents through `crates/event-store`, derived from snapshot readiness and blocked from result-event writes plus snapshot persistence
 - no-connection hosted storage migration plan through `crates/run-store`
 - local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
 - future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current run and event stores are intentionally local-file-backed. They are useful for proving the API behavior, graph payload contract, restart continuity, and local event replay, but they should not be treated as the hosted Pro data layer. The workspace access context, credential-vault boundary, quota-ledger boundary, result-commit boundary, derived run-events, local event-log/replay, worker result dry-run, result snapshot readiness, review-comparison, provider-status, provider-route preview, execution-job, lifecycle, worker-lease, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, result/event commit vocabulary, snapshot-persistence vocabulary, run status vocabulary, replay vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, retry/idempotency semantics, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, opening database/Redis connections, enforcing auth, claiming worker leases, scheduling retries, or calling real providers. Only the local event-log/replay endpoints write derived run-scoped events to the local JSON replay file; result-commit/provider/worker result dry-run/result snapshot readiness routes still cannot write provider result events or persisted snapshots. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current run and event stores are intentionally local-file-backed. They are useful for proving the API behavior, graph payload contract, restart continuity, and local event replay, but they should not be treated as the hosted Pro data layer. The workspace access context, credential-vault boundary, quota-ledger boundary, result-commit boundary, derived run-events, local event-log/replay, worker result dry-run, result snapshot readiness, worker result commit intent, review-comparison, provider-status, provider-route preview, execution-job, lifecycle, worker-lease, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, result/event commit vocabulary, snapshot-persistence vocabulary, run status vocabulary, replay vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, retry/idempotency semantics, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, opening database/Redis connections, enforcing auth, claiming worker leases, scheduling retries, or calling real providers. Only the local event-log/replay endpoints write derived run-scoped events to the local JSON replay file; result-commit/provider/worker result dry-run/result snapshot readiness/worker result commit intent routes still cannot write provider result events or persisted snapshots. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -227,6 +232,7 @@ Initial responsibility:
 - render durable local event replay from `GET /api/runs/{run_id}/event-replay`, showing replay mode, event count, persisted entries, and replay safeguards
 - run a preview-only worker result dry-run through `POST /api/runs/{run_id}/worker-result-dry-run`, showing proposed result steps, commit checks, blocked writes, and dry-run safeguards
 - check preview-only result snapshot readiness through `POST /api/runs/{run_id}/result-snapshot-readiness`, showing proposed non-persisted snapshot metadata, blockers, and safeguards
+- prepare a rejected preview-only worker result commit intent through `POST /api/runs/{run_id}/worker-result-commit-intent`, showing idempotency key preview, future event writes, blockers, and commit safeguards
 - render a derived review-comparison panel from `GET /api/runs/{run_id}/review-comparison`, showing evidence/challenge deltas and preview safeguards
 - show provider/search quota ownership, credential policy, and cooldown status through the local provider-status payload
 - render the dry provider-adapter request/result/degradation contract from `GET /api/provider-adapter-contract`
@@ -287,7 +293,7 @@ The current `GET /api/worker-lease-boundary` path exposes planned worker-lease, 
 
 The current `GET /api/result-commit-boundary` path exposes planned result-commit stages, event write rules, partial-result reconciliation rules, and safeguards. It does not write provider result events, mutate run state, claim worker leases, read credentials, reserve quota, or call providers. Future hosted Pro should replace it with worker-owned durable result/event commits after tenant auth, quota reservations, vault access, idempotent worker commits, and storage boundaries exist.
 
-The current `GET /api/runs/{run_id}/events` path derives a non-durable timeline from the run record. `GET /api/runs/{run_id}/event-log` and `GET /api/runs/{run_id}/event-replay` persist and replay that run-scoped stream through the local JSON event-store. `POST /api/runs/{run_id}/worker-result-dry-run` uses that replay as input and returns proposed result commit steps without result-event writes. `POST /api/runs/{run_id}/result-snapshot-readiness` uses that dry-run shape to show why persisted result snapshots remain blocked. This is useful for local replay UX, restart continuity, commit-flow shaping, and snapshot gate visibility, but it is not a hosted audit log, not a worker status queue, not a persisted result snapshot, and not proof that provider result commits are safe. Future hosted Pro should replace or supplement it with tenant-scoped event-store rows once auth, quota reservations, worker leases, vault access, and storage boundaries exist.
+The current `GET /api/runs/{run_id}/events` path derives a non-durable timeline from the run record. `GET /api/runs/{run_id}/event-log` and `GET /api/runs/{run_id}/event-replay` persist and replay that run-scoped stream through the local JSON event-store. `POST /api/runs/{run_id}/worker-result-dry-run` uses that replay as input and returns proposed result commit steps without result-event writes. `POST /api/runs/{run_id}/result-snapshot-readiness` uses that dry-run shape to show why persisted result snapshots remain blocked. `POST /api/runs/{run_id}/worker-result-commit-intent` derives the next rejected worker-owned commit envelope, including idempotency key preview and future event-write blockers, without committing anything. This is useful for local replay UX, restart continuity, commit-flow shaping, snapshot gate visibility, and idempotency planning, but it is not a hosted audit log, not a worker status queue, not a persisted result snapshot, and not proof that provider result commits are safe. Future hosted Pro should replace or supplement it with tenant-scoped event-store rows once auth, quota reservations, worker leases, vault access, idempotency checks, and storage boundaries exist.
 
 The current `GET /api/runs/{run_id}/review-comparison` path derives a previous-checkpoint preview from the requested run and reports evidence/challenge deltas. It is useful for shaping graph-review UI, but it is not a durable comparison against another tenant-scoped run. Future hosted Pro should replace the derived baseline with explicit run selection after auth and durable history exist.
 
@@ -496,3 +502,11 @@ The result snapshot readiness slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `POST /api/runs/{run_id}/result-snapshot-readiness` proving the payload is derived from worker-result dry-run/local replay and keeps snapshot persistence, result-event writes, provider calls, credentials, auth, quota, and billing disabled
 - a browser smoke that starts the Pro API and web shell, clicks `Check snapshot gate`, and verifies that the readiness panel renders preview-only gate mode, persistence off, readiness blockers, proposed non-persisted snapshot metadata, and safeguards
+
+The worker result commit-intent slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `POST /api/runs/{run_id}/worker-result-commit-intent` proving the payload is derived from result-snapshot readiness/local replay and keeps commits, result-event writes, snapshot persistence, provider calls, credentials, auth, quota, and billing disabled
+- a browser smoke that starts the Pro API and web shell, clicks `Prepare commit intent`, and verifies that the commit-intent panel renders rejected mode, idempotency key preview, future event writes, blockers, and safeguards

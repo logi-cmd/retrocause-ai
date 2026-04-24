@@ -16,7 +16,7 @@ use retrocause_pro_domain::{
 };
 use retrocause_pro_event_store::{
     EventStoreEntry, EventStoreError, EventStoreReplay, FileEventStore, ResultSnapshotReadiness,
-    WorkerResultDryRun,
+    WorkerResultCommitIntent, WorkerResultDryRun,
 };
 use retrocause_pro_provider_routing::{
     ProviderAdapterCandidateCatalog, ProviderAdapterContract, ProviderAdapterDryRunRequest,
@@ -127,6 +127,10 @@ fn router() -> Router {
         .route(
             "/api/runs/{run_id}/result-snapshot-readiness",
             post(run_result_snapshot_readiness).options(cors_preflight),
+        )
+        .route(
+            "/api/runs/{run_id}/worker-result-commit-intent",
+            post(run_worker_result_commit_intent).options(cors_preflight),
         )
         .route(
             "/api/runs/{run_id}/review-comparison",
@@ -353,6 +357,21 @@ async fn run_result_snapshot_readiness(
     state
         .event_store
         .result_snapshot_readiness(&run)
+        .map(Json)
+        .map_err(event_store_error)
+}
+
+async fn run_worker_result_commit_intent(
+    State(state): State<AppState>,
+    Path(run_id): Path<String>,
+) -> Result<Json<WorkerResultCommitIntent>, ApiError> {
+    let run = state
+        .run_store
+        .get_run(&run_id)
+        .ok_or_else(|| not_found(run_id))?;
+    state
+        .event_store
+        .worker_result_commit_intent(&run)
         .map(Json)
         .map_err(event_store_error)
 }
@@ -1018,6 +1037,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn worker_result_commit_intent_is_rejected_until_hosted_gates_exist() {
+        let payload = run_worker_result_commit_intent(
+            State(AppState::seeded()),
+            Path("run_semiconductor_controls_001".to_string()),
+        )
+        .await
+        .expect("known sample run")
+        .0;
+
+        assert_eq!(payload.run_id, "run_semiconductor_controls_001");
+        assert!(!payload.commit_allowed);
+        assert!(!payload.result_event_write_allowed);
+        assert!(!payload.snapshot_persistence_allowed);
+        assert!(!payload.provider_execution_allowed);
+        assert!(payload.idempotency_key_required);
+        assert!(
+            payload
+                .idempotency_key_preview
+                .contains("run_semiconductor_controls_001")
+        );
+        assert!(payload.worker_lease_required);
+        assert!(
+            payload
+                .blocking_checks
+                .iter()
+                .any(|check| { check.id == "durable_worker_commit_ready" })
+        );
+        assert!(
+            payload
+                .event_writes
+                .iter()
+                .all(|write| { !write.allowed_now && write.idempotency_required })
+        );
+        assert!(
+            payload
+                .safeguards
+                .contains(&"derived_from_result_snapshot_readiness".to_string())
+        );
+    }
+
+    #[tokio::test]
     async fn review_comparison_payload_is_derived_from_requested_run() {
         let payload = get_run_review_comparison(
             State(AppState::seeded()),
@@ -1114,13 +1174,22 @@ mod tests {
         assert_eq!(dry_run.replay_event_count, 1);
         assert!(!dry_run.result_event_write_allowed);
 
-        let readiness = run_result_snapshot_readiness(State(state), Path(created.id.clone()))
-            .await
-            .expect("created run result snapshot readiness should be readable")
-            .0;
+        let readiness =
+            run_result_snapshot_readiness(State(state.clone()), Path(created.id.clone()))
+                .await
+                .expect("created run result snapshot readiness should be readable")
+                .0;
         assert_eq!(readiness.run_id, created.id);
         assert_eq!(readiness.replay_event_count, 1);
         assert!(!readiness.snapshot_persistence_allowed);
+
+        let intent = run_worker_result_commit_intent(State(state), Path(created.id.clone()))
+            .await
+            .expect("created run worker result commit intent should be readable")
+            .0;
+        assert_eq!(intent.run_id, created.id);
+        assert!(!intent.commit_allowed);
+        assert!(intent.idempotency_key_required);
     }
 
     #[tokio::test]

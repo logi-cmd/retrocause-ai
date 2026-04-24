@@ -2606,3 +2606,87 @@ This task adds a preview-only result snapshot readiness gate for the Pro Rust pr
 
 - This is not a persisted result snapshot, not a worker runtime, not a hosted audit log, and not a provider result committer.
 - Result snapshot persistence, result-event writes, tenant auth, quota reservations, credential vault access, durable worker leases, and idempotent commits still need to exist before live provider execution or persisted result snapshots can be enabled safely.
+
+## Pro Product Core Slice 28 - Worker Result Commit Intent Gate
+
+### Scope
+
+This task adds a preview-only worker result commit-intent gate for the Pro Rust product core. The payload is derived from the existing result snapshot readiness/local replay path, exposes the idempotency requirements and hosted blockers for future worker-owned result commits, and renders those blockers in the graph-first web shell. This remains local-only and keyless: no persisted result snapshots, real result-event writes, Postgres/Redis, hosted auth enforcement, real workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, package publishing, or live provider calls were added.
+
+### Files Updated
+
+- `pro/crates/event-store/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `WorkerResultCommitIntent`, blocker payloads, future event-write payloads, and preview-only commit-intent mode/status in `crates/event-store`.
+- Added `FileEventStore::worker_result_commit_intent()` and `worker_result_commit_intent_from_readiness()` so the rejected commit intent is explicitly derived from result snapshot readiness.
+- Added keyless `POST /api/runs/{run_id}/worker-result-commit-intent`.
+- Added API and event-store tests proving the intent is run-scoped, requires idempotency, keeps commits/result-event writes/snapshot persistence/provider execution disabled, and exposes hosted blockers.
+- Added a graph-first web button and panel for `Prepare commit intent`, showing idempotency key preview, future event writes, blocking gates, and safeguards.
+- Updated Pro project state and architecture docs to record the commit-intent gate as a preview contract, not a worker-owned commit path or persisted result snapshot.
+
+### Commands Run
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - First result: failed because Rustfmt wanted to reflow new API/web/event-store assertions.
+  - Fix: ran `cargo fmt --manifest-path pro/Cargo.toml --all`.
+  - Final result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `32 passed`.
+  - Domain tests: `16 passed`.
+  - Event-store tests: `6 passed`.
+  - Provider-routing tests: `10 passed`.
+  - Queue tests: `7 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API worker-result commit-intent smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8839` with temporary `RETROCAUSE_PRO_RUN_STORE_PATH` and `RETROCAUSE_PRO_EVENT_STORE_PATH`.
+  - Called `POST /api/runs/run_semiconductor_controls_001/worker-result-commit-intent`.
+  - Created a run through `POST /api/runs`.
+  - Called `POST /api/runs/{created_run_id}/worker-result-commit-intent`.
+  - Result: passed; seed intent mode was `preview_only_from_snapshot_readiness`, seed blocker count was `5`, created run id was `run_local_000001`, commits stayed disabled, result-event writes stayed disabled, snapshot persistence stayed disabled, provider execution stayed disabled, idempotency was required, and the rejected safeguard was present.
+
+- Pro browser worker-result commit-intent smoke
+  - First gstack browser attempt timed out during page navigation and did not click the button; the panel stayed in its empty/default state.
+  - Fallback: started `retrocause-pro-api.exe` on `127.0.0.1:8843` and `retrocause-pro-web.exe` on `127.0.0.1:3053`, used `curl.exe` for local readiness checks, and used Playwright with external font requests aborted.
+  - Clicked `Prepare commit intent`.
+  - Result: passed; the commit-intent panel rendered `Worker commit intent`, `commit rejected`, `preview only from snapshot readiness`, `Durable worker commit ready`, `preview_only_commit_intent_rejected`, and `idempotency_key_is_preview_only`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Result: passed. A key-shaped scan for common provider-token prefixes and API-key assignment patterns found no key-shaped tokens in the current diff.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with concerns; no blocking errors.
+  - Score: `85/100 (pass-with-concerns)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because project state was synchronized to mark the worker-result commit-intent slice as implemented and move the next Pro focus toward durable worker-owned result-event commits only after hosted safety gates exist.
+  - Non-blocking warning: `pro/crates/event-store/src/lib.rs` changed as a state-related file. This was intentional because the event-store crate owns local replay/readiness-derived worker-result commit-intent payloads.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is interface-changing. This slice intentionally adds keyless local `POST /api/runs/{run_id}/worker-result-commit-intent`; it does not change OSS APIs, accept credentials, enforce auth, mutate quota/billing, start workers, write result events, persist snapshots, or execute provider calls.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice does not accept, read, store, log, or return provider secrets, payment credentials, auth tokens, or user API keys. It does not enforce hosted permissions or protect hosted resources. The commit intent is scoped by requested run id and uses only local replay/readiness data.
+- Dependencies: no new crates, npm packages, lockfile changes, or external dependency upgrades were introduced.
+- Performance: the commit-intent gate reuses the existing local replay -> worker-result dry-run -> snapshot-readiness path and builds an in-memory payload. It adds no provider, database, Redis, worker, quota-ledger, billing, or network load beyond one local API response.
+- Understanding: the deliberate tradeoff is to make idempotent worker-owned commit requirements visible before adding actual worker writes. That gives the UI and API a concrete next boundary while staying honest that no result event or snapshot is persisted.
+- Continuity: reused the existing event-store crate, result snapshot readiness path, Axum state/endpoint style, web `fetchJson` helper, and compact boundary-card styling. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- This is not a persisted result snapshot, not a worker runtime, not a hosted audit log, and not a provider result committer.
+- Result-event writes, result snapshot persistence, tenant auth, quota reservations, credential vault access, durable worker leases, and idempotent hosted commits still need to exist before live provider execution or persisted result snapshots can be enabled safely.

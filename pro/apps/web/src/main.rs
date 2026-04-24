@@ -316,6 +316,21 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "gated" }
                                 }
                             }
+                            button id="worker-result-commit-intent-button" type="button" {
+                                "Prepare commit intent"
+                            }
+                            p id="worker-result-commit-intent-status" class="console-status" {
+                                "Commit intent previews worker-owned writes and idempotency without persisting results."
+                            }
+                            div id="worker-result-commit-intent-panel" class="commit-panel" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "Worker commit intent" }
+                                        p { "Prepare a rejected commit intent to inspect idempotency and hosted blockers." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "rejected" }
+                                }
+                            }
                             div id="storage-boundary-panel" class="storage-panel" {
                                 article class="queue-meter queue-meter--empty" {
                                     div {
@@ -1576,6 +1591,65 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderWorkerResultCommitIntent(intent) {
+    const panel = byId("worker-result-commit-intent-panel");
+    if (!panel) return;
+    if (!intent) {
+      panel.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>Worker commit intent</strong>
+            <p>Prepare a rejected commit intent to inspect idempotency and hosted blockers.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">rejected</span>
+        </article>
+      `;
+      return;
+    }
+
+    const blockers = (intent.blocking_checks || []).map((check) => `
+      <li>
+        <strong>${escapeHtml(check.label || check.id)}</strong>
+        <span>${escapeHtml(check.id || "blocking_check")}</span>
+        <small>${escapeHtml(check.note || "No blocker note.")}</small>
+      </li>
+    `).join("");
+    const writes = (intent.event_writes || []).map((write) => `
+      <li>
+        <strong>${escapeHtml(write.event_kind || write.id)}</strong>
+        <span>${escapeHtml(write.owner || "future worker")} / allowed now: ${write.allowed_now ? "yes" : "no"} / idempotency: ${write.idempotency_required ? "required" : "not required"}</span>
+        <small>${escapeHtml(write.note || "No event-write note.")}</small>
+      </li>
+    `).join("");
+    const safeguards = (intent.safeguards || [])
+      .slice(0, 7)
+      .map((guard) => `<li>${escapeHtml(guard)}</li>`)
+      .join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card commit-card">
+        <div class="work-order-header">
+          <strong>Worker commit intent</strong>
+          <span class="quota-state quota-state--deferred">${intent.commit_allowed ? "commit allowed" : "commit rejected"}</span>
+          <p>${escapeHtml(readable(intent.mode || "preview_only_from_snapshot_readiness"))} / ${escapeHtml(readable(intent.status || "rejected_until_hosted_gates"))}</p>
+          <small>Run: ${escapeHtml(intent.run_id || "unknown")} / Idempotency key: ${escapeHtml(intent.idempotency_key_preview || "missing")}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Future event writes</p>
+          <ul class="work-order-list">${writes || "<li>No future event writes returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Blocking gates</p>
+          <ul class="work-order-list">${blockers || "<li>No blocking checks returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Commit safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>No commit safeguards returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   function renderStoragePlan(plan) {
     const panel = byId("storage-boundary-panel");
     if (!panel) return;
@@ -1783,6 +1857,7 @@ fn client_script() -> &'static str {
     renderReviewComparison(reviewComparison);
     renderWorkerResultDryRun(null);
     renderResultSnapshotReadiness(null);
+    renderWorkerResultCommitIntent(null);
     await refreshRuns(run.id);
     setStatus(`Loaded ${run.id}`);
   }
@@ -1897,6 +1972,23 @@ fn client_script() -> &'static str {
     );
   }
 
+  async function prepareWorkerResultCommitIntent() {
+    const runId = currentRun?.id;
+    if (!runId) {
+      throw new Error("No run selected for worker result commit intent.");
+    }
+    setText("worker-result-commit-intent-status", "Preparing worker commit intent...");
+    const intent = await fetchJson(`/api/runs/${encodeURIComponent(runId)}/worker-result-commit-intent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    renderWorkerResultCommitIntent(intent);
+    setText(
+      "worker-result-commit-intent-status",
+      `Commit intent remains ${intent.commit_allowed ? "allowed" : "rejected"}; ${intent.blocking_checks?.length || 0} blockers returned.`,
+    );
+  }
+
   byId("run-create-form")?.addEventListener("submit", (event) => {
     createRun(event).catch((error) => setStatus(`API error: ${error.message}`));
   });
@@ -1916,6 +2008,10 @@ fn client_script() -> &'static str {
   byId("result-snapshot-readiness-button")?.addEventListener("click", () => {
     checkResultSnapshotReadiness()
       .catch((error) => setText("result-snapshot-readiness-status", `Snapshot gate error: ${error.message}`));
+  });
+  byId("worker-result-commit-intent-button")?.addEventListener("click", () => {
+    prepareWorkerResultCommitIntent()
+      .catch((error) => setText("worker-result-commit-intent-status", `Commit intent error: ${error.message}`));
   });
   byId("provider-adapter-dry-run-button")?.addEventListener("click", () => {
     runProviderAdapterDryRun()
@@ -1954,6 +2050,7 @@ fn client_script() -> &'static str {
   renderResultCommitBoundary(null);
   renderWorkerResultDryRun(null);
   renderResultSnapshotReadiness(null);
+  renderWorkerResultCommitIntent(null);
   renderStoragePlan(null);
   renderCredentialVaultBoundary(null);
   renderQuotaLedgerBoundary(null);
@@ -2623,6 +2720,7 @@ p {
 #result-commit-panel,
 #worker-result-dry-run-panel,
 #result-snapshot-readiness-panel,
+#worker-result-commit-intent-panel,
 #storage-boundary-panel,
 #credential-vault-panel,
 #quota-ledger-panel {
@@ -3020,6 +3118,8 @@ mod tests {
         assert!(page.contains("worker-result-dry-run-button"));
         assert!(page.contains("result-snapshot-readiness-panel"));
         assert!(page.contains("result-snapshot-readiness-button"));
+        assert!(page.contains("worker-result-commit-intent-panel"));
+        assert!(page.contains("worker-result-commit-intent-button"));
         assert!(page.contains("storage-boundary-panel"));
         assert!(page.contains("credential-vault-panel"));
         assert!(page.contains("quota-ledger-panel"));
@@ -3030,6 +3130,9 @@ mod tests {
         assert!(page.contains("/api/result-commit-boundary"));
         assert!(page.contains("/api/runs/${encodeURIComponent(runId)}/worker-result-dry-run"));
         assert!(page.contains("/api/runs/${encodeURIComponent(runId)}/result-snapshot-readiness"));
+        assert!(
+            page.contains("/api/runs/${encodeURIComponent(runId)}/worker-result-commit-intent")
+        );
         assert!(page.contains("/api/storage-plan"));
         assert!(page.contains("/api/credential-vault-boundary"));
         assert!(page.contains("/api/quota-ledger-boundary"));
@@ -3042,6 +3145,8 @@ mod tests {
         assert!(page.contains("function runWorkerResultDryRun"));
         assert!(page.contains("function renderResultSnapshotReadiness"));
         assert!(page.contains("function checkResultSnapshotReadiness"));
+        assert!(page.contains("function renderWorkerResultCommitIntent"));
+        assert!(page.contains("function prepareWorkerResultCommitIntent"));
         assert!(page.contains("function renderStoragePlan"));
         assert!(page.contains("function renderCredentialVaultBoundary"));
         assert!(page.contains("function renderQuotaLedgerBoundary"));
