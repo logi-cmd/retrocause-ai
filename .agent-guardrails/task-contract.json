@@ -1,10 +1,10 @@
 {
   "schemaVersion": 3,
-  "task": "Add a non-executing hosted storage migration contract for the Pro Rust product core: define the Postgres/Redis/tenant/auth/worker-ownership migration plan in existing Rust crates, expose it through a keyless API endpoint, render a compact storage-boundary panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add database connections, Redis connections, migrations, provider credentials, live provider calls, auth, billing, real workers, OSS runtime changes, or package dependencies.",
+  "task": "Add a non-executing hosted provider adapter contract for the Pro Rust product core: define adapter request/result/degradation/quota/cooldown/partial-result semantics in the provider-routing crate, expose it through a keyless API endpoint, render a compact adapter contract panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, workers, database/Redis connections, OSS runtime changes, or package dependencies.",
   "preset": "generic",
-  "createdAt": "2026-04-24T12:01:26.085Z",
+  "createdAt": "2026-04-24T12:10:46.813Z",
   "allowedPaths": [
-    "pro/crates/run-store/",
+    "pro/crates/provider-routing/",
     "pro/apps/api/",
     "pro/apps/web/",
     "docs/PROJECT_STATE.md",
@@ -66,10 +66,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "1038dbb3-fb8a-426d-b764-d3a7e899d15a",
-    "createdAt": "2026-04-24T12:01:26.085Z",
+    "sessionId": "5382d74c-afaf-41c4-8095-872346b3209b",
+    "createdAt": "2026-04-24T12:10:46.812Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add a non-executing hosted storage migration contract for the Pro Rust product core: define the Postgres/Redis/tenant/auth/worker-ownership migration plan in existing Rust crates, expose it through a keyless API endpoint, render a compact storage-boundary panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add database connections, Redis connections, migrations, provider credentials, live provider calls, auth, billing, real workers, OSS runtime changes, or package dependencies.",
+    "taskRequest": "Add a non-executing hosted provider adapter contract for the Pro Rust product core: define adapter request/result/degradation/quota/cooldown/partial-result semantics in the provider-routing crate, expose it through a keyless API endpoint, render a compact adapter contract panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, workers, database/Redis connections, OSS runtime changes, or package dependencies.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],

@@ -12,7 +12,8 @@ use retrocause_pro_domain::{
     provider_status_snapshot, sample_run,
 };
 use retrocause_pro_provider_routing::{
-    RoutingPreviewError, RoutingPreviewPlan, RoutingPreviewRequest, build_routing_preview,
+    ProviderAdapterContract, RoutingPreviewError, RoutingPreviewPlan, RoutingPreviewRequest,
+    build_routing_preview, provider_adapter_contract,
 };
 use retrocause_pro_queue::{
     ExecutionJob, ExecutionJobSummary, ExecutionLifecycleSpec, ExecutionQueue, ExecutionQueueError,
@@ -73,6 +74,7 @@ fn router() -> Router {
                 .post(provider_route_preview)
                 .options(cors_preflight),
         )
+        .route("/api/provider-adapter-contract", get(provider_adapter))
         .route(
             "/api/runs",
             get(list_runs).post(create_run).options(cors_preflight),
@@ -144,6 +146,10 @@ async fn provider_route_preview(
     build_routing_preview(request)
         .map(Json)
         .map_err(routing_preview_error)
+}
+
+async fn provider_adapter() -> Json<ProviderAdapterContract> {
+    Json(provider_adapter_contract())
 }
 
 async fn list_runs(State(state): State<AppState>) -> Json<Vec<RunSummary>> {
@@ -471,6 +477,30 @@ mod tests {
         assert_eq!(
             plan.selected_lane_id.as_deref(),
             Some("uploaded_evidence_lane")
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_adapter_contract_exposes_dry_non_executing_semantics() {
+        let payload = provider_adapter().await.0;
+
+        assert!(!payload.execution_allowed);
+        assert!(
+            payload
+                .request_fields
+                .iter()
+                .any(|field| field.id == "provider_lane_id")
+        );
+        assert!(
+            payload
+                .degradation_states
+                .iter()
+                .any(|state| state.id == "provider_rate_limited")
+        );
+        assert!(
+            payload
+                .partial_result_rules
+                .contains(&"preserve_successful_evidence_before_retry".to_string())
         );
     }
 

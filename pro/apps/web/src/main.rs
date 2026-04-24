@@ -148,6 +148,15 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     (render_provider_status(entry))
                                 }
                             }
+                            div id="provider-adapter-panel" class="adapter-panel" {
+                                article class="quota-meter quota-meter--empty" {
+                                    div {
+                                        strong { "Adapter contract planned" }
+                                        p { "Provider adapter semantics load from the Pro API; provider calls stay disabled." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "dry" }
+                                }
+                            }
                         }
 
                         aside class="execution-console" aria-label="Execution queue" {
@@ -621,6 +630,54 @@ fn client_script() -> &'static str {
     `).join("");
   }
 
+  function renderProviderAdapterContract(contract) {
+    const panel = byId("provider-adapter-panel");
+    if (!panel) return;
+    if (!contract) {
+      panel.innerHTML = `
+        <article class="quota-meter quota-meter--empty">
+          <div>
+            <strong>Adapter contract planned</strong>
+            <p>Provider adapter semantics load from the Pro API; provider calls stay disabled.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">dry</span>
+        </article>
+      `;
+      return;
+    }
+
+    const requestFields = (contract.request_fields || []).slice(0, 4).map((field) => `
+      <li>
+        <strong>${escapeHtml(field.id)}</strong>
+        <span>${escapeHtml(field.owner)}${field.required ? " / required" : " / optional"}</span>
+      </li>
+    `).join("");
+    const degradations = (contract.degradation_states || []).slice(0, 4).map((state) => `
+      <li>
+        <strong>${escapeHtml(state.id)}</strong>
+        <span>${escapeHtml(readable(state.status))} / ${escapeHtml(readable(state.retry_policy))}</span>
+      </li>
+    `).join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card adapter-card">
+        <div class="work-order-header">
+          <strong>Provider adapter contract</strong>
+          <span class="quota-state quota-state--deferred">${contract.execution_allowed ? "calls on" : "calls off"}</span>
+          <p>${escapeHtml(readable(contract.mode || "dry_contract_only"))}</p>
+        </div>
+        <section>
+          <p class="work-order-label">Request fields</p>
+          <ol class="work-order-list">${requestFields || "<li>No request fields returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Degradation states</p>
+          <ul class="work-order-list">${degradations || "<li>No degradation states returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   function renderExecutionJobs(jobs) {
     const list = byId("execution-job-list");
     if (!list) return;
@@ -906,6 +963,7 @@ fn client_script() -> &'static str {
 
   renderRun(seed);
   renderProviderStatus(providerSeed);
+  renderProviderAdapterContract(null);
   renderExecutionJobs([]);
   renderWorkOrder(null);
   renderExecutionLifecycle(null);
@@ -914,6 +972,11 @@ fn client_script() -> &'static str {
     .then(renderProviderStatus)
     .catch(() => {
       renderProviderStatus(providerSeed);
+    });
+  fetchJson("/api/provider-adapter-contract")
+    .then(renderProviderAdapterContract)
+    .catch(() => {
+      renderProviderAdapterContract(null);
     });
   fetchJson("/api/execution-lifecycle")
     .then(renderExecutionLifecycle)
@@ -1441,6 +1504,8 @@ p {
   right: 1rem;
   top: 19.2rem;
   width: min(380px, calc(100% - 2rem));
+  max-height: 14rem;
+  overflow: auto;
   padding: 0.9rem;
   display: grid;
   gap: 0.65rem;
@@ -1478,6 +1543,11 @@ p {
   gap: 0.65rem;
 }
 
+#provider-adapter-panel {
+  display: grid;
+  gap: 0.65rem;
+}
+
 #execution-job-list {
   display: grid;
   gap: 0.65rem;
@@ -1509,6 +1579,10 @@ p {
 
 .storage-card {
   background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.47 0.08 250));
+}
+
+.adapter-card {
+  background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.58 0.08 190));
 }
 
 .work-order-header {
@@ -1749,6 +1823,11 @@ p {
     max-height: none;
     overflow: visible;
   }
+
+  .quota-console {
+    max-height: none;
+    overflow: visible;
+  }
 }
 "#
 }
@@ -1795,7 +1874,9 @@ mod tests {
         assert!(page.contains("function focusReviewItem"));
         assert!(page.contains("run-create-form"));
         assert!(page.contains("provider-status-list"));
+        assert!(page.contains("provider-adapter-panel"));
         assert!(page.contains("/api/provider-status"));
+        assert!(page.contains("/api/provider-adapter-contract"));
         assert!(page.contains("execution-job-list"));
         assert!(page.contains("execution-work-order-detail"));
         assert!(page.contains("execution-lifecycle-panel"));
@@ -1808,6 +1889,7 @@ mod tests {
         assert!(page.contains("function renderWorkOrder"));
         assert!(page.contains("function renderExecutionLifecycle"));
         assert!(page.contains("function renderStoragePlan"));
+        assert!(page.contains("function renderProviderAdapterContract"));
         assert!(page.contains("queue-preview-button"));
         assert!(page.contains("fetch(`${apiBase}${path}`"));
         assert!(page.contains("POST"));

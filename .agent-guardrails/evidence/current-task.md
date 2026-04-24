@@ -1527,6 +1527,12 @@ This task adds a no-connection hosted storage migration contract for the Pro Rus
   - Checked added Pro/doc diff lines for `api_key`, `secret`, `OPENROUTER`, `TAVILY`, `BRAVE`, and `sk-`.
   - Result: no matching added lines.
 
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the project state was synchronized to mark the provider-adapter contract as implemented and move the next Pro focus to adapter dry-run/workspace-auth/status-event work.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET /api/provider-adapter-contract`; it does not change OSS APIs, accept credentials, or execute provider calls.
+
 ### Risk / Tradeoff Notes
 
 - Security: no auth, secrets, provider credential fields, database connections, Redis connections, billing hooks, real workers, or sensitive-data storage were added. The new contract explicitly keeps future route handlers away from provider execution and credential reads.
@@ -1540,3 +1546,81 @@ This task adds a no-connection hosted storage migration contract for the Pro Rus
 - The storage plan is a contract, not a live hosted data layer.
 - There is still no Postgres schema, Redis queue, tenant/auth enforcement, billing/quota ledger, credential vault integration, live provider adapter, retry scheduler, or persisted worker lease.
 - Future hosted Pro needs a dry-run adapter shape before any live provider execution is safe.
+
+## Pro Product Core Slice 15 - Provider Adapter Contract
+
+### Scope
+
+This task adds the first non-executing hosted provider adapter contract for the Pro Rust product core. The provider-routing crate now owns request/result/degradation/quota/partial-result semantics, the API exposes them through a keyless read endpoint, and the graph-first web shell renders a compact adapter contract panel. No provider credentials, live provider calls, auth, billing, real workers, database/Redis connections, OSS runtime changes, dependency changes, or package publishing were added.
+
+### Files Updated
+
+- `pro/crates/provider-routing/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `ProviderAdapterContract`, `ProviderAdapterContractMode`, `ProviderAdapterField`, and `ProviderAdapterDegradation`.
+- Added `provider_adapter_contract()` with dry request fields for workspace id, job id, provider lane id, source policy, and optional evidence context.
+- Added result fields for evidence items, usage ledger rows, degraded source states, and partial results.
+- Added degradation states for provider rate limits, timeouts, forbidden responses, source-limited responses, and empty results.
+- Added quota guards and partial-result rules that require explicit quota ownership, retry-after visibility, usage ledger rows, degraded-source surfacing, and evidence preservation before retry.
+- Added `GET /api/provider-adapter-contract`.
+- Added a Pro web adapter contract panel that renders request fields, degradation states, and calls-disabled state.
+- Updated Pro docs and project state so the next focus moves to adapter dry-run shape, workspace/auth boundary, and durable event/status vocabulary.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: task contract refreshed for hosted provider adapter contract.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `17 passed`.
+  - Domain tests: `8 passed`.
+  - Provider-routing tests: `5 passed`.
+  - Queue tests: `6 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API provider-adapter smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8810` with a temporary local run-store path.
+  - Called `GET /api/provider-adapter-contract`.
+  - Result: passed; `execution_allowed=false`, request field `provider_lane_id` exists, degradation `provider_rate_limited` exists, and partial-result rule `preserve_successful_evidence_before_retry` exists.
+
+- Pro browser provider-adapter smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8810` and `retrocause-pro-web.exe` on `127.0.0.1:3030`.
+  - Aborted external font requests in Playwright so inline scripts could run without network font blocking.
+  - Verified the adapter panel renders `Provider adapter contract`, `calls off`, `provider_lane_id`, and `provider_rate_limited`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Checked added Pro/doc diff lines for `api_key`, `secret`, `OPENROUTER`, `TAVILY`, `BRAVE`, and `sk-`.
+  - Result: no matching added lines.
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, provider credential fields, provider calls, billing hooks, real workers, database/Redis connections, or sensitive-data storage were added. The contract names future adapter inputs and outputs while preserving the disabled-call boundary.
+- Dependencies: no new crates, npm packages, lockfile changes, or version upgrades were introduced.
+- Performance: the provider-adapter endpoint returns a static, small JSON contract and the browser renders a small subset of fields/states. It has no provider, database, Redis, or queue load impact.
+- Understanding: the tradeoff is naming adapter semantics before implementing adapters. This keeps future provider work honest about quota ownership, cooldowns, degradation, usage ledgers, and partial results without pretending live execution exists.
+- Continuity: reused the provider-routing crate as the provider/source decision owner, Axum JSON route style, `fetchJson`, and quota-console card styling. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- The provider adapter contract is not a live adapter or dry-run executor yet.
+- There is still no workspace/auth boundary, credential vault integration, provider SDK, billing/quota ledger, durable status events, or live source/provider call path.
+- Future hosted Pro needs an adapter dry-run shape before any real provider execution is enabled.

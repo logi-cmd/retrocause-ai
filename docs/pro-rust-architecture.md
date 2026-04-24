@@ -106,6 +106,8 @@ Current behavior:
 
 This is intentionally not a provider executor. It does not read provider keys, call models/search APIs, enqueue jobs, bill usage, or store credentials. The value is the decision vocabulary: future executors can consume the same lane and decision semantics instead of inventing hidden routing behavior inside provider adapters.
 
+`crates/provider-routing` also carries a dry provider-adapter contract. It names the future adapter request fields, result fields, degradation states, quota guards, and partial-result rules before any provider implementation exists. The contract requires explicit quota ownership, retry-after cooldown visibility, degraded source states, usage ledger rows, and evidence preservation before retries.
+
 ## Queue boundary
 
 `crates/queue` is the first Pro execution-queue boundary. It currently provides an in-memory `ExecutionQueue` that turns a routing-preview request into a preview-only execution job.
@@ -134,6 +136,7 @@ Initial responsibility:
 - `GET /api/runs/{run_id}`
 - `GET /api/runs/{run_id}/graph`
 - `GET /api/provider-status`
+- `GET /api/provider-adapter-contract`
 - `GET /api/provider-route/preview`
 - `POST /api/provider-route/preview`
 - `GET /api/execution-jobs`
@@ -159,6 +162,7 @@ Initial responsibility:
 - create new in-memory runs through `POST /api/runs`
 - reload run summaries, run detail, and graph payloads from the Pro API
 - show provider/search quota ownership, credential policy, and cooldown status through the local provider-status payload
+- render the dry provider-adapter request/result/degradation contract from `GET /api/provider-adapter-contract`
 - create and list preview-only execution jobs through the local execution-job API
 - inspect queued job work orders through `GET /api/execution-jobs/{job_id}/work-order`, rendering route steps, routing warnings, selected lane, and execution safeguards while execution stays disabled
 - render the hosted-worker lifecycle/failure taxonomy from `GET /api/execution-lifecycle` so future execution states are visible before live adapters exist
@@ -301,3 +305,11 @@ The storage-boundary contract slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `GET /api/storage-plan` proving the plan keeps connections disabled while naming Postgres, Redis, tenant, and worker-ownership boundaries
 - a browser smoke that starts the Pro API and web shell and verifies that the storage-boundary panel renders target stores and connection-disabled state
+
+The provider-adapter contract slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `GET /api/provider-adapter-contract` proving the contract stays non-executing while naming request/result fields, quota guards, degradation states, and partial-result rules
+- a browser smoke that starts the Pro API and web shell and verifies that the adapter contract panel renders provider lane fields, rate-limit degradation, and calls-disabled state

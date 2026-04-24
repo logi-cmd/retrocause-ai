@@ -26,6 +26,39 @@ pub struct RoutingPreviewPlan {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub struct ProviderAdapterContract {
+    pub mode: ProviderAdapterContractMode,
+    pub execution_allowed: bool,
+    pub request_fields: Vec<ProviderAdapterField>,
+    pub result_fields: Vec<ProviderAdapterField>,
+    pub degradation_states: Vec<ProviderAdapterDegradation>,
+    pub quota_guards: Vec<String>,
+    pub partial_result_rules: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderAdapterContractMode {
+    DryContractOnly,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ProviderAdapterField {
+    pub id: &'static str,
+    pub owner: &'static str,
+    pub required: bool,
+    pub purpose: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ProviderAdapterDegradation {
+    pub id: &'static str,
+    pub status: &'static str,
+    pub retry_policy: &'static str,
+    pub preserves_partial_results: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct RoutingStep {
     pub lane_id: String,
     pub label: String,
@@ -88,6 +121,116 @@ pub fn build_routing_preview(
     request: RoutingPreviewRequest,
 ) -> Result<RoutingPreviewPlan, RoutingPreviewError> {
     build_routing_preview_from_status(request, provider_status_snapshot())
+}
+
+pub fn provider_adapter_contract() -> ProviderAdapterContract {
+    ProviderAdapterContract {
+        mode: ProviderAdapterContractMode::DryContractOnly,
+        execution_allowed: false,
+        request_fields: vec![
+            ProviderAdapterField {
+                id: "workspace_id",
+                owner: "api",
+                required: true,
+                purpose: "Tenant boundary used for quota, policy, storage, and audit scope.",
+            },
+            ProviderAdapterField {
+                id: "job_id",
+                owner: "queue",
+                required: true,
+                purpose: "Durable execution job identifier claimed by a worker lease.",
+            },
+            ProviderAdapterField {
+                id: "provider_lane_id",
+                owner: "provider_router",
+                required: true,
+                purpose: "Selected model/search/source lane with quota owner and credential policy.",
+            },
+            ProviderAdapterField {
+                id: "source_policy",
+                owner: "api",
+                required: true,
+                purpose: "Controls whether primary sources, balanced sources, or user evidence may be used.",
+            },
+            ProviderAdapterField {
+                id: "evidence_context",
+                owner: "worker_pool",
+                required: false,
+                purpose: "Optional uploaded or cached evidence that can support partial results.",
+            },
+        ],
+        result_fields: vec![
+            ProviderAdapterField {
+                id: "evidence_items",
+                owner: "provider_adapter",
+                required: true,
+                purpose: "Normalized evidence snippets with citation anchors and source status.",
+            },
+            ProviderAdapterField {
+                id: "usage_ledger_rows",
+                owner: "provider_adapter",
+                required: true,
+                purpose: "Quota owner, provider lane, billable units, and cooldown hints.",
+            },
+            ProviderAdapterField {
+                id: "degraded_source_states",
+                owner: "provider_adapter",
+                required: true,
+                purpose: "Machine-readable source/provider degradation state for reviewability.",
+            },
+            ProviderAdapterField {
+                id: "partial_result",
+                owner: "provider_adapter",
+                required: false,
+                purpose: "Inspectable evidence when at least one lane succeeds but another degrades.",
+            },
+        ],
+        degradation_states: vec![
+            ProviderAdapterDegradation {
+                id: "provider_rate_limited",
+                status: "retryable",
+                retry_policy: "retry_after_cooldown_or_failover",
+                preserves_partial_results: true,
+            },
+            ProviderAdapterDegradation {
+                id: "provider_timeout",
+                status: "retryable",
+                retry_policy: "retry_with_backoff",
+                preserves_partial_results: true,
+            },
+            ProviderAdapterDegradation {
+                id: "provider_forbidden",
+                status: "terminal_for_lane",
+                retry_policy: "switch_lane_or_fix_credentials",
+                preserves_partial_results: true,
+            },
+            ProviderAdapterDegradation {
+                id: "source_limited",
+                status: "reviewable_degraded",
+                retry_policy: "continue_with_visible_gap",
+                preserves_partial_results: true,
+            },
+            ProviderAdapterDegradation {
+                id: "provider_empty_result",
+                status: "reviewable_gap",
+                retry_policy: "try_alternate_query_or_lane",
+                preserves_partial_results: false,
+            },
+        ],
+        quota_guards: vec![
+            "quota_owner_must_be_explicit".to_string(),
+            "cooldown_must_emit_retry_after_seconds".to_string(),
+            "workspace_quota_must_not_use_managed_pool_silently".to_string(),
+            "user_owned_quota_must_be_labeled_byok_later".to_string(),
+            "adapter_results_must_emit_usage_ledger_rows".to_string(),
+        ],
+        partial_result_rules: vec![
+            "preserve_successful_evidence_before_retry".to_string(),
+            "surface_degraded_source_states_to_review_ui".to_string(),
+            "never_upgrade_partial_results_to_ready_without_evidence".to_string(),
+            "cite_provider_or_source_for_each_llm_claim".to_string(),
+        ],
+    }
 }
 
 pub fn build_routing_preview_from_status(
@@ -200,8 +343,8 @@ impl std::error::Error for RoutingPreviewError {}
 #[cfg(test)]
 mod tests {
     use super::{
-        RoutingDecision, RoutingPreviewError, RoutingPreviewRequest, RoutingScenario, SourcePolicy,
-        build_routing_preview,
+        ProviderAdapterContractMode, RoutingDecision, RoutingPreviewError, RoutingPreviewRequest,
+        RoutingScenario, SourcePolicy, build_routing_preview, provider_adapter_contract,
     };
 
     #[test]
@@ -273,5 +416,35 @@ mod tests {
 
         assert!(matches!(error, RoutingPreviewError::QueryRequired));
         assert_eq!(error.to_string(), "query_required");
+    }
+
+    #[test]
+    fn adapter_contract_keeps_provider_execution_disabled_and_reviewable() {
+        let contract = provider_adapter_contract();
+
+        assert_eq!(contract.mode, ProviderAdapterContractMode::DryContractOnly);
+        assert!(!contract.execution_allowed);
+        assert!(
+            contract
+                .request_fields
+                .iter()
+                .any(|field| field.id == "workspace_id" && field.required)
+        );
+        assert!(
+            contract
+                .degradation_states
+                .iter()
+                .any(|state| state.id == "provider_rate_limited" && state.preserves_partial_results)
+        );
+        assert!(
+            contract
+                .quota_guards
+                .contains(&"quota_owner_must_be_explicit".to_string())
+        );
+        assert!(
+            contract
+                .partial_result_rules
+                .contains(&"surface_degraded_source_states_to_review_ui".to_string())
+        );
     }
 }
