@@ -113,6 +113,7 @@ Current behavior:
 - input: the same workspace id, query, scenario, and source policy accepted by provider-routing preview
 - output: execution job payload with id, workspace id, query, preview-only status, selected lane, and the full route plan
 - worker contract: a non-executing work-order payload with route steps, routing warnings, selected lane, and explicit safeguards
+- lifecycle contract: a non-executing hosted-worker stage/failure taxonomy that names future queue, worker, provider, partial-result, and terminal states before adapters exist
 - storage: process-local memory only
 - execution: always disabled in this slice
 
@@ -137,6 +138,7 @@ Initial responsibility:
 - `POST /api/execution-jobs`
 - `GET /api/execution-jobs/{job_id}`
 - `GET /api/execution-jobs/{job_id}/work-order`
+- `GET /api/execution-lifecycle`
 - minimal local CORS headers for the separate Pro web port
 - local JSON run storage through `crates/run-store`, shared by list/detail/graph reads and surviving API restarts
 - local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
@@ -155,6 +157,7 @@ Initial responsibility:
 - show provider/search quota ownership, credential policy, and cooldown status through the local provider-status payload
 - create and list preview-only execution jobs through the local execution-job API
 - inspect queued job work orders through `GET /api/execution-jobs/{job_id}/work-order`, rendering route steps, routing warnings, selected lane, and execution safeguards while execution stays disabled
+- render the hosted-worker lifecycle/failure taxonomy from `GET /api/execution-lifecycle` so future execution states are visible before live adapters exist
 - keep a browser-local selected-node state and graph inspector for evidence/challenge links, including focused evidence/challenge review items
 - establish layout, palette, and information hierarchy for the knowledge-graph experience
 
@@ -277,3 +280,11 @@ The route-step visibility web slice adds:
 - `cargo test --manifest-path pro/Cargo.toml`
 - `cargo build --manifest-path pro/Cargo.toml`
 - a browser smoke that starts the Pro API and web shell, clicks `Queue preview job`, and verifies that the work-order detail panel shows route steps, the selected uploaded-evidence lane, and explicit disabled-execution safeguards
+
+The worker-lifecycle contract slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `GET /api/execution-lifecycle` proving the contract stays non-executing, includes worker/provider failure states, and keeps credential access behind future vault-owned workers
+- a browser smoke that starts the Pro API and web shell and verifies that the lifecycle panel renders hosted worker stages and failure states without enabling execution

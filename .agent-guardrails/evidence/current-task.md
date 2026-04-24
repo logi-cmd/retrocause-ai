@@ -1372,3 +1372,86 @@ This task makes queued preview jobs inspectable in the graph-first Pro web shell
 - Work-order inspection is browser-local UI over an in-memory preview queue; jobs disappear when the API process restarts.
 - There is still no worker lifecycle, retry/failure state machine, auth/tenant enforcement, billing, credential vault, or live provider adapter.
 - Future hosted Pro needs durable queue/storage design before this preview UI can become an operational console.
+
+## Pro Product Core Slice 13 - Hosted Worker Lifecycle Contract
+
+### Scope
+
+This task adds the first non-executing hosted worker lifecycle/failure-state contract for the Pro Rust product core. The queue crate now owns the lifecycle vocabulary, the API exposes it through a keyless read endpoint, and the graph-first web shell renders a compact lifecycle/failure panel. No provider credentials, live provider calls, auth, billing, real worker process, queue persistence, OSS runtime changes, dependency changes, or package publishing were added.
+
+### Files Updated
+
+- `pro/crates/queue/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `ExecutionLifecycleSpec`, `ExecutionLifecycleStage`, `ExecutionFailureState`, and `ExecutionLifecycleMode`.
+- Added `execution_lifecycle_spec()` with planned hosted-worker stages: accepted, routed, waiting for quota, waiting for worker, executing provider calls, normalizing evidence, synthesizing graph, awaiting review, and completed.
+- Added planned failure states such as `credential_unavailable`, `provider_rate_limited`, `provider_timeout`, `partial_results_only`, `worker_interrupted`, and `cancelled`.
+- Added transition guards that keep future credentials behind vault-owned workers and keep route handlers away from raw provider secrets.
+- Added `GET /api/execution-lifecycle`.
+- Added a Pro web lifecycle panel that renders visible worker stages and failure states while showing execution off.
+- Updated Pro docs and project state so the next focus moves to hosted storage migration and adapter dry-run design.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: task contract refreshed for hosted worker lifecycle/failure-state contract.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `15 passed`.
+  - Domain tests: `8 passed`.
+  - Provider-routing tests: `4 passed`.
+  - Queue tests: `6 passed`.
+  - Run-store tests: `3 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API lifecycle smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8806` with a temporary local run-store path.
+  - Called `GET /api/execution-lifecycle`.
+  - Result: passed; `execution_allowed=false`, stage `waiting_for_worker` exists, failure `credential_unavailable` exists, and guard `worker_reads_credentials_from_vault_only` exists.
+
+- Pro browser lifecycle smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8806` and `retrocause-pro-web.exe` on `127.0.0.1:3026`.
+  - Initial browser attempt showed Playwright navigation blocked by external Google Fonts loading before inline script execution; this was a smoke-harness issue, not a product endpoint failure.
+  - Final browser smoke aborted external font requests, loaded the web shell, and verified the lifecycle panel renders `Hosted worker lifecycle`, `execution off`, `Executing provider calls`, and `Credential unavailable`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Checked added Pro/doc diff lines for `api_key`, `secret`, `OPENROUTER`, `TAVILY`, `BRAVE`, and `sk-`.
+  - Result: matched only intentional lifecycle guard/test strings about not exposing provider secrets; no actual secret values or API keys were added.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the project state was synchronized to mark the worker-lifecycle contract as implemented and move the next Pro focus to store migration and adapter dry-run design.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET /api/execution-lifecycle`; it does not change OSS APIs, accept credentials, or execute provider calls.
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, provider credential fields, provider calls, billing hooks, real workers, or sensitive-data storage were added. The new strings explicitly document the future rule that routes must not receive raw provider secrets and workers must read credentials from a vault boundary.
+- Dependencies: no new crates, npm packages, lockfile changes, or version upgrades were introduced.
+- Performance: the lifecycle endpoint returns a static, small JSON contract and the browser renders only a small subset of visible stages/failures. It has no queue or provider load impact.
+- Understanding: the tradeoff is naming the hosted worker lifecycle before implementing workers. This reduces future ambiguity around retries, partial results, credentials, and terminal states without pretending live execution exists.
+- Continuity: reused the existing queue crate as the execution-boundary owner, Axum JSON route style, `fetchJson`, and the execution-console card styling. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- The lifecycle contract is a planned taxonomy, not an executable worker state machine.
+- There is still no durable queue, tenant/auth enforcement, billing/quota ledger, credential vault integration, live provider adapter, retry scheduler, or persisted worker lease.
+- Future hosted Pro still needs the local JSON/in-memory queue boundary migrated to Postgres plus Redis before live provider execution is safe.

@@ -15,7 +15,8 @@ use retrocause_pro_provider_routing::{
     RoutingPreviewError, RoutingPreviewPlan, RoutingPreviewRequest, build_routing_preview,
 };
 use retrocause_pro_queue::{
-    ExecutionJob, ExecutionJobSummary, ExecutionQueue, ExecutionQueueError, ExecutionWorkOrder,
+    ExecutionJob, ExecutionJobSummary, ExecutionLifecycleSpec, ExecutionQueue, ExecutionQueueError,
+    ExecutionWorkOrder, execution_lifecycle_spec,
 };
 use retrocause_pro_run_store::{FileRunStore, RunStoreError};
 use serde::Serialize;
@@ -87,6 +88,7 @@ fn router() -> Router {
             "/api/execution-jobs/{job_id}/work-order",
             get(get_execution_work_order),
         )
+        .route("/api/execution-lifecycle", get(execution_lifecycle))
         .layer(middleware::from_fn(add_cors_headers))
         .with_state(AppState::open_default().expect("open pro run store"))
 }
@@ -221,6 +223,10 @@ async fn get_execution_work_order(
         .get_work_order(&job_id)
         .map(Json)
         .ok_or_else(|| job_not_found(job_id))
+}
+
+async fn execution_lifecycle() -> Json<ExecutionLifecycleSpec> {
+    Json(execution_lifecycle_spec())
 }
 
 fn bad_request(error: String) -> ApiError {
@@ -385,6 +391,30 @@ mod tests {
             let combined = format!("{} {} {}", entry.id, entry.label, entry.note).to_lowercase();
             !combined.contains("api_key") && !combined.contains("secret")
         }));
+    }
+
+    #[tokio::test]
+    async fn execution_lifecycle_exposes_non_executing_worker_contract() {
+        let payload = execution_lifecycle().await.0;
+
+        assert!(!payload.execution_allowed);
+        assert!(
+            payload
+                .stages
+                .iter()
+                .any(|stage| stage.id == "executing_provider_calls")
+        );
+        assert!(
+            payload
+                .failure_states
+                .iter()
+                .any(|failure| failure.id == "credential_unavailable")
+        );
+        assert!(
+            payload
+                .transition_guards
+                .contains(&"worker_reads_credentials_from_vault_only".to_string())
+        );
     }
 
     #[tokio::test]

@@ -56,6 +56,36 @@ pub struct ExecutionWorkOrder {
     pub safeguards: Vec<String>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct ExecutionLifecycleSpec {
+    pub mode: ExecutionLifecycleMode,
+    pub execution_allowed: bool,
+    pub stages: Vec<ExecutionLifecycleStage>,
+    pub failure_states: Vec<ExecutionFailureState>,
+    pub transition_guards: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ExecutionLifecycleStage {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub phase: &'static str,
+    pub purpose: &'static str,
+    pub enters_when: &'static str,
+    pub exits_when: &'static str,
+    pub visible_to_user: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ExecutionFailureState {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub retry_policy: &'static str,
+    pub user_message: &'static str,
+    pub terminal: bool,
+    pub preserves_partial_results: bool,
+}
+
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionJobStatus {
@@ -68,10 +98,195 @@ pub enum ExecutionWorkOrderMode {
     PreviewOnly,
 }
 
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionLifecycleMode {
+    HostedWorkerPlanned,
+}
+
 #[derive(Debug)]
 pub enum ExecutionQueueError {
     RoutingPreview(RoutingPreviewError),
     LockPoisoned,
+}
+
+pub fn execution_lifecycle_spec() -> ExecutionLifecycleSpec {
+    ExecutionLifecycleSpec {
+        mode: ExecutionLifecycleMode::HostedWorkerPlanned,
+        execution_allowed: false,
+        stages: vec![
+            ExecutionLifecycleStage {
+                id: "accepted",
+                label: "Accepted",
+                phase: "intake",
+                purpose: "Persist the requested run and assign a durable job id.",
+                enters_when: "A user or schedule submits a run request.",
+                exits_when: "The request validates and can be routed.",
+                visible_to_user: true,
+            },
+            ExecutionLifecycleStage {
+                id: "routed",
+                label: "Routed",
+                phase: "routing",
+                purpose: "Choose provider/source lanes from quota, policy, and source availability.",
+                enters_when: "A valid job has workspace, scenario, and source policy context.",
+                exits_when: "At least one lane is selected or a no-runnable-lane failure is recorded.",
+                visible_to_user: true,
+            },
+            ExecutionLifecycleStage {
+                id: "waiting_for_quota",
+                label: "Waiting for quota",
+                phase: "queueing",
+                purpose: "Hold the job until managed, workspace, or user-owned quota is available.",
+                enters_when: "A selected lane is cooling down or rate-limited.",
+                exits_when: "Cooldown expires, an alternate lane is selected, or the job is cancelled.",
+                visible_to_user: true,
+            },
+            ExecutionLifecycleStage {
+                id: "waiting_for_worker",
+                label: "Waiting for worker",
+                phase: "queueing",
+                purpose: "Make the work order claimable by a hosted worker without exposing secrets to routes.",
+                enters_when: "Routing is complete and execution is allowed by policy.",
+                exits_when: "A worker claims the job and records a lease.",
+                visible_to_user: true,
+            },
+            ExecutionLifecycleStage {
+                id: "executing_provider_calls",
+                label: "Executing provider calls",
+                phase: "execution",
+                purpose: "Call model/search providers through adapter-owned credentials and budgets.",
+                enters_when: "A worker holds a valid lease and provider lane.",
+                exits_when: "Provider calls return, timeout, or fail with a classified provider state.",
+                visible_to_user: true,
+            },
+            ExecutionLifecycleStage {
+                id: "normalizing_evidence",
+                label: "Normalizing evidence",
+                phase: "assembly",
+                purpose: "Deduplicate source results, preserve citations, and classify degraded source states.",
+                enters_when: "Provider/search adapters return raw evidence candidates.",
+                exits_when: "Evidence anchors are ready for graph synthesis or partial-result reporting.",
+                visible_to_user: false,
+            },
+            ExecutionLifecycleStage {
+                id: "synthesizing_graph",
+                label: "Synthesizing graph",
+                phase: "assembly",
+                purpose: "Build causal nodes, edges, challenge checks, uncertainty, and reviewable brief output.",
+                enters_when: "Evidence candidates are normalized and anchored.",
+                exits_when: "A graph payload and report payload are ready for review.",
+                visible_to_user: true,
+            },
+            ExecutionLifecycleStage {
+                id: "awaiting_review",
+                label: "Awaiting review",
+                phase: "review",
+                purpose: "Expose the result, gaps, degraded sources, and challenge checks before trust.",
+                enters_when: "A synthesized graph is stored.",
+                exits_when: "The user marks the run reviewed, exports it, or starts a follow-up run.",
+                visible_to_user: true,
+            },
+            ExecutionLifecycleStage {
+                id: "completed",
+                label: "Completed",
+                phase: "terminal",
+                purpose: "Mark the run as done while keeping evidence, usage, and audit metadata inspectable.",
+                enters_when: "A reviewable result is available and no retry is pending.",
+                exits_when: "Terminal state; later changes create a new run or revision.",
+                visible_to_user: true,
+            },
+        ],
+        failure_states: vec![
+            ExecutionFailureState {
+                id: "validation_rejected",
+                label: "Validation rejected",
+                retry_policy: "fix_input",
+                user_message: "The request is missing required fields or violates workspace policy.",
+                terminal: true,
+                preserves_partial_results: false,
+            },
+            ExecutionFailureState {
+                id: "no_runnable_lane",
+                label: "No runnable lane",
+                retry_policy: "change_source_policy_or_add_evidence",
+                user_message: "No provider, search, or uploaded-evidence lane can run under the current policy.",
+                terminal: true,
+                preserves_partial_results: false,
+            },
+            ExecutionFailureState {
+                id: "quota_limited",
+                label: "Quota limited",
+                retry_policy: "retry_after_cooldown",
+                user_message: "The selected lane is cooling down or out of workspace quota.",
+                terminal: false,
+                preserves_partial_results: true,
+            },
+            ExecutionFailureState {
+                id: "credential_unavailable",
+                label: "Credential unavailable",
+                retry_policy: "configure_workspace_or_user_key",
+                user_message: "The selected lane needs credentials that are not available to the worker.",
+                terminal: true,
+                preserves_partial_results: true,
+            },
+            ExecutionFailureState {
+                id: "provider_rate_limited",
+                label: "Provider rate limited",
+                retry_policy: "retry_with_backoff_or_alt_lane",
+                user_message: "The provider rejected the call because the lane exceeded its rate limit.",
+                terminal: false,
+                preserves_partial_results: true,
+            },
+            ExecutionFailureState {
+                id: "provider_timeout",
+                label: "Provider timeout",
+                retry_policy: "retry_with_backoff",
+                user_message: "The provider did not respond before the worker timeout.",
+                terminal: false,
+                preserves_partial_results: true,
+            },
+            ExecutionFailureState {
+                id: "provider_error",
+                label: "Provider error",
+                retry_policy: "retry_or_failover",
+                user_message: "The provider returned an error that must be classified before retry.",
+                terminal: false,
+                preserves_partial_results: true,
+            },
+            ExecutionFailureState {
+                id: "partial_results_only",
+                label: "Partial results only",
+                retry_policy: "allow_review_or_continue",
+                user_message: "Enough evidence exists to inspect, but at least one selected lane degraded.",
+                terminal: false,
+                preserves_partial_results: true,
+            },
+            ExecutionFailureState {
+                id: "worker_interrupted",
+                label: "Worker interrupted",
+                retry_policy: "requeue_after_lease_expiry",
+                user_message: "A worker lost its lease before completing the job.",
+                terminal: false,
+                preserves_partial_results: true,
+            },
+            ExecutionFailureState {
+                id: "cancelled",
+                label: "Cancelled",
+                retry_policy: "start_new_run",
+                user_message: "The run was cancelled before completion.",
+                terminal: true,
+                preserves_partial_results: true,
+            },
+        ],
+        transition_guards: vec![
+            "worker_requires_tenant_auth".to_string(),
+            "worker_reads_credentials_from_vault_only".to_string(),
+            "provider_execution_requires_billable_quota".to_string(),
+            "partial_results_preserve_source_status".to_string(),
+            "routes_never_receive_raw_provider_secrets".to_string(),
+        ],
+    }
 }
 
 impl ExecutionQueue {
@@ -188,7 +403,10 @@ impl std::error::Error for ExecutionQueueError {}
 
 #[cfg(test)]
 mod tests {
-    use super::{ExecutionJobStatus, ExecutionQueue, ExecutionQueueError, ExecutionWorkOrderMode};
+    use super::{
+        ExecutionJobStatus, ExecutionLifecycleMode, ExecutionQueue, ExecutionQueueError,
+        ExecutionWorkOrderMode, execution_lifecycle_spec,
+    };
     use retrocause_pro_provider_routing::{RoutingPreviewRequest, RoutingScenario, SourcePolicy};
 
     #[test]
@@ -271,6 +489,28 @@ mod tests {
             work_order
                 .safeguards
                 .contains(&"credential_access_forbidden".to_string())
+        );
+    }
+
+    #[test]
+    fn lifecycle_spec_keeps_hosted_worker_contract_non_executing() {
+        let spec = execution_lifecycle_spec();
+
+        assert_eq!(spec.mode, ExecutionLifecycleMode::HostedWorkerPlanned);
+        assert!(!spec.execution_allowed);
+        assert!(
+            spec.stages
+                .iter()
+                .any(|stage| stage.id == "waiting_for_worker")
+        );
+        assert!(
+            spec.failure_states
+                .iter()
+                .any(|failure| failure.id == "provider_rate_limited" && !failure.terminal)
+        );
+        assert!(
+            spec.transition_guards
+                .contains(&"routes_never_receive_raw_provider_secrets".to_string())
         );
     }
 

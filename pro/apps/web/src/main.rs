@@ -175,6 +175,15 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "preview" }
                                 }
                             }
+                            div id="execution-lifecycle-panel" class="lifecycle-panel" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "Worker lifecycle planned" }
+                                        p { "Lifecycle states load from the Pro API; execution remains disabled." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "planned" }
+                                }
+                            }
                         }
 
                         aside class="evidence-dock" aria-label="Evidence anchors" {
@@ -690,6 +699,56 @@ fn client_script() -> &'static str {
     setText("execution-queue-status", `Loaded ${jobId} route steps; execution remains disabled.`);
   }
 
+  function renderExecutionLifecycle(spec) {
+    const panel = byId("execution-lifecycle-panel");
+    if (!panel) return;
+    if (!spec) {
+      panel.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>Worker lifecycle planned</strong>
+            <p>Lifecycle states load from the Pro API; execution remains disabled.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">planned</span>
+        </article>
+      `;
+      return;
+    }
+
+    const visibleStages = (spec.stages || []).filter((stage) => stage.visible_to_user).slice(0, 5);
+    const stageItems = visibleStages.map((stage) => `
+      <li>
+        <strong>${escapeHtml(stage.label)}</strong>
+        <span>${escapeHtml(readable(stage.phase))}</span>
+        <small>${escapeHtml(stage.purpose)}</small>
+      </li>
+    `).join("");
+    const failureItems = (spec.failure_states || []).slice(0, 4).map((failure) => `
+      <li>
+        <strong>${escapeHtml(failure.label)}</strong>
+        <span>${escapeHtml(readable(failure.retry_policy))}${failure.terminal ? " / terminal" : " / retryable"}</span>
+      </li>
+    `).join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card lifecycle-card">
+        <div class="work-order-header">
+          <strong>Hosted worker lifecycle</strong>
+          <span class="quota-state quota-state--deferred">${spec.execution_allowed ? "execution on" : "execution off"}</span>
+          <p>${escapeHtml(readable(spec.mode || "hosted_worker_planned"))}</p>
+        </div>
+        <section>
+          <p class="work-order-label">Visible stages</p>
+          <ol class="work-order-list">${stageItems || "<li>No visible stages returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Failure states</p>
+          <ul class="work-order-list">${failureItems || "<li>No failure states returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   async function refreshExecutionJobs() {
     const jobs = await fetchJson("/api/execution-jobs");
     renderExecutionJobs(jobs);
@@ -790,10 +849,16 @@ fn client_script() -> &'static str {
   renderProviderStatus(providerSeed);
   renderExecutionJobs([]);
   renderWorkOrder(null);
+  renderExecutionLifecycle(null);
   fetchJson("/api/provider-status")
     .then(renderProviderStatus)
     .catch(() => {
       renderProviderStatus(providerSeed);
+    });
+  fetchJson("/api/execution-lifecycle")
+    .then(renderExecutionLifecycle)
+    .catch(() => {
+      renderExecutionLifecycle(null);
     });
   refreshExecutionJobs().catch(() => {
     setText("execution-queue-status", `Queue API offline: start retrocause-pro-api at ${apiBase}`);
@@ -1353,7 +1418,8 @@ p {
   gap: 0.65rem;
 }
 
-#execution-work-order-detail {
+#execution-work-order-detail,
+#execution-lifecycle-panel {
   display: grid;
   gap: 0.65rem;
 }
@@ -1369,6 +1435,10 @@ p {
   padding: 0.72rem;
   border-radius: 8px;
   background: color-mix(in oklch, var(--panel-hard) 72%, black);
+}
+
+.lifecycle-card {
+  background: color-mix(in oklch, var(--panel-hard) 68%, var(--accent));
 }
 
 .work-order-header {
@@ -1658,10 +1728,13 @@ mod tests {
         assert!(page.contains("/api/provider-status"));
         assert!(page.contains("execution-job-list"));
         assert!(page.contains("execution-work-order-detail"));
+        assert!(page.contains("execution-lifecycle-panel"));
         assert!(page.contains("/api/execution-jobs"));
         assert!(page.contains("/work-order"));
+        assert!(page.contains("/api/execution-lifecycle"));
         assert!(page.contains("data-work-order-job-id"));
         assert!(page.contains("function renderWorkOrder"));
+        assert!(page.contains("function renderExecutionLifecycle"));
         assert!(page.contains("queue-preview-button"));
         assert!(page.contains("fetch(`${apiBase}${path}`"));
         assert!(page.contains("POST"));
