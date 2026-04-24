@@ -1274,6 +1274,11 @@ This task defines the first worker/executor contract behind preview-only queue j
 
 - `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
   - Result: passed with no blocking errors.
+  - Score: `95/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the project state was synchronized to mark route-step visibility as implemented and move the next Pro focus to hosted worker lifecycle/store/adapter planning.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
   - Score: `90/100 (safe-to-deploy)`.
   - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. The state doc was intentionally synchronized to mark the non-executing work-order contract as implemented and move the next-step focus to route-step visibility and hosted worker lifecycle planning.
   - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET /api/execution-jobs/{job_id}/work-order`; it does not change OSS APIs or execute provider calls.
@@ -1291,3 +1296,79 @@ This task defines the first worker/executor contract behind preview-only queue j
 - Work orders are read-only preview payloads; there is still no worker process or execution lifecycle.
 - Work orders disappear with the process-local queue.
 - Future hosted Pro still needs tenant/auth checks, durable job storage, quota enforcement, credential vault integration, cooldown persistence, worker retries, and live provider adapters.
+
+## Pro Product Core Slice 12 - Route-Step Visibility In Web Queue
+
+### Scope
+
+This task makes queued preview jobs inspectable in the graph-first Pro web shell. The web app now fetches the existing non-executing work-order endpoint and renders the selected lane, route steps, routing warnings, and safeguards. No provider credentials, provider calls, auth, billing, worker process, queue persistence, backend API changes, or OSS runtime changes were added.
+
+### Files Updated
+
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added an execution work-order detail area to the Pro web shell's execution queue panel.
+- Added an `Inspect route` action for queued preview jobs.
+- `Queue preview job` now refreshes the job list and auto-loads the created job's work order.
+- The work-order detail view renders:
+  - job id, mode, query, and selected lane
+  - route step decision/readiness/quota owner/action/reason
+  - routing warnings
+  - safeguards such as `provider_execution_disabled` and `credential_access_forbidden`
+- Kept the desktop execution panel internally scrollable so route details do not cover the evidence dock.
+- Updated Pro docs and project state so the next focus moves to hosted worker lifecycle, durable store migration, and provider adapter contract planning.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: task contract refreshed for route-step web visibility.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `14 passed`.
+  - Domain tests: `8 passed`.
+  - Provider-routing tests: `4 passed`.
+  - Queue tests: `5 passed`.
+  - Run-store tests: `3 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro browser route-detail smoke
+  - First attempt used the wrong API health URL (`/api/health`); corrected to the actual Pro API health endpoint `/healthz`.
+  - Second attempt proved the page rendered the work order, then failed because the smoke expected `Route steps` while CSS uppercased the visible label to `ROUTE STEPS`.
+  - Final result: passed.
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8804` and `retrocause-pro-web.exe` on `127.0.0.1:3025` with a temporary local run-store path.
+  - Clicked `#queue-preview-button`.
+  - Verified the detail panel loaded `job_local_000000`, `uploaded_evidence_lane`, route steps, `provider_execution_disabled`, and `credential_access_forbidden`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Checked added Pro/doc diff lines for `api_key`, `secret`, `OPENROUTER`, `TAVILY`, `BRAVE`, and `sk-`.
+  - Result: no matching added lines.
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, credential fields, provider calls, billing hooks, worker execution, or sensitive-data storage were added. The UI exposes safeguards from the existing work-order payload so the no-execution boundary is visible.
+- Dependencies: no new crates, npm packages, lockfile changes, or version upgrades were introduced.
+- Performance: each manual/auto inspection fetches one small work-order JSON payload and renders a short route list. This is fine for preview-alpha state; hosted Pro should paginate or virtualize only if route plans become large.
+- Understanding: the tradeoff is making the worker contract visible before any worker exists. This improves reviewability while preserving the hard disabled-execution boundary.
+- Continuity: reused the existing queue panel, `fetchJson` helper, work-order endpoint, and source/queue card styling. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- Work-order inspection is browser-local UI over an in-memory preview queue; jobs disappear when the API process restarts.
+- There is still no worker lifecycle, retry/failure state machine, auth/tenant enforcement, billing, credential vault, or live provider adapter.
+- Future hosted Pro needs durable queue/storage design before this preview UI can become an operational console.

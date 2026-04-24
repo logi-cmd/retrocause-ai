@@ -154,6 +154,7 @@ Initial responsibility:
 - reload run summaries, run detail, and graph payloads from the Pro API
 - show provider/search quota ownership, credential policy, and cooldown status through the local provider-status payload
 - create and list preview-only execution jobs through the local execution-job API
+- inspect queued job work orders through `GET /api/execution-jobs/{job_id}/work-order`, rendering route steps, routing warnings, selected lane, and execution safeguards while execution stays disabled
 - keep a browser-local selected-node state and graph inspector for evidence/challenge links, including focused evidence/challenge review items
 - establish layout, palette, and information hierarchy for the knowledge-graph experience
 
@@ -269,3 +270,10 @@ The executor-contract slice adds:
 - `cargo test --manifest-path pro/Cargo.toml`
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `GET /api/execution-jobs/{job_id}/work-order` proving the work order remains preview-only, includes route steps, and carries explicit safeguards
+
+The route-step visibility web slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- a browser smoke that starts the Pro API and web shell, clicks `Queue preview job`, and verifies that the work-order detail panel shows route steps, the selected uploaded-evidence lane, and explicit disabled-execution safeguards

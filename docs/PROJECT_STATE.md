@@ -41,7 +41,7 @@ What is not done:
 
 Maintain the stable-deliverable local OSS alpha conservatively and build Pro in the separate Rust workspace. The stabilization pass addressed the first mobile/source-trace regressions locally, started backend route-module extraction, made the homepage evidence board the canonical graph/card path while keeping older canvas components as legacy secondary surfaces, added a homepage Chinese A-share intraday sample that fills `芯原股份今天盘中为什么下跌？` while selecting the Market scenario, removed active key entry/preflight flows from the OSS browser/API surface, deprecated OpenRouter from active support, and cleaned the root README back into readable bilingual OSS onboarding. The active Pro branch now starts from a graph-first Rust foundation with a richer shared run payload and API endpoints for run list/detail/graph inspection.
 
-Current UX focus: Pro should keep the knowledge graph as the primary workspace. The first Rust web shell is server-rendered and graph-first; it can now create runs through the Rust API, reload run detail/graph payloads, update the graph workspace from API state, show keyless provider/search quota ownership plus cooldown semantics, let operators select graph nodes into a browser-local inspector, focus evidence/challenge items from inspector links, keep created runs across API restarts through a local JSON run-store boundary, preview provider/source routing plans without executing providers, create local preview-only execution jobs behind that routing plan, expose non-executing worker work orders for those jobs, and render queue jobs in the graph workspace. Future work should add real provider/search execution and deeper graph review without inheriting the OSS page layout.
+Current UX focus: Pro should keep the knowledge graph as the primary workspace. The first Rust web shell is server-rendered and graph-first; it can now create runs through the Rust API, reload run detail/graph payloads, update the graph workspace from API state, show keyless provider/search quota ownership plus cooldown semantics, let operators select graph nodes into a browser-local inspector, focus evidence/challenge items from inspector links, keep created runs across API restarts through a local JSON run-store boundary, preview provider/source routing plans without executing providers, create local preview-only execution jobs behind that routing plan, expose non-executing worker work orders for those jobs, and render queue jobs plus route-step/work-order details in the graph workspace. Future work should add real provider/search execution and deeper graph review without inheriting the OSS page layout.
 
 Current source status: the active OSS browser/API surface is keyless. It returns local/demo analysis payloads, saved-run metadata, uploaded evidence, source-trace structures, and reviewability signals without asking users for model or search credentials. Earlier hosted-source and provider-preflight experiments remain historical context only; OpenRouter is deprecated and is not part of the supported OSS provider surface. The repeatable probe in `scripts/live_stability_probe.py` now exercises the keyless local OSS scenarios instead of requiring provider credentials.
 
@@ -143,6 +143,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 - Added the next Pro web-shell slice: the graph-first Rust web app can now create preview-only queue jobs from the current run question, list queue jobs from the Pro API, and show selected lane plus execution-disabled state.
 - Added the next Pro graph-review slice: inspector evidence/challenge links now focus the corresponding evidence-dock or challenge-strip item in the browser-local graph workspace.
 - Added the next Pro executor-contract slice: preview-only queue jobs now expose a non-executing `work-order` payload with route steps, routing warnings, selected lane, and explicit safeguards for disabled provider execution, credential access, billing, and workers.
+- Added the next Pro route-visibility slice: the graph-first web shell now fetches queued job work orders, auto-opens the route details after queueing a preview job, and renders route steps, routing warnings, selected lane, and safeguards without enabling provider execution.
 
 ## Known Gaps
 
@@ -159,7 +160,7 @@ Current planning status: the Production Brief Harness implementation plan is sav
 
 Continue Pro implementation on `codex/pro-rust-product-core`:
 
-1. add route-step detail visibility for queued preview jobs before any provider execution
-2. sketch the hosted worker lifecycle and failure states before implementing live provider adapters
-3. plan the hosted store migration path from local JSON/in-memory queue state to Postgres plus Redis, tenant/auth boundaries, and worker ownership
+1. sketch the hosted worker lifecycle and failure states before implementing live provider adapters
+2. plan the hosted store migration path from local JSON/in-memory queue state to Postgres plus Redis, tenant/auth boundaries, and worker ownership
+3. design the first hosted source/provider adapter contract around tenant quota ownership, cooldowns, and partial-result reporting
 4. keep the keyless OSS browser/API path stable and avoid changing OSS runtime unless a task explicitly asks for it

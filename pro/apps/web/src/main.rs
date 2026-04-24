@@ -166,6 +166,15 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "idle" }
                                 }
                             }
+                            div id="execution-work-order-detail" class="work-order-detail" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "No work order selected" }
+                                        p { "Inspect a queued job to see route steps and execution safeguards." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "preview" }
+                                }
+                            }
                         }
 
                         aside class="evidence-dock" aria-label="Evidence anchors" {
@@ -607,6 +616,7 @@ fn client_script() -> &'static str {
           <span class="quota-state quota-state--deferred">idle</span>
         </article>
       `;
+      renderWorkOrder(null);
       return;
     }
     list.innerHTML = jobs.slice(0, 4).map((job) => `
@@ -615,10 +625,69 @@ fn client_script() -> &'static str {
           <strong>${escapeHtml(job.id)}</strong>
           <p>${escapeHtml(job.query)}</p>
           <small>${escapeHtml(readable(job.status))} / ${escapeHtml(job.selected_lane_id || "no selected lane")}</small>
+          <button class="queue-action" type="button" data-work-order-job-id="${escapeHtml(job.id)}">Inspect route</button>
         </div>
         <span class="quota-state quota-state--${job.execution_allowed ? "ready" : "deferred"}">${job.execution_allowed ? "execution on" : "execution off"}</span>
       </article>
     `).join("");
+  }
+
+  function renderWorkOrder(order) {
+    const detail = byId("execution-work-order-detail");
+    if (!detail) return;
+    if (!order) {
+      detail.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>No work order selected</strong>
+            <p>Inspect a queued job to see route steps and execution safeguards.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">preview</span>
+        </article>
+      `;
+      return;
+    }
+
+    const routeSteps = (order.route_steps || []).map((step) => `
+      <li>
+        <strong>${escapeHtml(step.label || step.lane_id || "route lane")}</strong>
+        <span>${escapeHtml(readable(step.decision || "unknown"))} / ${escapeHtml(readable(step.readiness || "unknown"))} / ${escapeHtml(readable(step.quota_owner || "unknown"))}</span>
+        <small>${escapeHtml(readable(step.action || "no action"))}${step.retry_after_seconds ? ` after ${escapeHtml(step.retry_after_seconds)}s` : ""}: ${escapeHtml(step.reason || "No route note provided.")}</small>
+      </li>
+    `).join("");
+    const warnings = (order.routing_warnings || []).map((warning) => `<li>${escapeHtml(warning)}</li>`).join("");
+    const safeguards = (order.safeguards || []).map((guard) => `<li>${escapeHtml(guard)}</li>`).join("");
+
+    detail.innerHTML = `
+      <article class="work-order-card">
+        <div class="work-order-header">
+          <strong>${escapeHtml(order.job_id)}</strong>
+          <span class="quota-state quota-state--deferred">${escapeHtml(readable(order.mode || "preview_only"))}</span>
+          <p>${escapeHtml(order.query)}</p>
+          <small>Selected lane: ${escapeHtml(order.selected_lane_id || "none")}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Route steps</p>
+          <ol class="work-order-list">${routeSteps || "<li>No route steps returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Routing warnings</p>
+          <ul class="work-order-list">${warnings || "<li>No routing warnings.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Execution safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>Execution remains disabled.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
+  async function inspectWorkOrder(jobId) {
+    if (!jobId) return;
+    setText("execution-queue-status", `Inspecting ${jobId} work order...`);
+    const order = await fetchJson(`/api/execution-jobs/${encodeURIComponent(jobId)}/work-order`);
+    renderWorkOrder(order);
+    setText("execution-queue-status", `Loaded ${jobId} route steps; execution remains disabled.`);
   }
 
   async function refreshExecutionJobs() {
@@ -690,6 +759,7 @@ fn client_script() -> &'static str {
     });
     setText("execution-queue-status", `Queued ${job.id}; provider execution remains disabled.`);
     await refreshExecutionJobs();
+    await inspectWorkOrder(job.id);
   }
 
   byId("run-create-form")?.addEventListener("submit", (event) => {
@@ -709,10 +779,17 @@ fn client_script() -> &'static str {
     if (!button) return;
     focusReviewItem(button.dataset.reviewKind, button.dataset.reviewId);
   });
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-work-order-job-id]");
+    if (!button) return;
+    inspectWorkOrder(button.dataset.workOrderJobId)
+      .catch((error) => setText("execution-queue-status", `Work order error: ${error.message}`));
+  });
 
   renderRun(seed);
   renderProviderStatus(providerSeed);
   renderExecutionJobs([]);
+  renderWorkOrder(null);
   fetchJson("/api/provider-status")
     .then(renderProviderStatus)
     .catch(() => {
@@ -1243,6 +1320,8 @@ p {
   right: 1rem;
   top: 35.2rem;
   width: min(380px, calc(100% - 2rem));
+  max-height: 13rem;
+  overflow: auto;
   padding: 0.9rem;
   display: grid;
   gap: 0.65rem;
@@ -1272,6 +1351,62 @@ p {
 #execution-job-list {
   display: grid;
   gap: 0.65rem;
+}
+
+#execution-work-order-detail {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.queue-action {
+  margin-top: 0.48rem;
+  width: 100%;
+}
+
+.work-order-card {
+  display: grid;
+  gap: 0.72rem;
+  padding: 0.72rem;
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--panel-hard) 72%, black);
+}
+
+.work-order-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.32rem 0.7rem;
+  align-items: start;
+}
+
+.work-order-header p,
+.work-order-header small {
+  grid-column: 1 / -1;
+}
+
+.work-order-label {
+  margin-bottom: 0.32rem;
+  color: color-mix(in oklch, var(--text) 78%, var(--muted));
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.work-order-list {
+  display: grid;
+  gap: 0.42rem;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.work-order-list li {
+  min-width: 0;
+}
+
+.work-order-list li strong,
+.work-order-list li span,
+.work-order-list li small {
+  display: block;
 }
 
 .evidence-dock {
@@ -1323,6 +1458,9 @@ p {
 .evidence-chip span,
 .quota-meter small,
 .queue-meter small,
+.work-order-header small,
+.work-order-list li span,
+.work-order-list li small,
 .verdict span,
 .focus-docket li span,
 .graph-node small,
@@ -1466,6 +1604,11 @@ p {
   .graph-viewport {
     min-height: 980px;
   }
+
+  .execution-console {
+    max-height: none;
+    overflow: visible;
+  }
 }
 "#
 }
@@ -1514,7 +1657,11 @@ mod tests {
         assert!(page.contains("provider-status-list"));
         assert!(page.contains("/api/provider-status"));
         assert!(page.contains("execution-job-list"));
+        assert!(page.contains("execution-work-order-detail"));
         assert!(page.contains("/api/execution-jobs"));
+        assert!(page.contains("/work-order"));
+        assert!(page.contains("data-work-order-job-id"));
+        assert!(page.contains("function renderWorkOrder"));
         assert!(page.contains("queue-preview-button"));
         assert!(page.contains("fetch(`${apiBase}${path}`"));
         assert!(page.contains("POST"));

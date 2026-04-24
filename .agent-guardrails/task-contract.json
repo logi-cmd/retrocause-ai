@@ -1,11 +1,10 @@
 {
   "schemaVersion": 3,
-  "task": "Define the first Pro worker/executor contract behind preview-only queue jobs: add a non-executing work-order payload derived from queued routing-preview jobs, expose a local API read endpoint for the work order, keep all safeguards explicit, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, workers, persistence, or OSS runtime changes.",
+  "task": "Add route-step detail visibility for queued preview jobs in the Pro Rust web shell: let the execution queue panel fetch a job work order, render route steps, routing warnings, selected lane, and safeguards, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, workers, persistence, backend API changes, or OSS runtime changes.",
   "preset": "generic",
-  "createdAt": "2026-04-24T11:25:46.582Z",
+  "createdAt": "2026-04-24T11:32:26.535Z",
   "allowedPaths": [
-    "pro/crates/queue/",
-    "pro/apps/api/",
+    "pro/apps/web/",
     "docs/PROJECT_STATE.md",
     "docs/pro-rust-architecture.md",
     ".agent-guardrails/"
@@ -65,10 +64,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "518e3106-f601-4e47-a2cc-78f4fde25278",
-    "createdAt": "2026-04-24T11:25:46.581Z",
+    "sessionId": "64417483-a21d-47ad-a379-e28106c0b816",
+    "createdAt": "2026-04-24T11:32:26.534Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Define the first Pro worker/executor contract behind preview-only queue jobs: add a non-executing work-order payload derived from queued routing-preview jobs, expose a local API read endpoint for the work order, keep all safeguards explicit, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, workers, persistence, or OSS runtime changes.",
+    "taskRequest": "Add route-step detail visibility for queued preview jobs in the Pro Rust web shell: let the execution queue panel fetch a job work order, render route steps, routing warnings, selected lane, and safeguards, and synchronize Pro docs/evidence. Do not add provider credentials, live provider calls, auth, billing, workers, persistence, backend API changes, or OSS runtime changes.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],
