@@ -127,6 +127,43 @@ pub struct WorkspaceAccessContext {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CredentialVaultBoundary {
+    pub mode: CredentialVaultMode,
+    pub connections_enabled: bool,
+    pub secret_values_returned: bool,
+    pub credential_classes: Vec<CredentialClass>,
+    pub access_rules: Vec<VaultAccessRule>,
+    pub rotation_rules: Vec<VaultRotationRule>,
+    pub safeguards: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CredentialClass {
+    pub id: String,
+    pub label: String,
+    pub owner: String,
+    pub storage_status: CredentialStorageStatus,
+    pub visibility: CredentialVisibility,
+    pub purpose: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct VaultAccessRule {
+    pub id: String,
+    pub actor: String,
+    pub allowed_now: bool,
+    pub requirement: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct VaultRotationRule {
+    pub id: String,
+    pub trigger: String,
+    pub owner: String,
+    pub status: CredentialRotationStatus,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WorkspaceActor {
     pub actor_id: String,
     pub display_name: String,
@@ -385,6 +422,34 @@ pub enum WorkspaceRole {
 pub enum WorkspacePermissionStatus {
     PreviewAllowed,
     RequiresAuthLater,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialVaultMode {
+    PlannedNoSecrets,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialStorageStatus {
+    NotStored,
+    FutureVaultOnly,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialVisibility {
+    NeverReturnedToApi,
+    WorkerScopedHandleLater,
+    WorkspaceAdminMetadataLater,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialRotationStatus {
+    Planned,
+    NotConnected,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -1033,6 +1098,86 @@ pub fn workspace_access_context() -> WorkspaceAccessContext {
     }
 }
 
+pub fn credential_vault_boundary() -> CredentialVaultBoundary {
+    CredentialVaultBoundary {
+        mode: CredentialVaultMode::PlannedNoSecrets,
+        connections_enabled: false,
+        secret_values_returned: false,
+        credential_classes: vec![
+            CredentialClass {
+                id: s("managed_model_credentials"),
+                label: s("Managed model provider credentials"),
+                owner: s("platform_security_later"),
+                storage_status: CredentialStorageStatus::FutureVaultOnly,
+                visibility: CredentialVisibility::WorkerScopedHandleLater,
+                purpose: s(
+                    "Future hosted model adapters receive scoped handles, not raw credential values.",
+                ),
+            },
+            CredentialClass {
+                id: s("workspace_search_credentials"),
+                label: s("Workspace search connector credentials"),
+                owner: s("workspace_admin_later"),
+                storage_status: CredentialStorageStatus::FutureVaultOnly,
+                visibility: CredentialVisibility::WorkspaceAdminMetadataLater,
+                purpose: s(
+                    "Future workspace connectors expose metadata and health, never raw values in API responses.",
+                ),
+            },
+            CredentialClass {
+                id: s("byok_provider_credentials"),
+                label: s("BYOK provider credentials"),
+                owner: s("workspace_admin_later"),
+                storage_status: CredentialStorageStatus::NotStored,
+                visibility: CredentialVisibility::NeverReturnedToApi,
+                purpose: s(
+                    "BYOK remains a future ownership mode and has no local input field in this slice.",
+                ),
+            },
+        ],
+        access_rules: vec![
+            VaultAccessRule {
+                id: s("api_routes_never_read_secret_values"),
+                actor: s("api"),
+                allowed_now: false,
+                requirement: s("Routes may request provider-lane metadata only."),
+            },
+            VaultAccessRule {
+                id: s("workers_receive_scoped_handles_later"),
+                actor: s("worker_pool_later"),
+                allowed_now: false,
+                requirement: s("Worker leases, tenant auth, and quota ledger must exist first."),
+            },
+            VaultAccessRule {
+                id: s("operators_view_metadata_only_later"),
+                actor: s("workspace_admin_later"),
+                allowed_now: false,
+                requirement: s("Future UI can show connector health and rotation age, not values."),
+            },
+        ],
+        rotation_rules: vec![
+            VaultRotationRule {
+                id: s("managed_pool_rotation"),
+                trigger: s("provider policy or scheduled platform security window"),
+                owner: s("platform_security_later"),
+                status: CredentialRotationStatus::Planned,
+            },
+            VaultRotationRule {
+                id: s("workspace_connector_rotation"),
+                trigger: s("workspace admin action or connector health failure"),
+                owner: s("workspace_admin_later"),
+                status: CredentialRotationStatus::NotConnected,
+            },
+        ],
+        safeguards: vec![
+            s("no_secret_values_in_requests_or_responses"),
+            s("no_local_credential_storage_in_this_slice"),
+            s("no_vault_connection_opened"),
+            s("provider_execution_still_denied_without_vault_auth_quota_worker_gates"),
+        ],
+    }
+}
+
 pub fn run_event_timeline(run: &ProRun) -> RunEventTimeline {
     let mut events = Vec::new();
     push_run_event(
@@ -1610,11 +1755,12 @@ fn status_vocabulary_entry(
 #[cfg(test)]
 mod tests {
     use super::{
-        CooldownKind, CreateRunRequest, ProviderReadiness, ReviewComparisonMode, ReviewDeltaKind,
-        RunEventKind, RunEventSource, RunStatus, WorkspaceEnforcementMode,
-        WorkspacePermissionStatus, create_run_from_request, provider_status_snapshot,
-        run_event_timeline, run_review_comparison, run_status_vocabulary, sample_run,
-        sample_run_by_id, sample_run_summaries, validate_run_references, workspace_access_context,
+        CooldownKind, CreateRunRequest, CredentialStorageStatus, CredentialVaultMode,
+        ProviderReadiness, ReviewComparisonMode, ReviewDeltaKind, RunEventKind, RunEventSource,
+        RunStatus, WorkspaceEnforcementMode, WorkspacePermissionStatus, create_run_from_request,
+        credential_vault_boundary, provider_status_snapshot, run_event_timeline,
+        run_review_comparison, run_status_vocabulary, sample_run, sample_run_by_id,
+        sample_run_summaries, validate_run_references, workspace_access_context,
     };
     use std::collections::HashSet;
 
@@ -1757,6 +1903,36 @@ mod tests {
             context
                 .sensitive_data_rules
                 .contains(&"workspace_id_is_demo_tenant_not_acl".to_string())
+        );
+    }
+
+    #[test]
+    fn credential_vault_boundary_is_keyless_and_disconnected() {
+        let boundary = credential_vault_boundary();
+
+        assert_eq!(boundary.mode, CredentialVaultMode::PlannedNoSecrets);
+        assert!(!boundary.connections_enabled);
+        assert!(!boundary.secret_values_returned);
+        assert!(boundary.credential_classes.iter().any(|item| {
+            item.id == "managed_model_credentials"
+                && item.storage_status == CredentialStorageStatus::FutureVaultOnly
+        }));
+        assert!(
+            boundary
+                .access_rules
+                .iter()
+                .any(|rule| rule.id == "api_routes_never_read_secret_values" && !rule.allowed_now)
+        );
+        assert!(
+            boundary
+                .safeguards
+                .contains(&"no_secret_values_in_requests_or_responses".to_string())
+        );
+        assert!(
+            boundary
+                .credential_classes
+                .iter()
+                .all(|item| !item.purpose.contains("sk-") && !item.label.contains("sk-"))
         );
     }
 

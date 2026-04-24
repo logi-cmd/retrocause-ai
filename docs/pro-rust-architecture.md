@@ -70,6 +70,7 @@ The first shared crate now defines:
 - usage ledger entries
 - provider/search quota ownership entries
 - workspace access context entries
+- credential-vault boundary entries
 - run event timeline and status vocabulary entries
 - review-comparison payloads for evidence and challenge deltas
 - source cooldown state
@@ -80,6 +81,8 @@ The first shared crate now defines:
 This keeps the API and web kickoff honest: they render the same shape instead of drifting into two separate demos.
 
 The workspace access context is deliberately non-enforcing in this slice. It names the demo workspace, preview actor, preview-allowed actions, actions that require real auth later, and safeguards such as no sessions, no cookie issuance, no token validation, no credential reads, and no billing/quota mutation. It is an inspectable contract, not a login system.
+
+The credential-vault boundary is deliberately keyless and disconnected in this slice. It names future credential classes, metadata-only visibility, worker-scoped access requirements, rotation ownership, and safeguards while returning `secret_values_returned=false` and `connections_enabled=false`.
 
 The run event timeline is deliberately non-durable in this slice. It is generated from the current `ProRun` record and names event/status vocabulary before an event store exists. It does not open an event-store connection, run workers, call providers, enforce auth, or mutate run state.
 
@@ -147,6 +150,7 @@ Initial responsibility:
 - `GET /api/runs/{run_id}/events`
 - `GET /api/runs/{run_id}/review-comparison`
 - `GET /api/workspace/access-context`
+- `GET /api/credential-vault-boundary`
 - `GET /api/provider-status`
 - `GET /api/provider-adapter-contract`
 - `GET /api/provider-adapter/candidates`
@@ -166,7 +170,7 @@ Initial responsibility:
 - local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
 - future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The workspace access context, run-events, review-comparison, provider-status, provider-route preview, execution-job, lifecycle, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, run status vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, and storage boundaries without exposing credential fields, opening event-store/database/Redis connections, enforcing auth, or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current store is intentionally local-file-backed. It is useful for proving the API behavior, graph payload contract, and restart continuity, but it should not be treated as the hosted Pro data layer. The workspace access context, credential-vault boundary, run-events, review-comparison, provider-status, provider-route preview, execution-job, lifecycle, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, run status vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, and storage boundaries without exposing credential fields, opening event-store/database/Redis connections, enforcing auth, or calling real providers. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -177,6 +181,7 @@ Initial responsibility:
 - create new in-memory runs through `POST /api/runs`
 - reload run summaries, run detail, and graph payloads from the Pro API
 - render the non-enforcing workspace/auth context from `GET /api/workspace/access-context`
+- render the planned credential-vault boundary from `GET /api/credential-vault-boundary`, showing credential classes, blocked access rules, and safeguards without showing values
 - render a non-durable run event timeline from `GET /api/runs/{run_id}/events`
 - render a derived review-comparison panel from `GET /api/runs/{run_id}/review-comparison`, showing evidence/challenge deltas and preview safeguards
 - show provider/search quota ownership, credential policy, and cooldown status through the local provider-status payload
@@ -228,6 +233,8 @@ Those semantics should remain explicit in both API payloads and the graph worksp
 The current `POST /api/runs` path uses `queued` runs and managed/user-provided quota labels without calling model or search providers. The current `GET /api/provider-status` path exposes static ownership lanes for managed Pro quota, workspace-managed search quota, BYOK-later search, uploaded-evidence-only input, and an example market-search cooldown bucket. The current `POST /api/execution-jobs` path records a preview-only queue job from the routing plan, and `GET /api/execution-jobs/{job_id}/work-order` exposes the non-executing work-order contract a future worker should consume. Live provider credentials, BYOK storage, workspace quotas, real cooldown enforcement, and real worker execution remain future work.
 
 The current `GET /api/workspace/access-context` path exposes a static local preview actor and permission vocabulary. It does not authenticate, authorize, issue sessions, validate tokens, store credentials, mutate billing/quota, or protect hosted resources. Future auth work should replace this preview context with real tenant and actor resolution before any provider execution is enabled.
+
+The current `GET /api/credential-vault-boundary` path exposes planned credential classes, access rules, rotation rules, and safeguards. It does not accept credential input, read or store secrets, open a vault connection, return values, or enable workers. Future hosted Pro should replace it with metadata-only vault status after auth, quota ledger, and worker leases exist.
 
 The current `GET /api/runs/{run_id}/events` path derives a non-durable timeline from the run record. It is useful for UI and API vocabulary, but it is not an audit log, not a durable event stream, and not a worker status queue. Future hosted Pro should replace or supplement it with event-store rows once tenant/auth, worker leases, and storage boundaries exist.
 
@@ -382,3 +389,11 @@ The graph-review comparison slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `GET /api/runs/{run_id}/review-comparison` proving the comparison is derived, returns evidence/challenge added deltas, and keeps provider/credential access disabled
 - a browser smoke that starts the Pro API and web shell and verifies that the review-comparison panel renders derived checkpoint mode, evidence/challenge delta counts, and comparison safeguards
+
+The credential-vault boundary slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `GET /api/credential-vault-boundary` proving the vault boundary is disconnected, returns no secret values, and names blocked access rules plus safeguards
+- a browser smoke that starts the Pro API and web shell and verifies that the vault-boundary panel renders connections-off state, secret-values-returned `no`, credential classes, and safeguards

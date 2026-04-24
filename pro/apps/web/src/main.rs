@@ -268,6 +268,15 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "planned" }
                                 }
                             }
+                            div id="credential-vault-panel" class="vault-panel" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "Credential vault boundary" }
+                                        p { "Vault rules load from the Pro API; no credentials are accepted or stored." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "planned" }
+                                }
+                            }
                         }
 
                         aside class="evidence-dock" aria-label="Evidence anchors" {
@@ -1258,6 +1267,64 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderCredentialVaultBoundary(boundary) {
+    const panel = byId("credential-vault-panel");
+    if (!panel) return;
+    if (!boundary) {
+      panel.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>Credential vault boundary</strong>
+            <p>Vault rules load from the Pro API; no credentials are accepted or stored.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">planned</span>
+        </article>
+      `;
+      return;
+    }
+
+    const classes = (boundary.credential_classes || []).slice(0, 4).map((item) => `
+      <li>
+        <strong>${escapeHtml(item.label)}</strong>
+        <span>${escapeHtml(readable(item.storage_status))} / ${escapeHtml(readable(item.visibility))}</span>
+        <small>${escapeHtml(item.owner)}: ${escapeHtml(item.purpose)}</small>
+      </li>
+    `).join("");
+    const accessRules = (boundary.access_rules || []).slice(0, 3).map((rule) => `
+      <li>
+        <strong>${escapeHtml(rule.id)}</strong>
+        <span>${rule.allowed_now ? "allowed now" : "blocked now"} / ${escapeHtml(rule.actor)}</span>
+        <small>${escapeHtml(rule.requirement)}</small>
+      </li>
+    `).join("");
+    const safeguards = (boundary.safeguards || [])
+      .slice(0, 3)
+      .map((guard) => `<li>${escapeHtml(guard)}</li>`)
+      .join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card vault-card">
+        <div class="work-order-header">
+          <strong>Credential vault boundary</strong>
+          <span class="quota-state quota-state--deferred">${boundary.connections_enabled ? "connections on" : "connections off"}</span>
+          <p>${escapeHtml(readable(boundary.mode || "planned_no_secrets"))} / secret values returned: ${boundary.secret_values_returned ? "yes" : "no"}</p>
+        </div>
+        <section>
+          <p class="work-order-label">Credential classes</p>
+          <ol class="work-order-list">${classes || "<li>No credential classes returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Access rules</p>
+          <ul class="work-order-list">${accessRules || "<li>No access rules returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Vault safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>No vault safeguards returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   async function refreshExecutionJobs() {
     const jobs = await fetchJson("/api/execution-jobs");
     renderExecutionJobs(jobs);
@@ -1420,6 +1487,7 @@ fn client_script() -> &'static str {
   renderWorkOrder(null);
   renderExecutionLifecycle(null);
   renderStoragePlan(null);
+  renderCredentialVaultBoundary(null);
   fetchJson("/api/workspace/access-context")
     .then(renderWorkspaceAccess)
     .catch(() => {
@@ -1459,6 +1527,11 @@ fn client_script() -> &'static str {
     .then(renderStoragePlan)
     .catch(() => {
       renderStoragePlan(null);
+    });
+  fetchJson("/api/credential-vault-boundary")
+    .then(renderCredentialVaultBoundary)
+    .catch(() => {
+      renderCredentialVaultBoundary(null);
     });
   refreshExecutionJobs().catch(() => {
     setText("execution-queue-status", `Queue API offline: start retrocause-pro-api at ${apiBase}`);
@@ -2056,7 +2129,8 @@ p {
 
 #execution-work-order-detail,
 #execution-lifecycle-panel,
-#storage-boundary-panel {
+#storage-boundary-panel,
+#credential-vault-panel {
   display: grid;
   gap: 0.65rem;
 }
@@ -2104,6 +2178,10 @@ p {
 
 .storage-card {
   background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.47 0.08 250));
+}
+
+.vault-card {
+  background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.52 0.07 310));
 }
 
 .adapter-card {
@@ -2426,14 +2504,17 @@ mod tests {
         assert!(page.contains("execution-work-order-detail"));
         assert!(page.contains("execution-lifecycle-panel"));
         assert!(page.contains("storage-boundary-panel"));
+        assert!(page.contains("credential-vault-panel"));
         assert!(page.contains("/api/execution-jobs"));
         assert!(page.contains("/work-order"));
         assert!(page.contains("/api/execution-lifecycle"));
         assert!(page.contains("/api/storage-plan"));
+        assert!(page.contains("/api/credential-vault-boundary"));
         assert!(page.contains("data-work-order-job-id"));
         assert!(page.contains("function renderWorkOrder"));
         assert!(page.contains("function renderExecutionLifecycle"));
         assert!(page.contains("function renderStoragePlan"));
+        assert!(page.contains("function renderCredentialVaultBoundary"));
         assert!(page.contains("function renderProviderAdapterContract"));
         assert!(page.contains("function renderProviderAdapterDryRun"));
         assert!(page.contains("function renderProviderAdapterCandidates"));

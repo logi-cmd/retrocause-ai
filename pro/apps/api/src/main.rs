@@ -8,9 +8,10 @@ use axum::{
     routing::{get, post},
 };
 use retrocause_pro_domain::{
-    CreateRunRequest, KnowledgeGraph, ProRun, ProviderStatusSnapshot, RunEventTimeline,
-    RunReviewComparison, RunStatus, RunSummary, WorkspaceAccessContext, provider_status_snapshot,
-    run_event_timeline, run_review_comparison, sample_run, workspace_access_context,
+    CreateRunRequest, CredentialVaultBoundary, KnowledgeGraph, ProRun, ProviderStatusSnapshot,
+    RunEventTimeline, RunReviewComparison, RunStatus, RunSummary, WorkspaceAccessContext,
+    credential_vault_boundary, provider_status_snapshot, run_event_timeline, run_review_comparison,
+    sample_run, workspace_access_context,
 };
 use retrocause_pro_provider_routing::{
     ProviderAdapterCandidateCatalog, ProviderAdapterContract, ProviderAdapterDryRunRequest,
@@ -72,6 +73,7 @@ fn router() -> Router {
         .route("/healthz", get(health))
         .route("/api/graph/seed", get(seed_graph))
         .route("/api/workspace/access-context", get(workspace_access))
+        .route("/api/credential-vault-boundary", get(credential_vault))
         .route("/api/provider-status", get(provider_status))
         .route(
             "/api/provider-route/preview",
@@ -148,6 +150,10 @@ async fn seed_graph(State(state): State<AppState>) -> Json<ProRun> {
 
 async fn workspace_access() -> Json<WorkspaceAccessContext> {
     Json(workspace_access_context())
+}
+
+async fn credential_vault() -> Json<CredentialVaultBoundary> {
+    Json(credential_vault_boundary())
 }
 
 async fn provider_status() -> Json<ProviderStatusSnapshot> {
@@ -488,6 +494,25 @@ mod tests {
                 && permission.status
                     == retrocause_pro_domain::WorkspacePermissionStatus::RequiresAuthLater
         }));
+    }
+
+    #[tokio::test]
+    async fn credential_vault_exposes_keyless_boundary_preview() {
+        let payload = credential_vault().await.0;
+
+        assert!(!payload.connections_enabled);
+        assert!(!payload.secret_values_returned);
+        assert!(
+            payload
+                .credential_classes
+                .iter()
+                .any(|item| item.id == "managed_model_credentials")
+        );
+        assert!(
+            payload
+                .safeguards
+                .contains(&"no_secret_values_in_requests_or_responses".to_string())
+        );
     }
 
     #[tokio::test]

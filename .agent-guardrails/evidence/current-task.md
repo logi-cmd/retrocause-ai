@@ -2023,3 +2023,82 @@ This task adds a keyless graph-review comparison preview for the Pro Rust produc
 - The comparison is not backed by durable run history and does not yet let users select another real run.
 - The endpoint is keyless and non-enforcing; future hosted Pro must add real tenant/auth boundaries before exposing true cross-run comparisons.
 - Future hosted Pro still needs tenant auth, durable run history, credential vault integration, quota ledger enforcement, worker execution, event storage, retry scheduling, and provider SDK integration before live adapter work is safe.
+
+## Pro Product Core Slice 21 - Credential Vault Boundary Preview
+
+### Scope
+
+This task adds a keyless credential-vault boundary preview for the Pro Rust product core. The shared domain crate now defines credential class, access-rule, rotation-rule, and safeguard payloads; the API exposes a read-only vault-boundary endpoint; and the graph-first web shell renders a compact vault panel. No provider credentials are accepted, stored, read, logged, or echoed. No live provider calls, auth enforcement, billing, database/Redis/event-store connections, workers, OSS runtime changes, dependency changes, or package publishing were added.
+
+### Files Updated
+
+- `pro/crates/domain/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `CredentialVaultBoundary`, credential classes, vault access rules, vault rotation rules, and credential visibility/storage enums.
+- Added `credential_vault_boundary()` returning `planned_no_secrets`, `connections_enabled=false`, and `secret_values_returned=false`.
+- Added `GET /api/credential-vault-boundary`.
+- Added a Pro web vault-boundary panel that renders credential classes, blocked access rules, and safeguards without rendering credential values.
+- Updated Pro project state and architecture docs so maintainers can see this is a disconnected boundary contract, not a real vault.
+
+### Commands Run
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - First result: failed because a domain test used `serde_json` without a domain dependency.
+  - Fix: removed the `serde_json` assertion and checked payload fields directly, avoiding a new dependency.
+  - Final result: passed.
+  - API tests: `24 passed`.
+  - Domain tests: `14 passed`.
+  - Provider-routing tests: `10 passed`.
+  - Queue tests: `6 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API credential-vault smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8823` with a temporary local run-store path.
+  - Called `GET /api/credential-vault-boundary`.
+  - Result: passed; mode was `planned_no_secrets`, `connections_enabled=false`, `secret_values_returned=false`, three credential classes and three access rules were returned, and safeguard `no_secret_values_in_requests_or_responses` was present.
+
+- Pro browser credential-vault smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8824` and `retrocause-pro-web.exe` on `127.0.0.1:3038`.
+  - Aborted external font requests in Playwright so inline scripts could run without network font blocking.
+  - Result: passed; the vault panel rendered `Credential vault boundary`, `planned no secrets`, `connections off`, `secret values returned: no`, `Managed model provider credentials`, `api_routes_never_read_secret_values`, and `no_secret_values_in_requests_or_responses`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - A key-shaped scan for common provider-token prefixes and API-key assignment patterns found no actual key-shaped tokens in the non-doc diff.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the project state was synchronized to mark the credential-vault boundary preview as implemented and move the next Pro focus toward quota-ledger/billing boundaries.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally adds keyless local `GET /api/credential-vault-boundary`; it does not change OSS APIs, accept credentials, store secrets, enforce auth, mutate billing/quota, or execute provider calls.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice explicitly does not implement a vault. It does not accept credential input, store secrets, read secrets, log secrets, return secret values, enforce auth, or enable worker/provider execution. It only makes future credential ownership and access rules visible.
+- Dependencies: no new crates, npm packages, lockfile changes, or version upgrades were introduced. The failed `serde_json` test was fixed without adding the dependency.
+- Performance: the endpoint returns one static in-process payload and the browser renders one compact panel. It adds no provider, database, Redis, event-store, worker, billing, or vault load.
+- Understanding: the deliberate tradeoff is naming credential classes and access rules before real vault infrastructure exists. This helps future live-adapter work avoid ad hoc key handling while keeping the current system honest about not being secure vault storage.
+- Continuity: reused the shared domain crate for static contract payloads, Axum read-only endpoint style, the web `fetchJson` helper, and existing compact boundary-card styling. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- This is not a credential vault and should not be treated as one.
+- There is still no real tenant auth, credential encryption, secret rotation, scoped worker lease, quota ledger, billing boundary, durable event storage, retry scheduler, or live source/provider call path.
+- Future hosted Pro must implement real vault-backed metadata and worker-scoped secret access before any live adapter can execute provider calls.

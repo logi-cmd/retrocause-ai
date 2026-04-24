@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
-  "task": "Add a graph-review comparison preview for the Pro Rust product core: define shared review comparison payloads for evidence and challenge deltas across two runs, expose a keyless per-run comparison API endpoint, render a compact review-comparison panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add live provider calls, auth enforcement, billing, database/Redis/event-store connections, workers, OSS runtime changes, or package dependencies.",
+  "task": "Add a credential-vault boundary preview for the Pro Rust product core: define shared keyless credential vault boundary payloads, expose a read-only API endpoint, render a compact vault-boundary panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not store, accept, read, log, or echo provider credentials; do not add live provider calls, auth enforcement, billing, database/Redis/event-store connections, workers, OSS runtime changes, or package dependencies.",
   "preset": "generic",
-  "createdAt": "2026-04-24T13:40:42.996Z",
+  "createdAt": "2026-04-24T14:06:02.346Z",
   "allowedPaths": [
     "pro/crates/domain/",
     "pro/apps/api/",
@@ -66,10 +66,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "890bd723-53a3-4ee6-b36d-109d1e70d251",
-    "createdAt": "2026-04-24T13:40:42.995Z",
+    "sessionId": "163e1eb5-7ed7-453d-965e-3725408a350d",
+    "createdAt": "2026-04-24T14:06:02.345Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add a graph-review comparison preview for the Pro Rust product core: define shared review comparison payloads for evidence and challenge deltas across two runs, expose a keyless per-run comparison API endpoint, render a compact review-comparison panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not add live provider calls, auth enforcement, billing, database/Redis/event-store connections, workers, OSS runtime changes, or package dependencies.",
+    "taskRequest": "Add a credential-vault boundary preview for the Pro Rust product core: define shared keyless credential vault boundary payloads, expose a read-only API endpoint, render a compact vault-boundary panel in the graph-first web shell, and synchronize Pro docs/evidence. Do not store, accept, read, log, or echo provider credentials; do not add live provider calls, auth enforcement, billing, database/Redis/event-store connections, workers, OSS runtime changes, or package dependencies.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],
