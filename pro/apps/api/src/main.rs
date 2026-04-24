@@ -1,7 +1,10 @@
 use axum::{
     Json, Router,
+    body::Body,
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, HeaderValue, Request, StatusCode, header},
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::get,
 };
 use retrocause_pro_domain::{
@@ -64,9 +67,13 @@ fn router() -> Router {
         .route("/", get(index))
         .route("/healthz", get(health))
         .route("/api/graph/seed", get(seed_graph))
-        .route("/api/runs", get(list_runs).post(create_run))
+        .route(
+            "/api/runs",
+            get(list_runs).post(create_run).options(cors_preflight),
+        )
         .route("/api/runs/{run_id}", get(get_run))
         .route("/api/runs/{run_id}/graph", get(get_run_graph))
+        .layer(middleware::from_fn(add_cors_headers))
         .with_state(AppState::seeded())
 }
 
@@ -79,6 +86,12 @@ async fn health() -> Json<HealthPayload> {
         service: "retrocause-pro-api",
         status: "ok",
     })
+}
+
+async fn cors_preflight() -> Response {
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    apply_cors_headers(response.headers_mut());
+    response
 }
 
 async fn seed_graph(State(state): State<AppState>) -> Json<ProRun> {
@@ -173,6 +186,31 @@ fn not_found(run_id: String) -> ApiError {
     )
 }
 
+async fn add_cors_headers(request: Request<Body>, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    apply_cors_headers(response.headers_mut());
+    response
+}
+
+fn apply_cors_headers(headers: &mut HeaderMap) {
+    headers.insert(
+        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        HeaderValue::from_static("*"),
+    );
+    headers.insert(
+        header::ACCESS_CONTROL_ALLOW_METHODS,
+        HeaderValue::from_static("GET,POST,OPTIONS"),
+    );
+    headers.insert(
+        header::ACCESS_CONTROL_ALLOW_HEADERS,
+        HeaderValue::from_static("content-type"),
+    );
+    headers.insert(
+        header::ACCESS_CONTROL_MAX_AGE,
+        HeaderValue::from_static("600"),
+    );
+}
+
 #[tokio::main]
 async fn main() {
     let port = std::env::var("PRO_API_PORT")
@@ -199,6 +237,21 @@ mod tests {
         let payload = health().await.0;
         assert_eq!(payload.service, "retrocause-pro-api");
         assert_eq!(payload.status, "ok");
+    }
+
+    #[tokio::test]
+    async fn cors_preflight_allows_local_web_fetches() {
+        let response = cors_preflight().await;
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            response.headers()[header::ACCESS_CONTROL_ALLOW_METHODS],
+            "GET,POST,OPTIONS"
+        );
+        assert_eq!(
+            response.headers()[header::ACCESS_CONTROL_ALLOW_HEADERS],
+            "content-type"
+        );
     }
 
     #[tokio::test]

@@ -17,10 +17,10 @@ fn router() -> Router {
 }
 
 async fn index() -> impl IntoResponse {
-    Html(render_page(&sample_run()).into_string())
+    Html(render_page(&sample_run(), &api_base()).into_string())
 }
 
-fn render_page(run: &ProRun) -> Markup {
+fn render_page(run: &ProRun, api_base: &str) -> Markup {
     let seed_json = serde_json::to_string_pretty(run).expect("serialize seed run");
 
     html! {
@@ -37,7 +37,7 @@ fn render_page(run: &ProRun) -> Markup {
                     rel="stylesheet";
                 style { (PreEscaped(styles())) }
             }
-            body {
+            body data-api-base=(api_base) {
                 main class="field-shell" {
                     section class="graph-field" aria-label="Knowledge graph operating field" {
                         header class="hud hud--top" {
@@ -49,24 +49,40 @@ fn render_page(run: &ProRun) -> Markup {
                                 }
                             }
                             div class="run-state" {
-                                span class="state-token state-token--live" { (run_status_label(run.status)) }
-                                span class="state-token" { "confidence " (percent(run.confidence)) }
-                                span class="state-token" { (run.graph.nodes.len()) " nodes" }
-                                span class="state-token" { (run.graph.edges.len()) " edges" }
+                                span id="run-status" class="state-token state-token--live" { (run_status_label(run.status)) }
+                                span id="run-confidence" class="state-token" { "confidence " (percent(run.confidence)) }
+                                span id="run-node-count" class="state-token" { (run.graph.nodes.len()) " nodes" }
+                                span id="run-edge-count" class="state-token" { (run.graph.edges.len()) " edges" }
                             }
                         }
 
                         div class="question-band" {
                             p class="eyebrow" { "Run" }
-                            h2 { (run.title.as_str()) }
-                            p { (run.question.as_str()) }
-                            strong { (run.operator_summary.headline.as_str()) }
+                            h2 id="run-title" { (run.title.as_str()) }
+                            p id="run-question" { (run.question.as_str()) }
+                            strong id="run-headline" { (run.operator_summary.headline.as_str()) }
+                            form id="run-create-form" class="run-console" {
+                                label for="run-question-input" { "Ask a new causal question" }
+                                textarea id="run-question-input" name="question" rows="3" required="" {
+                                    "Why did renewal conversion drop after the pricing launch?"
+                                }
+                                div class="create-grid" {
+                                    input id="run-title-input" name="title" type="text" placeholder="Optional run title";
+                                    button type="submit" { "Create run" }
+                                }
+                                div class="create-grid" {
+                                    select id="run-picker" aria-label="Saved Pro runs" {}
+                                    button id="load-run-button" type="button" { "Load run" }
+                                }
+                                p id="run-action-status" class="console-status" { "API: " (api_base) }
+                            }
                         }
 
                         div class="graph-viewport" {
                             div class="axis-line axis-line--x" {}
                             div class="axis-line axis-line--y" {}
                             svg
+                                id="graph-wires"
                                 class="graph-wires"
                                 viewBox={(format!("0 0 {} {}", CANVAS_WIDTH, CANVAS_HEIGHT))}
                                 aria-hidden="true"
@@ -75,14 +91,16 @@ fn render_page(run: &ProRun) -> Markup {
                                     (render_edge(run, edge))
                                 }
                             }
-                            @for node in &run.graph.nodes {
-                                (render_node(node))
+                            div id="graph-nodes" {
+                                @for node in &run.graph.nodes {
+                                    (render_node(node))
+                                }
                             }
                         }
 
                         aside class="focus-docket" aria-label="Focus queue" {
                             p class="eyebrow" { "Focus queue" }
-                            ol {
+                            ol id="focus-list" {
                                 @for step in &run.next_steps {
                                     li {
                                         span { (step_state_label(step.state)) }
@@ -94,27 +112,31 @@ fn render_page(run: &ProRun) -> Markup {
 
                         aside class="source-pulse" aria-label="Source pulse" {
                             p class="eyebrow" { "Source pulse" }
-                            @for source in &run.sources {
-                                (render_source_meter(
-                                    source.source.as_str(),
-                                    source.status,
-                                    source.note.as_str()
-                                ))
+                            div id="source-list" {
+                                @for source in &run.sources {
+                                    (render_source_meter(
+                                        source.source.as_str(),
+                                        source.status,
+                                        source.note.as_str()
+                                    ))
+                                }
                             }
                         }
 
                         aside class="evidence-dock" aria-label="Evidence anchors" {
                             p class="eyebrow" { "Evidence anchors" }
-                            @for evidence in run.evidence.iter().take(3) {
-                                article class="evidence-chip" {
-                                    div {
-                                        strong { (evidence.title.as_str()) }
-                                        p { (evidence.excerpt.as_str()) }
+                            div id="evidence-list" {
+                                @for evidence in run.evidence.iter().take(3) {
+                                    article class="evidence-chip" {
+                                        div {
+                                            strong { (evidence.title.as_str()) }
+                                            p { (evidence.excerpt.as_str()) }
+                                        }
+                                        span { (evidence_stance_label(evidence.stance)) " / " (evidence_freshness_label(evidence.freshness)) }
                                     }
-                                    span { (evidence_stance_label(evidence.stance)) " / " (evidence_freshness_label(evidence.freshness)) }
                                 }
                             }
-                            div class="challenge-strip" aria-label="Challenge checks" {
+                            div id="challenge-strip" class="challenge-strip" aria-label="Challenge checks" {
                                 @for challenge in &run.challenge_checks {
                                     span { (challenge_status_label(challenge.status)) ": " (challenge.title.as_str()) }
                                 }
@@ -124,24 +146,26 @@ fn render_page(run: &ProRun) -> Markup {
                         footer class="command-deck" {
                             div class="verdict" {
                                 p class="eyebrow" { "Current read" }
-                                strong { (run.operator_summary.current_read.as_str()) }
-                                span { (run.operator_summary.caveat.as_str()) }
+                                strong id="run-current-read" { (run.operator_summary.current_read.as_str()) }
+                                span id="run-caveat" { (run.operator_summary.caveat.as_str()) }
                             }
                             div class="command-clusters" aria-label="Run signals" {
-                                span { (run_status_label(run.status)) }
-                                span { (percent(run.confidence)) " confidence" }
-                                span { (run.graph.nodes.len()) " nodes tracked" }
-                                span { (run.graph.edges.len()) " causal links" }
-                                span { (run.challenge_checks.len()) " challenge checks" }
+                                span id="command-status" { (run_status_label(run.status)) }
+                                span id="command-confidence" { (percent(run.confidence)) " confidence" }
+                                span id="command-nodes" { (run.graph.nodes.len()) " nodes tracked" }
+                                span id="command-edges" { (run.graph.edges.len()) " causal links" }
+                                span id="command-challenges" { (run.challenge_checks.len()) " challenge checks" }
                             }
                         }
 
                         details class="seed-drawer" {
                             summary { "Run payload" }
-                            pre { (seed_json) }
+                            pre id="payload-json" { (seed_json.as_str()) }
                         }
                     }
                 }
+                script id="seed-run-json" type="application/json" { (PreEscaped(seed_json)) }
+                script { (PreEscaped(client_script())) }
             }
         }
     }
@@ -175,7 +199,7 @@ fn render_edge(run: &ProRun, edge: &GraphEdge) -> Markup {
 fn render_node(node: &GraphNode) -> Markup {
     html! {
         article
-            class=(format!("graph-node {:?}", node.kind).to_lowercase().replace(' ', "-"))
+            class=(format!("graph-node {}", node_kind_label(node.kind)))
             style=(format!("left:{}px; top:{}px;", node.x, node.y))
         {
             div class="node-head" {
@@ -199,6 +223,204 @@ fn render_source_meter(source: &str, status: SourceStatus, note: &str) -> Markup
             span class=(format!("status-dot status-dot--{}", source_status_label(status))) {}
         }
     }
+}
+
+fn api_base() -> String {
+    std::env::var("PRO_API_BASE").unwrap_or_else(|_| "http://127.0.0.1:8787".to_string())
+}
+
+fn client_script() -> &'static str {
+    r#"
+(() => {
+  const apiBase = document.body.dataset.apiBase || "http://127.0.0.1:8787";
+  const seed = JSON.parse(document.getElementById("seed-run-json").textContent || "{}");
+  const byId = (id) => document.getElementById(id);
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll("\"", "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  function percent(value) {
+    return `${Math.round((Number(value) || 0) * 100)}%`;
+  }
+
+  function readable(value) {
+    return String(value ?? "").replaceAll("_", " ");
+  }
+
+  function setText(id, value) {
+    const node = byId(id);
+    if (node) node.textContent = value;
+  }
+
+  function setStatus(message) {
+    setText("run-action-status", message);
+  }
+
+  function wirePath(source, target) {
+    const startX = Number(source.x) + 168;
+    const startY = Number(source.y) + 86;
+    const endX = Number(target.x);
+    const endY = Number(target.y) + 86;
+    const controlX = Math.round((startX + endX) / 2);
+    return `M ${startX} ${startY} C ${controlX} ${startY}, ${controlX} ${endY}, ${endX} ${endY}`;
+  }
+
+  function renderGraph(run) {
+    const graph = run.graph || { nodes: [], edges: [] };
+    const wires = byId("graph-wires");
+    const nodes = byId("graph-nodes");
+    if (!wires || !nodes) return;
+
+    wires.innerHTML = graph.edges.map((edge) => {
+      const source = graph.nodes.find((node) => node.id === edge.source);
+      const target = graph.nodes.find((node) => node.id === edge.target);
+      if (!source || !target) return "";
+      const path = wirePath(source, target);
+      const labelX = Math.round((Number(source.x) + Number(target.x)) / 2);
+      const labelY = Math.round((Number(source.y) + Number(target.y)) / 2);
+      return `
+        <path class="wire-shadow" d="${escapeHtml(path)}"></path>
+        <path class="wire" d="${escapeHtml(path)}"></path>
+        <text class="wire-label" x="${labelX}" y="${labelY}">${escapeHtml(edge.label)}</text>
+      `;
+    }).join("");
+
+    nodes.innerHTML = graph.nodes.map((node) => `
+      <article class="graph-node ${escapeHtml(readable(node.kind).replaceAll(" ", "-"))}" style="left:${Number(node.x) || 0}px; top:${Number(node.y) || 0}px;">
+        <div class="node-head">
+          <p class="node-kind">${escapeHtml(readable(node.kind))}</p>
+          <span>${percent(node.confidence)}</span>
+        </div>
+        <h3>${escapeHtml(node.title)}</h3>
+        <p>${escapeHtml(node.summary)}</p>
+        <small>${(node.evidence_ids || []).length} evidence / ${(node.challenge_ids || []).length} checks</small>
+      </article>
+    `).join("");
+  }
+
+  function renderRun(run) {
+    renderGraph(run);
+    setText("run-status", readable(run.status));
+    setText("run-confidence", `confidence ${percent(run.confidence)}`);
+    setText("run-node-count", `${(run.graph?.nodes || []).length} nodes`);
+    setText("run-edge-count", `${(run.graph?.edges || []).length} edges`);
+    setText("run-title", run.title || "Untitled run");
+    setText("run-question", run.question || "");
+    setText("run-headline", run.operator_summary?.headline || "");
+    setText("run-current-read", run.operator_summary?.current_read || "");
+    setText("run-caveat", run.operator_summary?.caveat || "");
+    setText("command-status", readable(run.status));
+    setText("command-confidence", `${percent(run.confidence)} confidence`);
+    setText("command-nodes", `${(run.graph?.nodes || []).length} nodes tracked`);
+    setText("command-edges", `${(run.graph?.edges || []).length} causal links`);
+    setText("command-challenges", `${(run.challenge_checks || []).length} challenge checks`);
+    setText("payload-json", JSON.stringify(run, null, 2));
+
+    const focus = byId("focus-list");
+    if (focus) {
+      focus.innerHTML = (run.next_steps || []).map((step) => `
+        <li><span>${escapeHtml(readable(step.state))}</span><strong>${escapeHtml(step.title)}</strong></li>
+      `).join("");
+    }
+
+    const sources = byId("source-list");
+    if (sources) {
+      sources.innerHTML = (run.sources || []).map((source) => `
+        <article class="source-meter">
+          <div><strong>${escapeHtml(source.source)}</strong><p>${escapeHtml(source.note)}</p></div>
+          <span class="status-dot status-dot--${escapeHtml(source.status)}"></span>
+        </article>
+      `).join("");
+    }
+
+    const evidence = byId("evidence-list");
+    if (evidence) {
+      evidence.innerHTML = (run.evidence || []).slice(0, 3).map((item) => `
+        <article class="evidence-chip">
+          <div><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.excerpt)}</p></div>
+          <span>${escapeHtml(readable(item.stance))} / ${escapeHtml(readable(item.freshness))}</span>
+        </article>
+      `).join("");
+    }
+
+    const challenges = byId("challenge-strip");
+    if (challenges) {
+      challenges.innerHTML = (run.challenge_checks || []).map((challenge) => `
+        <span>${escapeHtml(readable(challenge.status))}: ${escapeHtml(challenge.title)}</span>
+      `).join("");
+    }
+
+  }
+
+  async function fetchJson(path, options) {
+    const response = await fetch(`${apiBase}${path}`, options);
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `HTTP ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async function refreshRuns(selectedId) {
+    const picker = byId("run-picker");
+    if (!picker) return;
+    const runs = await fetchJson("/api/runs");
+    picker.innerHTML = runs.map((run) => `
+      <option value="${escapeHtml(run.id)}"${run.id === selectedId ? " selected" : ""}>${escapeHtml(run.title)}</option>
+    `).join("");
+  }
+
+  async function loadRun(runId) {
+    if (!runId) return;
+    const [run, graphPayload] = await Promise.all([
+      fetchJson(`/api/runs/${encodeURIComponent(runId)}`),
+      fetchJson(`/api/runs/${encodeURIComponent(runId)}/graph`),
+    ]);
+    run.graph = graphPayload.graph;
+    renderRun(run);
+    await refreshRuns(run.id);
+    setStatus(`Loaded ${run.id}`);
+  }
+
+  async function createRun(event) {
+    event.preventDefault();
+    const question = byId("run-question-input")?.value || "";
+    const title = byId("run-title-input")?.value || "";
+    setStatus("Creating run...");
+    const created = await fetchJson("/api/runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspace_id: "workspace_web",
+        title: title.trim() || null,
+        question,
+      }),
+    });
+    await loadRun(created.id);
+  }
+
+  byId("run-create-form")?.addEventListener("submit", (event) => {
+    createRun(event).catch((error) => setStatus(`API error: ${error.message}`));
+  });
+  byId("load-run-button")?.addEventListener("click", () => {
+    loadRun(byId("run-picker")?.value).catch((error) => setStatus(`API error: ${error.message}`));
+  });
+  byId("run-picker")?.addEventListener("change", (event) => {
+    loadRun(event.target.value).catch((error) => setStatus(`API error: ${error.message}`));
+  });
+
+  renderRun(seed);
+  refreshRuns(seed.id).catch(() => {
+    setStatus(`API offline: start retrocause-pro-api at ${apiBase}`);
+  });
+})();
+"#
 }
 
 fn wire_path(source: &GraphNode, target: &GraphNode) -> String {
@@ -393,6 +615,54 @@ body {
   left: 0.9rem;
   max-width: min(620px, calc(100% - 1.8rem));
   padding: 0.95rem 1rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.run-console {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.25rem;
+}
+
+.run-console label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.run-console textarea,
+.run-console input,
+.run-console select {
+  width: 100%;
+  border: 1px solid color-mix(in oklch, var(--text) 12%, transparent);
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--panel-hard) 80%, black);
+  color: var(--text);
+  font: inherit;
+  padding: 0.62rem 0.7rem;
+}
+
+.run-console button {
+  border: 1px solid color-mix(in oklch, var(--accent) 32%, transparent);
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--accent) 82%, black);
+  color: oklch(0.16 0.016 148);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.62rem 0.8rem;
+}
+
+.create-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.console-status {
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .graph-viewport {
@@ -432,6 +702,13 @@ body {
   position: absolute;
   left: 0;
   top: 0;
+  width: 1220px;
+  height: 720px;
+}
+
+#graph-nodes {
+  position: absolute;
+  inset: 0;
   width: 1220px;
   height: 720px;
 }
@@ -540,6 +817,11 @@ p {
   top: 5.5rem;
   width: min(340px, calc(100% - 2rem));
   padding: 0.9rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+#source-list {
   display: grid;
   gap: 0.65rem;
 }
@@ -709,9 +991,12 @@ mod tests {
 
     #[test]
     fn rendered_page_contains_graph_first_sections() {
-        let page = render_page(&sample_run()).into_string();
+        let page = render_page(&sample_run(), "http://127.0.0.1:8787").into_string();
         assert!(page.contains("Knowledge graph operating field"));
         assert!(page.contains("graph-viewport"));
+        assert!(page.contains("run-create-form"));
+        assert!(page.contains("fetch(`${apiBase}${path}`"));
+        assert!(page.contains("POST"));
         assert!(page.contains("Focus queue"));
         assert!(page.contains("Source pulse"));
         assert!(page.contains("Evidence anchors"));

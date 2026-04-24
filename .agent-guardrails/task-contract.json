@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
-  "task": "Implement Pro in-memory run creation and storage: add a create-run request/builder in the Rust domain crate, add API state plus POST /api/runs while keeping list/detail/graph backed by the in-memory store, and synchronize Pro docs/evidence.",
+  "task": "Wire the Pro graph-first web shell to the Rust API create/list/detail/graph flow: add browser-side create-run controls and graph rendering from API payloads, add minimal CORS support to the Pro API for the local web origin, and synchronize Pro docs/evidence.",
   "preset": "generic",
-  "createdAt": "2026-04-24T04:57:35.074Z",
+  "createdAt": "2026-04-24T09:32:38.145Z",
   "allowedPaths": [
     "pro/",
     "docs/PROJECT_STATE.md",
@@ -64,10 +64,10 @@
   ],
   "session": {
     "version": 1,
-    "sessionId": "5892ec25-2b34-4131-9acd-0dc0c9a7aa41",
-    "createdAt": "2026-04-24T04:57:35.073Z",
+    "sessionId": "9914f319-2b3d-4a29-929c-31be2ca20b41",
+    "createdAt": "2026-04-24T09:32:38.144Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Implement Pro in-memory run creation and storage: add a create-run request/builder in the Rust domain crate, add API state plus POST /api/runs while keeping list/detail/graph backed by the in-memory store, and synchronize Pro docs/evidence.",
+    "taskRequest": "Wire the Pro graph-first web shell to the Rust API create/list/detail/graph flow: add browser-side create-run controls and graph rendering from API payloads, add minimal CORS support to the Pro API for the local web origin, and synchronize Pro docs/evidence.",
     "contractSource": "preset-defaults",
     "selectedFiles": [],
     "changedFiles": [],

@@ -590,3 +590,81 @@ This task continues active Pro implementation on `codex/pro-rust-product-core`. 
 - Runs are not durable and disappear when the Pro API process exits.
 - The Pro web shell still renders the canonical sample directly instead of creating runs through the API.
 - Provider/search routing, cooldown buckets, workspace quotas, auth, and persistence remain future Pro work.
+
+## 2026-04-24 Pro Product Core Slice 3
+
+This task wires the graph-first Pro web shell to the Rust API create/list/detail/graph flow. It keeps OSS runtime paths untouched and does not add live provider/search credentials.
+
+### Files Updated
+
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added minimal local CORS handling to the Pro API so the separate Pro web port can call `GET /api/runs`, `POST /api/runs`, `GET /api/runs/{run_id}`, and `GET /api/runs/{run_id}/graph` during local alpha development.
+- Added a Pro web create-run console with a question textarea, optional title, saved-run picker, and status text.
+- Added browser-side run loading that calls the Pro API detail and graph endpoints, then refreshes the graph cards, wires, evidence anchors, source pulse, challenge checks, focus queue, and payload drawer from the API payload.
+- Kept the web shell graph-first and avoided inheriting the OSS evidence-board layout.
+- Updated Pro project-state and architecture docs to mark web/API create-run interaction as implemented and move the next step to provider/search quota ownership and durable run storage.
+
+### Commands Run
+
+- `agent-guardrails plan ...`
+  - Result: contract refreshed for the Pro web/API wiring slice.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - First result: failed because the edited Rust files needed standard `rustfmt` line wrapping.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed after adding the web/API wiring.
+  - API tests: `7 passed`.
+  - Domain tests: `7 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Final result: passed after applying `rustfmt`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Pro browser smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8793`.
+  - Started `retrocause-pro-web.exe` on `127.0.0.1:3018` with `PRO_API_BASE=http://127.0.0.1:8793`.
+  - Opened the Pro web shell with Playwright/Chromium.
+  - Submitted the create-run form.
+  - Result: page displayed title `Browser-created smoke run`, graph updated to `3` created-run nodes, and status showed `Loaded run_local_000001`.
+
+- `npm test`
+  - Result: passed.
+  - Included frontend lint/build, `python -m ruff check retrocause/`, full pytest, and browser E2E.
+  - Pytest result: `321 collected`, all passed.
+  - E2E result: `609 passed`, `1 skipped`, `0 failed`.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with no blocking errors.
+  - Score: `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. The state doc was intentionally synchronized with the implemented Pro web/API create-run flow and next-step queue.
+  - Non-blocking warning: `pro/apps/api/src/main.rs` is an interface-changing file. This slice intentionally changes the local Pro API surface by adding local CORS and enabling `POST /api/runs` consumption from the browser shell; it is not an OSS API change and remains keyless/no-auth local alpha plumbing.
+
+### Risk / Tradeoff Notes
+
+- Security: no auth, secrets, provider credentials, BYOK fields, or hosted calls were added. The CORS headers are permissive local-alpha plumbing for a keyless/no-auth local API and should be replaced before any hosted deployment.
+- Dependencies: no new packages, lockfile changes, or version upgrades were introduced.
+- Performance: browser-side DOM refresh is bounded by the small Pro run payload and makes only list/detail/graph API calls. This is appropriate for the current alpha shell but not the final high-interaction graph client.
+- Understanding: the main tradeoff is using a small server-rendered page plus vanilla browser script to prove the run loop now, rather than introducing a full Rust client/hydration stack before persistence and provider routing are defined.
+- Continuity: this reuses the existing Axum API, Maud web shell, shared domain payload, and in-memory store. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- Runs are still process-local and disappear when the Pro API exits.
+- The API has no auth/tenant boundary yet.
+- The CORS behavior is not production-ready.
+- Provider/search routing, quota ownership enforcement, cooldown buckets, persistence, and richer graph interaction remain future Pro work.

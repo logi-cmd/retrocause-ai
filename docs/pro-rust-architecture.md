@@ -13,7 +13,7 @@ The Rust rewrite lives under `pro/` inside this repository so the product and ar
 1. Establish a clean Rust workspace boundary.
 2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, and usage ledger entries.
 3. Stand up API endpoints that expose run summaries, run detail, graph payloads, and in-memory run creation.
-4. Render a graph-first web shell from the same shared Rust payload.
+4. Render a graph-first web shell from the same shared Rust payload and wire it to the local API create/read flow.
 5. Keep Pro separate from the OSS Python/FastAPI + Next.js runtime.
 
 ## Workspace layout
@@ -83,10 +83,11 @@ Initial responsibility:
 - `POST /api/runs`
 - `GET /api/runs/{run_id}`
 - `GET /api/runs/{run_id}/graph`
+- minimal local CORS headers for the separate Pro web port
 - process-local in-memory run storage shared by list/detail/graph reads
 - future home for durable run status, queue control, and saved-run access
 
-The current store is intentionally in-memory. It is useful for proving the API behavior and graph payload contract, but it is not durable storage and should not be treated as a hosted Pro data layer.
+The current store is intentionally in-memory. It is useful for proving the API behavior and graph payload contract, but it is not durable storage and should not be treated as a hosted Pro data layer. The CORS behavior is likewise local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -94,6 +95,8 @@ Initial responsibility:
 
 - render the graph-first Pro workspace
 - visualize the canonical run, including evidence anchors, challenge checks, source health, and usage ledger state
+- create new in-memory runs through `POST /api/runs`
+- reload run summaries, run detail, and graph payloads from the Pro API
 - establish layout, palette, and information hierarchy for the knowledge-graph experience
 
 ## Future crates after the kickoff
@@ -147,6 +150,8 @@ The Pro UI should feel like a graph command room, not a generic SaaS dashboard a
 
 The kickoff web shell encodes that direction with a static graph workspace, while leaving advanced interaction for later.
 
+The current web shell is still intentionally lightweight: server-rendered HTML plus a small browser script for local API calls and DOM refresh. It is enough to prove the Pro run loop without committing to the eventual interactive graph client stack.
+
 ## Verification for this kickoff
 
 - `cargo test --manifest-path pro/Cargo.toml`
@@ -157,3 +162,5 @@ The in-memory run-creation slice also uses:
 
 - `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
 - `cargo test --manifest-path pro/Cargo.toml`
+
+The web/API wiring slice additionally uses a local browser smoke that starts `retrocause-pro-api.exe` and `retrocause-pro-web.exe`, submits the web create-run form, and verifies that the page reloads the API graph payload for the created run.
