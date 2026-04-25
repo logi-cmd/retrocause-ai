@@ -57,7 +57,7 @@ This is a deliberate tradeoff:
 
 If the graph workspace proves out, the next phase can move the web shell toward Leptos or another Rust-heavy client strategy without changing the domain model or API boundary.
 
-The active visual direction is captured in the root `DESIGN.md`. It adapts a stark monochrome, futuristic system to the Pro product without copying or implying any external brand affiliation: black canvas, spectral-white text, uppercase DIN-like typography, transparent HUD controls, ghost buttons, no remote imagery, no new font dependency, no dashboard gradients, and no decorative card stack. Because Pro is an operator workspace rather than a marketing homepage, the graph itself acts as the cinematic scene; the surrounding inputs and safety boundaries are kept as mission-control HUD surfaces so existing preview-only controls remain usable.
+The active visual direction is captured in the root `DESIGN.md`, with the awesome-design-md xAI entry used as the current reference point. It adapts a stark monochrome, futuristic system to the Pro product without copying or implying any external brand affiliation: black canvas, spectral-white text, uppercase DIN-like telemetry, transparent HUD controls, ghost buttons, no remote imagery, no new font dependency, no dashboard gradients, and no decorative card stack. Because Pro is an operator workspace rather than a marketing homepage, the dialogue box is the first action, the graph itself acts as the cinematic star-map scene, and the surrounding inputs and safety boundaries remain mission-control HUD surfaces so existing preview-only controls stay usable.
 
 ## Shared domain
 
@@ -602,6 +602,13 @@ The `DESIGN.md` Pro shell redesign slice adds:
 - `cargo test --manifest-path pro/Cargo.toml`
 - `cargo build --manifest-path pro/Cargo.toml`
 - a browser smoke that starts the Pro API and web shell, loads `http://127.0.0.1:3007/`, captures the redesigned shell, and verifies the graph remains visible while existing preview-only controls still render without provider calls, credential fields, worker execution, quota/billing mutation, or new dependencies
+
+The awesome-design-md xAI-style effects slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- a browser smoke that starts the Pro API and web shell, loads `http://127.0.0.1:3007/`, captures the enhanced shell, verifies the dialogue box and star-map layers render, checks graph nodes remain visible, and confirms no credential fields, provider execution, worker execution, quota/billing mutation, console errors, or new dependencies are introduced
 
 The pre-execution boundary slice adds:
 

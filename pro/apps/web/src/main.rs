@@ -57,23 +57,24 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                             }
                         }
 
-                        div class="question-band" {
+                        div class="question-band dialogue-box" {
+                            div class="dialogue-glint" aria-hidden="true" {}
                             p class="eyebrow" { "Ask RetroCause" }
                             h2 id="run-title" { (run.title.as_str()) }
                             p id="run-question" { (run.question.as_str()) }
                             strong id="run-headline" { (run.operator_summary.headline.as_str()) }
-                            form id="run-create-form" class="run-console" {
-                                label for="run-question-input" { "Start with a causal question" }
-                                textarea id="run-question-input" name="question" rows="3" required="" {
+                            form id="run-create-form" class="run-console dialogue-console" {
+                                label for="run-question-input" { "Ask a causal question" }
+                                textarea id="run-question-input" name="question" rows="5" required="" {
                                     "Why did server storage demand suddenly tighten this week?"
                                 }
                                 div class="create-grid" {
                                     input id="run-title-input" name="title" type="text" placeholder="Optional run title";
-                                    button type="submit" { "Create run" }
+                                    button type="submit" { "Map causes" }
                                 }
                                 div class="create-grid" {
                                     select id="run-picker" aria-label="Saved Pro runs" {}
-                                    button id="load-run-button" type="button" { "Load run" }
+                                    button id="load-run-button" type="button" { "Open run" }
                                 }
                                 p id="run-action-status" class="console-status" { "API: " (api_base) }
                             }
@@ -136,6 +137,9 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                         }
 
                         div class="graph-viewport" {
+                            div class="starfield-layer starfield-layer--far" aria-hidden="true" {}
+                            div class="starfield-layer starfield-layer--near" aria-hidden="true" {}
+                            div class="cinematic-scan" aria-hidden="true" {}
                             div class="axis-line axis-line--x" {}
                             div class="axis-line axis-line--y" {}
                             svg
@@ -529,15 +533,20 @@ fn render_edge(run: &ProRun, edge: &GraphEdge) -> Markup {
     let path = wire_path(source, target);
     let label_x = (source.x + target.x) / 2;
     let label_y = (source.y + target.y) / 2;
+    let wire_delay_ms =
+        (u32::from(source.x) + u32::from(source.y) + u32::from(target.x) + u32::from(target.y))
+            % 360;
 
     html! {
-        path class="wire-shadow" d=(path.clone()) {}
-        path class="wire" d=(path) {}
+        path class="wire-shadow" d=(path.clone()) style=(format!("--wire-delay:{}ms;", wire_delay_ms)) {}
+        path class="wire" d=(path) style=(format!("--wire-delay:{}ms;", wire_delay_ms)) {}
         text class="wire-label" x=(label_x) y=(label_y) { (edge.label.as_str()) }
     }
 }
 
 fn render_node(node: &GraphNode, selected: bool) -> Markup {
+    let node_delay_ms = (u32::from(node.x) + u32::from(node.y)) % 320;
+    let node_glow_px = 12 + (node.confidence * 10.0).round() as u8;
     html! {
         article
             class=(format!(
@@ -549,7 +558,10 @@ fn render_node(node: &GraphNode, selected: bool) -> Markup {
             role="button"
             tabindex="0"
             aria-label=(format!("Inspect {}", node.title))
-            style=(format!("left:{}px; top:{}px;", node.x, node.y))
+            style=(format!(
+                "left:{}px; top:{}px; --node-delay:{}ms; --node-glow:{}px;",
+                node.x, node.y, node_delay_ms, node_glow_px
+            ))
         {
             div class="node-head" {
                 p class="node-kind" { (node_kind_label(node.kind)) }
@@ -735,15 +747,18 @@ fn client_script() -> &'static str {
       const path = wirePath(source, target);
       const labelX = Math.round((Number(source.x) + Number(target.x)) / 2);
       const labelY = Math.round((Number(source.y) + Number(target.y)) / 2);
+      const wireDelay = Math.round((
+        Number(source.x) + Number(source.y) + Number(target.x) + Number(target.y)
+      ) % 360);
       return `
-        <path class="wire-shadow" d="${escapeHtml(path)}"></path>
-        <path class="wire" d="${escapeHtml(path)}"></path>
+        <path class="wire-shadow" d="${escapeHtml(path)}" style="--wire-delay:${wireDelay}ms;"></path>
+        <path class="wire" d="${escapeHtml(path)}" style="--wire-delay:${wireDelay}ms;"></path>
         <text class="wire-label" x="${labelX}" y="${labelY}">${escapeHtml(edge.label)}</text>
       `;
     }).join("");
 
     nodes.innerHTML = graph.nodes.map((node) => `
-      <article class="graph-node ${escapeHtml(readable(node.kind).replaceAll(" ", "-"))}${node.id === activeNodeId ? " is-selected" : ""}" data-node-id="${escapeHtml(node.id)}" role="button" tabindex="0" aria-label="Inspect ${escapeHtml(node.title)}" style="left:${Number(node.x) || 0}px; top:${Number(node.y) || 0}px;">
+      <article class="graph-node ${escapeHtml(readable(node.kind).replaceAll(" ", "-"))}${node.id === activeNodeId ? " is-selected" : ""}" data-node-id="${escapeHtml(node.id)}" role="button" tabindex="0" aria-label="Inspect ${escapeHtml(node.title)}" style="left:${Number(node.x) || 0}px; top:${Number(node.y) || 0}px; --node-delay:${Math.round(((Number(node.x) || 0) + (Number(node.y) || 0)) % 320)}ms; --node-glow:${12 + Math.round((Number(node.confidence) || 0) * 10)}px;">
         <div class="node-head">
           <p class="node-kind">${escapeHtml(readable(node.kind))}</p>
           <span>${percent(node.confidence)}</span>
@@ -2642,6 +2657,42 @@ fn client_script() -> &'static str {
     );
   }
 
+  function installCinematicPointer() {
+    const surface = document.querySelector(".graph-viewport");
+    if (!surface) return;
+    let frame = null;
+
+    const setSurfaceFocus = (clientX, clientY) => {
+      const rect = surface.getBoundingClientRect();
+      const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        surface.style.setProperty("--light-x", `${Math.round(x * 100)}%`);
+        surface.style.setProperty("--light-y", `${Math.round(y * 100)}%`);
+        surface.style.setProperty("--star-shift-x", `${Math.round((x - 0.5) * -18)}px`);
+        surface.style.setProperty("--star-shift-y", `${Math.round((y - 0.5) * -12)}px`);
+        surface.style.setProperty("--star-near-shift-x", `${Math.round((x - 0.5) * 26)}px`);
+        surface.style.setProperty("--star-near-shift-y", `${Math.round((y - 0.5) * 18)}px`);
+      });
+    };
+
+    surface.addEventListener("pointermove", (event) => {
+      setSurfaceFocus(event.clientX, event.clientY);
+    });
+    surface.addEventListener("pointerleave", () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        surface.style.setProperty("--light-x", "50%");
+        surface.style.setProperty("--light-y", "44%");
+        surface.style.setProperty("--star-shift-x", "0px");
+        surface.style.setProperty("--star-shift-y", "0px");
+        surface.style.setProperty("--star-near-shift-x", "0px");
+        surface.style.setProperty("--star-near-shift-y", "0px");
+      });
+    });
+  }
+
   byId("run-create-form")?.addEventListener("submit", (event) => {
     createRun(event).catch((error) => setStatus(`API error: ${error.message}`));
   });
@@ -2731,6 +2782,7 @@ fn client_script() -> &'static str {
   renderStoragePlan(null);
   renderCredentialVaultBoundary(null);
   renderQuotaLedgerBoundary(null);
+  installCinematicPointer();
   fetchJson("/api/workspace/access-context")
     .then(renderWorkspaceAccess)
     .catch(() => {
@@ -2948,6 +3000,13 @@ fn styles() -> &'static str {
   --danger: rgba(255, 116, 92, 0.9);
   --ready: rgba(180, 255, 210, 0.88);
   --cached: rgba(190, 220, 255, 0.82);
+  --ease-cinema: cubic-bezier(0.16, 1, 0.3, 1);
+  --light-x: 50%;
+  --light-y: 44%;
+  --star-shift-x: 0px;
+  --star-shift-y: 0px;
+  --star-near-shift-x: 0px;
+  --star-near-shift-y: 0px;
 }
 
 * { box-sizing: border-box; }
@@ -3068,19 +3127,57 @@ body {
 
 .question-band {
   grid-area: question;
+  position: relative;
   align-self: stretch;
   justify-self: stretch;
   z-index: 2;
   min-height: 0;
   min-width: 0;
   max-height: 100%;
-  overflow: auto;
-  padding: 24px;
+  overflow: hidden auto;
+  padding: 26px 24px 24px;
   display: grid;
   gap: 14px;
   align-content: start;
-  background: rgba(0, 0, 0, 0.58);
-  animation: cinematic-enter 760ms ease-out both;
+  background:
+    linear-gradient(145deg, rgba(240, 240, 250, 0.08), rgba(0, 0, 0, 0.08) 42%),
+    rgba(0, 0, 0, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(240, 240, 250, 0.18),
+    inset 0 -1px 0 rgba(240, 240, 250, 0.08);
+  animation: cinematic-enter 820ms var(--ease-cinema) both;
+}
+
+.dialogue-box::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(240, 240, 250, 0.8), transparent);
+  opacity: 0.72;
+}
+
+.dialogue-box::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(115deg, transparent 0 34%, rgba(240, 240, 250, 0.13) 42%, transparent 52%);
+  transform: translateX(-130%);
+  animation: cinematic-sheen 1.9s var(--ease-cinema) 260ms both;
+}
+
+.dialogue-glint {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  width: 9px;
+  height: 9px;
+  border: 1px solid rgba(240, 240, 250, 0.5);
+  border-radius: 50%;
+  background: rgba(240, 240, 250, 0.86);
+  box-shadow: 0 0 22px rgba(240, 240, 250, 0.34);
 }
 
 .run-console {
@@ -3108,6 +3205,20 @@ body {
   text-transform: none;
   letter-spacing: 0.02em;
   resize: vertical;
+  transition: border-color 180ms var(--ease-cinema), background 180ms var(--ease-cinema), transform 180ms var(--ease-cinema);
+}
+
+.dialogue-console textarea {
+  min-height: 142px;
+  line-height: 1.35;
+}
+
+.run-console textarea:focus,
+.run-console input:focus,
+.run-console select:focus {
+  border-color: rgba(240, 240, 250, 0.68);
+  background: rgba(240, 240, 250, 0.085);
+  transform: translateY(-1px);
 }
 
 button,
@@ -3125,6 +3236,7 @@ button,
   min-height: 42px;
   padding: 10px 16px;
   text-transform: uppercase;
+  transition: background 180ms var(--ease-cinema), border-color 180ms var(--ease-cinema), transform 180ms var(--ease-cinema);
 }
 
 button:hover,
@@ -3162,12 +3274,12 @@ summary:focus-visible,
 .graph-viewport {
   grid-area: graph;
   position: relative;
-  overflow: auto;
+  overflow: hidden;
   min-height: 0;
   min-width: 0;
   border-radius: 4px;
   background:
-    radial-gradient(circle at 50% 42%, rgba(240, 240, 250, 0.17), transparent 18rem),
+    radial-gradient(circle at var(--light-x) var(--light-y), rgba(240, 240, 250, 0.22), transparent 19rem),
     radial-gradient(circle at 28% 24%, rgba(240, 240, 250, 0.18) 0 1px, transparent 2px),
     radial-gradient(circle at 82% 70%, rgba(240, 240, 250, 0.14) 0 1px, transparent 2px),
     linear-gradient(90deg, rgba(240, 240, 250, 0.045) 1px, transparent 1px),
@@ -3175,12 +3287,72 @@ summary:focus-visible,
     var(--space-black);
   background-size: auto, 120px 120px, 180px 180px, 72px 72px, 72px 72px, auto;
   border: 1px solid rgba(240, 240, 250, 0.22);
-  animation: cinematic-enter 920ms ease-out both;
+  animation: cinematic-enter 920ms var(--ease-cinema) both;
+  transition: background 260ms var(--ease-cinema);
+}
+
+.graph-viewport::before,
+.graph-viewport::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.graph-viewport::before {
+  background: radial-gradient(circle at 50% 48%, transparent 0 38%, rgba(0, 0, 0, 0.36) 72%, rgba(0, 0, 0, 0.68));
+}
+
+.graph-viewport::after {
+  background: linear-gradient(120deg, transparent 0 42%, rgba(240, 240, 250, 0.11) 47%, transparent 58%);
+  mix-blend-mode: screen;
+  transform: translateX(-120%);
+  animation: orbital-scan 2.8s var(--ease-cinema) 380ms both;
+}
+
+.starfield-layer,
+.cinematic-scan {
+  position: absolute;
+  inset: -8%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.starfield-layer--far {
+  background:
+    radial-gradient(circle, rgba(240, 240, 250, 0.38) 0 1px, transparent 1.8px) 0 0 / 96px 96px,
+    radial-gradient(circle, rgba(240, 240, 250, 0.24) 0 1px, transparent 1.7px) 48px 32px / 140px 140px;
+  opacity: 0.54;
+  transform: translate3d(var(--star-shift-x), var(--star-shift-y), 0);
+  transition: transform 260ms var(--ease-cinema);
+}
+
+.starfield-layer--near {
+  background:
+    radial-gradient(circle, rgba(240, 240, 250, 0.72) 0 1px, transparent 2px) 24px 18px / 180px 180px,
+    radial-gradient(circle, rgba(240, 240, 250, 0.4) 0 1px, transparent 2px) 82px 70px / 240px 240px;
+  opacity: 0.5;
+  transform: translate3d(var(--star-near-shift-x), var(--star-near-shift-y), 0);
+  transition: transform 300ms var(--ease-cinema);
+}
+
+.cinematic-scan {
+  inset: 0;
+  z-index: 2;
+  background:
+    linear-gradient(90deg, transparent, rgba(240, 240, 250, 0.12), transparent),
+    linear-gradient(0deg, rgba(240, 240, 250, 0.03) 1px, transparent 1px);
+  background-size: 44% 100%, 100% 18px;
+  opacity: 0.42;
+  transform: translateX(-58%);
+  animation: star-scan 2.4s var(--ease-cinema) 160ms both;
 }
 
 .axis-line {
   position: absolute;
   background: rgba(240, 240, 250, 0.22);
+  z-index: 2;
 }
 
 .axis-line--x {
@@ -3203,6 +3375,7 @@ summary:focus-visible,
   top: 0;
   width: 1220px;
   height: 720px;
+  z-index: 3;
 }
 
 #graph-nodes {
@@ -3210,6 +3383,7 @@ summary:focus-visible,
   inset: 0;
   width: 1220px;
   height: 720px;
+  z-index: 4;
 }
 
 .wire-shadow {
@@ -3217,6 +3391,9 @@ summary:focus-visible,
   stroke: rgba(0, 0, 0, 0.7);
   stroke-width: 5;
   stroke-linecap: round;
+  stroke-dasharray: 780;
+  stroke-dashoffset: 780;
+  animation: wire-draw 1.25s var(--ease-cinema) var(--wire-delay, 0ms) forwards;
 }
 
 .wire {
@@ -3224,6 +3401,10 @@ summary:focus-visible,
   stroke: rgba(240, 240, 250, 0.66);
   stroke-width: 1.8;
   stroke-linecap: round;
+  stroke-dasharray: 780;
+  stroke-dashoffset: 780;
+  filter: drop-shadow(0 0 5px rgba(240, 240, 250, 0.16));
+  animation: wire-draw 1.25s var(--ease-cinema) var(--wire-delay, 0ms) forwards;
 }
 
 .wire-label {
@@ -3245,8 +3426,11 @@ summary:focus-visible,
   color: var(--spectral);
   cursor: pointer;
   background: rgba(5, 5, 5, 0.76);
-  transition: transform 160ms ease-out, border-color 160ms ease-out, background 160ms ease-out;
-  animation: star-node-enter 680ms ease-out both;
+  box-shadow:
+    inset 0 0 0 1px rgba(240, 240, 250, 0.04),
+    0 20px 60px rgba(0, 0, 0, 0.26);
+  transition: transform 220ms var(--ease-cinema), border-color 220ms var(--ease-cinema), background 220ms var(--ease-cinema), opacity 220ms var(--ease-cinema);
+  animation: star-node-enter 860ms var(--ease-cinema) var(--node-delay, 0ms) both;
   overflow-wrap: anywhere;
 }
 
@@ -3259,6 +3443,7 @@ summary:focus-visible,
   height: 8px;
   border-radius: 50%;
   background: var(--spectral);
+  box-shadow: 0 0 var(--node-glow, 16px) rgba(240, 240, 250, 0.48);
 }
 
 .graph-node::after {
@@ -3279,7 +3464,7 @@ summary:focus-visible,
 }
 
 .graph-node:hover {
-  transform: translateY(-3px) scale(1.012);
+  transform: translateY(-5px) scale(1.018);
   border-color: rgba(240, 240, 250, 0.58);
   background: rgba(240, 240, 250, 0.075);
 }
@@ -3287,6 +3472,10 @@ summary:focus-visible,
 .graph-node.is-selected {
   border-color: var(--spectral);
   background: rgba(240, 240, 250, 0.12);
+  box-shadow:
+    inset 0 0 0 1px rgba(240, 240, 250, 0.18),
+    0 0 0 1px rgba(240, 240, 250, 0.22),
+    0 24px 78px rgba(240, 240, 250, 0.08);
 }
 
 .node-head,
@@ -3850,7 +4039,7 @@ p {
 @keyframes cinematic-enter {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(18px) scale(0.992);
   }
   to {
     opacity: 1;
@@ -3858,10 +4047,39 @@ p {
   }
 }
 
+@keyframes cinematic-sheen {
+  from { transform: translateX(-130%); opacity: 0; }
+  42% { opacity: 0.72; }
+  to { transform: translateX(130%); opacity: 0; }
+}
+
+@keyframes orbital-scan {
+  from { transform: translateX(-120%); opacity: 0; }
+  38% { opacity: 0.42; }
+  to { transform: translateX(120%); opacity: 0; }
+}
+
+@keyframes star-scan {
+  from { transform: translateX(-58%); opacity: 0; }
+  48% { opacity: 0.42; }
+  to { transform: translateX(58%); opacity: 0.18; }
+}
+
+@keyframes wire-draw {
+  from {
+    stroke-dashoffset: 780;
+    opacity: 0.08;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
 @keyframes star-node-enter {
   from {
     opacity: 0;
-    transform: translateY(10px) scale(0.96);
+    transform: translateY(16px) scale(0.94);
   }
   to {
     opacity: 1;
@@ -3917,10 +4135,19 @@ mod tests {
         assert!(page.contains("Arial Narrow"));
         assert!(page.contains("Causal star map"));
         assert!(page.contains("Ask RetroCause"));
+        assert!(page.contains("Ask a causal question"));
+        assert!(page.contains("Map causes"));
+        assert!(page.contains("starfield-layer"));
+        assert!(page.contains("cinematic-scan"));
         assert!(page.contains("grid-template-areas"));
         assert!(page.contains("rgba(240, 240, 250, 0.08)"));
         assert!(page.contains("cinematic-enter"));
+        assert!(page.contains("cinematic-sheen"));
+        assert!(page.contains("orbital-scan"));
+        assert!(page.contains("wire-draw"));
         assert!(page.contains("star-node-enter"));
+        assert!(page.contains("--node-glow"));
+        assert!(page.contains("installCinematicPointer"));
         assert!(!page.contains("--accent"));
         assert!(page.contains("graph-viewport"));
         assert!(page.contains("node-inspector"));

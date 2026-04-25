@@ -2,7 +2,7 @@
 
 ## Task
 
-Redesign the Pro Rust web shell into a premium graph-first command-room interface using the root `DESIGN.md` direction, while preserving every existing preview-only Pro API/action boundary and avoiding OSS runtime changes.
+Enhance the Pro Rust web shell with an awesome-design-md xAI-inspired visual/effects pass: dialogue-box-first homepage, star-map knowledge graph, and smooth cinematic UI motion while preserving all existing preview-only execution boundaries.
 
 ## Scope
 
@@ -15,17 +15,27 @@ Redesign the Pro Rust web shell into a premium graph-first command-room interfac
 
 ## What Changed
 
-- Added `DESIGN.md` as the local Pro visual source and clarified its RetroCause adaptation rules: graph as the scene, HUD rails around it, no brand affiliation, no remote assets, no new dependencies, and no hosted-execution implication.
-- Restyled the Pro web shell from the earlier generic panel stack into a black/spectral-white mission-control surface with uppercase DIN-like typography, ghost controls, and an inline local SVG graph mark.
-- Reframed the page around a causal question entry and central `Causal star map` graph, with source, quota, inspector, evidence, execution, and command rails arranged around the graph.
-- Fixed the first browser-smoke layout defect where grid auto rows let execution/evidence content collapse the graph viewport to 12px; the rails now use bounded grid tracks and local scrolling so the graph remains visible.
-- Preserved existing JavaScript/API wiring, graph selection behavior, provider/queue/admission/intent/storage/vault/quota/event/review panels, and preview-only denials.
-- Updated project docs to record the current `DESIGN.md` visual direction and to keep Pro scoped as a separate Rust line.
+- Updated `DESIGN.md` to name the awesome-design-md xAI reference as visual inspiration only, not affiliation, and to document the dialogue-first, star-map, low-cost cinematic-motion rules.
+- Strengthened the Pro homepage dialogue surface:
+  - label changed to `Ask a causal question`
+  - primary action changed to `Map causes`
+  - larger prompt textarea and subtle monochrome dialogue glint/sheen
+- Enhanced the graph field as a star map:
+  - two starfield layers
+  - one cinematic scan layer
+  - pointer-driven star parallax through CSS custom properties
+  - wire-draw reveal using stroke dash offsets
+  - staggered node entrance and selected-node glow
+- Preserved the existing server-rendered Maud structure, inline browser script pattern, graph selection behavior, API fetch paths, and preview-only provider/queue/admission/intent/storage/vault/quota/event/review panels.
+- Updated project-state and Pro architecture docs so the new visual/effects direction stays synchronized with current Pro behavior.
 
 ## Commands Run
 
+- `cargo fmt --manifest-path pro/Cargo.toml --all`
+  - Result: applied one mechanical Rust formatting change after `cargo fmt --check` identified line wrapping.
+
 - `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
-  - Result: passed.
+  - Result: passed after formatting.
 
 - `cargo test --manifest-path pro/Cargo.toml`
   - Result: passed.
@@ -42,48 +52,49 @@ Redesign the Pro Rust web shell into a premium graph-first command-room interfac
 
 - Pro browser smoke for `http://127.0.0.1:3007/`
   - Started `retrocause-pro-api.exe` and `retrocause-pro-web.exe` with temporary `.tmp/pro-smoke` run/event stores.
-  - Playwright loaded the Pro shell, waited for graph nodes, captured `D:\opencode\retrocause-ai\.tmp\previews\pro-design-md-shell.png`, and verified:
+  - Playwright loaded the Pro shell, moved the pointer over the graph, captured `D:\opencode\retrocause-ai\.tmp\previews\pro-xai-cinematic-shell.png`, and verified:
     - title: `RetroCause Pro`
     - heading: `Causal star map`
     - question rail label: `Ask RetroCause`
+    - prompt label: `Ask a causal question`
+    - CTA: `Map causes`
+    - star layers: `2`
+    - scan layers: `1`
+    - graph wires: `5`
     - graph nodes: `6`
     - visible central nodes: `6`
     - graph viewport: `1174 x 734.4375`
-    - graph nodes do not overlap the question rail
+    - pointer cinematic variables changed from their defaults
     - no console errors
     - no secret-shaped key/secret/token/password fields rendered
-  - Initial result: failed because the graph viewport had collapsed to `12px` tall.
-  - Fix: bounded grid rows, added `min-height: 0` / `min-width: 0` to HUD rails, and reduced node width to keep the star map visible.
-  - Final result: passed.
 
 - `git diff --check`
   - Result: passed. Git only emitted expected CRLF conversion warnings for touched text/Rust files.
 
-- Sensitive-token scan across the changed task files
+- Sensitive-token scan across changed task files
   - Result: passed. No `sk-*`-style secrets or JWT-shaped tokens were found.
 
 - Local process cleanup check
   - Result: passed. No `retrocause-pro-api` or `retrocause-pro-web` processes remained after browser smoke.
 
 - `agent-guardrails check --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
-  - Initial result after the first UI commit: blocked.
-  - Cause: the task contract allowed implementation/docs/tests/guardrails changes, but the guardrails classifier labeled the Pro web-shell Rust file as an interface/other change.
-  - Fix: updated the task contract to explicitly allow `interface` and `other` for this UI-only web-shell redesign.
-  - Final result after contract correction: passed with score `90/100 (safe-to-deploy)`.
+  - Pre-commit result: passed with score `90/100 (safe-to-deploy)`.
+  - Post-commit result: passed with score `90/100 (safe-to-deploy)`.
   - Non-blocking warnings:
     - The task spans 4 top-level areas: `.agent-guardrails`, `DESIGN.md`, `docs`, and `pro`.
     - `docs/PROJECT_STATE.md` changed as a state file.
-  - Disposition: both warnings are intentional for this task because the user asked to use/synchronize `DESIGN.md`, the Pro web shell changed, docs had to stay synchronized, and the guardrails evidence/contract had to reflect the final scope.
+  - Disposition: both warnings are intentional because the user requested an awesome-design-md visual pass, the local design source changed, the Pro web shell changed, docs had to stay synchronized, and evidence/contract had to reflect the final scope.
 
 ## Risk / Tradeoff Notes
 
-- This is a Pro web-shell visual/interaction redesign only. It does not change backend domain behavior, API routes, provider routing, queue semantics, storage, credentials, billing, workers, or OSS runtime.
-- The design remains server-rendered Rust/Maud plus the existing inline script. No Rust, npm, Python, icon, font, image, or remote asset dependencies were added.
-- The UI still exposes many preview-only panels because the current Pro product is boundary-first; this pass improves hierarchy and framing but does not remove the underlying unfinished hosted gates.
-- The browser smoke uses a desktop viewport. The CSS keeps a single-column fallback below `1080px`, but deeper mobile design remains a later Pro UX task.
+- This is a Pro web-shell visual/effects pass only. It does not change backend domain behavior, API routes, provider routing, queue semantics, storage, credentials, billing, workers, or OSS runtime.
+- No Rust, npm, Python, icon, font, image, video, JavaScript framework, remote asset, provider, credential, or payment dependencies were added.
+- Motion is deliberately low-cost: CSS opacity/transform/stroke animation plus pointer-driven CSS variables. It respects `prefers-reduced-motion` through the existing global motion override.
+- The xAI reference is treated as style inspiration only. The UI keeps RetroCause identity and does not claim or imply external affiliation.
+- The UI still exposes many preview-only panels because the current Pro product is boundary-first; this pass improves cinematic hierarchy and graph feel without enabling hosted execution.
 
 ## Remaining Risks
 
 - Real hosted Pro is still not enabled. Tenant auth, vault handles, quota reservations, durable intent persistence, worker leases, provider calls, billing mutation, and result commits remain blocked or preview-only.
-- The graph is still a static positioned star map. Dragging, zoom persistence, collision avoidance, and deeper graph review interactions remain future client-work.
-- Guardrails passed. Remaining warnings are intentional documentation/guardrails scope warnings, not blocking implementation errors.
+- The graph remains a static positioned star map. Dragging, zoom persistence, collision avoidance, and deeper graph review interactions remain future client-work.
+- Guardrails passed for this visual-effects commit. Remaining warnings are intentional documentation/guardrails scope warnings, not blocking implementation errors.

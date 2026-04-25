@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "task": "Redesign the Pro Rust web shell frontend into a premium DESIGN.md-inspired command-room interface. Keep the homepage centered on a question entry and cinematic knowledge-graph star map, reuse existing Pro API/client patterns, update DESIGN.md, docs/PROJECT_STATE.md, docs/pro-rust-architecture.md, and .agent-guardrails evidence, and do not change OSS runtime or add credentials/provider execution.",
+  "task": "Enhance the Pro Rust web shell with the awesome-design-md xAI-inspired monochrome style, a stronger homepage dialogue box, a star-map knowledge graph, and smooth cinematic UI effects. Reuse existing Pro API/client patterns, update DESIGN.md, docs/PROJECT_STATE.md, docs/pro-rust-architecture.md, and .agent-guardrails evidence, and do not change OSS runtime or add credentials/provider execution.",
   "preset": "generic",
   "createdAt": "2026-04-25T16:53:01.207Z",
   "allowedPaths": [
@@ -47,15 +47,15 @@
   ],
   "acknowledgedSkips": [],
   "patternSummary": "Pro web is a single server-rendered Rust/Maud page with CSS and a small inline script. Keep API and domain payloads unchanged; improve layout, visual hierarchy, graph-first composition, and panel organization.",
-  "smallestViableChange": "Restyle and reorganize the existing Pro web shell into a premium DESIGN.md-inspired graph-first command room while preserving all existing endpoints/actions.",
+  "smallestViableChange": "Enhance the existing Pro web shell with a more dialogue-first xAI-inspired monochrome surface, star-map graph depth, and low-cost cinematic motion while preserving all existing endpoints/actions.",
   "assumptions": [
     "The active task is Pro frontend redesign only.",
-    "DESIGN.md is the local design source: stark black, spectral white, D-DIN/DIN-style uppercase typography, ghost controls, and cinematic full-field composition; the UI must not imply affiliation with any referenced brand.",
+    "DESIGN.md plus the awesome-design-md xAI reference are the local design source: stark black, spectral white, mono/Universal Sans feel, uppercase telemetry, ghost controls, and cinematic full-field composition; the UI must not imply affiliation with any referenced brand.",
     "The knowledge graph remains the primary surface."
   ],
   "acceptanceCriteria": [
     "The Pro web shell still renders every existing graph, run, provider, queue, admission, intent, storage, vault, quota, event, review, and commit panel/action expected by current tests.",
-    "The visual redesign starts from a causal question entry, makes the graph a star-map primary surface, reduces generic panel clutter, and uses the high-trust monochrome cinematic style from DESIGN.md.",
+    "The visual enhancement keeps the homepage centered on a causal dialogue box, makes the graph feel more like a cinematic star map, and uses the high-trust monochrome xAI-inspired style from DESIGN.md.",
     "No OSS runtime files, provider credential flows, dependency files, or API/domain behavior are changed.",
     "Docs and evidence describe the redesign and remaining capability boundaries."
   ],
@@ -71,10 +71,10 @@
     "No package publishing"
   ],
   "expectedBehaviorChanges": [
-    "The Pro browser shell has a redesigned graph-first command-room layout and visual system."
+    "The Pro browser shell has a more cinematic dialogue-first and star-map graph-led visual system."
   ],
   "userVisibleEffects": [
-    "The current Pro homepage appears more premium, cinematic, dialogue-led, and star-map graph-led while preserving the existing preview-only controls."
+    "The current Pro homepage appears more premium, cinematic, dialogue-box-led, and star-map graph-led while preserving the existing preview-only controls."
   ],
   "intendedSymbols": [],
   "expectedPublicSurfaceChanges": [
