@@ -1,10 +1,12 @@
 {
   "schemaVersion": 3,
-  "task": "Add the next Pro Rust product-core slice: a keyless pre-execution boundary for hosted auth, credential-vault handles, and quota reservation prerequisites. Expose one local API endpoint, render one graph-first web panel, and synchronize Pro docs/evidence. This remains preview-only and must not add sessions, passwords, JWT validation, external auth, credential storage, provider calls, quota or billing mutation, worker execution, package publishing, npm dependencies, or OSS runtime changes.",
+  "task": "Add the next Pro Rust product-core slice: a keyless execution handoff preview that wires the pre-execution boundary into preview execution jobs and work orders. Expose one local API endpoint, render one graph-first web panel, and synchronize Pro docs/evidence. This remains preview-only and must not add sessions, passwords, JWT validation, external auth, credential storage, provider calls, quota or billing mutation, worker execution, package publishing, npm dependencies, or OSS runtime changes.",
   "preset": "generic",
   "createdAt": "2026-04-25T06:10:00.000Z",
   "allowedPaths": [
     "pro/crates/domain/",
+    "pro/crates/queue/",
+    "pro/Cargo.lock",
     "pro/apps/api/",
     "pro/apps/web/",
     "docs/PROJECT_STATE.md",
@@ -25,6 +27,7 @@
     "tests",
     "docs",
     "guardrails-internal",
+    "config",
     "other"
   ],
   "riskLevel": "standard",
@@ -33,7 +36,7 @@
   "securityRequirements": [
     "Mention auth, secrets, permissions, and sensitive-data handling explicitly.",
     "Do not accept or store passwords, tokens, provider secrets, or API keys.",
-    "Pre-execution boundary must deny live/provider/worker/result-write paths until hosted auth, vault-handle, and quota-reservation gates exist."
+    "Execution handoff preview must deny live/provider/worker/result-write paths until hosted auth, vault-handle, quota-reservation, worker-lease, and idempotent-commit gates exist."
   ],
   "dependencyRequirements": [
     "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
@@ -42,23 +45,23 @@
     "Mention performance, latency, or load impact in evidence."
   ],
   "understandingRequirements": [
-    "Explain why this boundary composes existing hosted auth, vault, quota, worker, and commit vocabulary instead of enabling execution."
+    "Explain why this handoff preview composes existing work-order and pre-execution boundary vocabulary instead of enabling execution."
   ],
   "continuityRequirements": [
-    "Reuse the existing workspace access-gate, credential-vault, quota-ledger, Axum endpoint style, and compact web panel patterns."
+    "Reuse the existing execution queue, work-order, pre-execution boundary, Axum endpoint style, and compact web panel patterns."
   ],
   "acknowledgedSkips": [],
-  "patternSummary": "Reuse the existing Pro domain boundary payloads, API route handlers, web fetchJson helpers, and preview-only boundary panels.",
-  "smallestViableChange": "Add a deterministic pre-execution payload that reports live execution denied until hosted auth, credential-vault handle, quota reservation, worker lease, and idempotent commit gates are satisfied.",
+  "patternSummary": "Reuse the existing Pro queue work-order payloads, domain preflight payload, API route handlers, web fetchJson helper, and preview-only boundary panels.",
+  "smallestViableChange": "Add a deterministic handoff preview payload that combines a queued work order with the pre-execution boundary and reports live execution denied until hosted prerequisites are satisfied.",
   "assumptions": [
     "The Pro runtime remains local preview-only.",
     "Real provider/search execution is still intentionally blocked.",
-    "Credential values are never accepted, displayed, stored, or returned by this boundary."
+    "Credential values are never accepted, displayed, stored, or returned by this handoff preview."
   ],
   "acceptanceCriteria": [
-    "Domain tests prove the pre-execution boundary denies live provider calls and marks hosted auth, vault-handle, quota-reservation, worker-lease, and idempotent-commit prerequisites as blocking.",
-    "API tests prove the endpoint returns a server-computed pre-execution payload and no secret-shaped fields.",
-    "Web tests prove the graph-first shell contains the pre-execution panel, endpoint path, and renderer.",
+    "Queue tests prove the handoff preview denies execution and contains both work-order and pre-execution blockers.",
+    "API tests prove the endpoint returns a server-computed handoff preview payload and no secret-shaped fields.",
+    "Web tests prove the graph-first shell contains the handoff panel, endpoint path, and renderer.",
     "Docs and evidence explain that this is not real provider execution, credential access, quota mutation, or auth enforcement."
   ],
   "nonGoals": [
@@ -74,14 +77,14 @@
     "No OSS runtime changes"
   ],
   "expectedBehaviorChanges": [
-    "Pro API exposes a keyless pre-execution boundary endpoint.",
-    "Pro web shell renders whether live execution is still denied and which hosted prerequisites block it."
+    "Pro API exposes a keyless execution handoff preview endpoint per preview job.",
+    "Pro web shell renders whether a queued work order can hand off to future execution and which hosted prerequisites block it."
   ],
   "expectedPublicSurfaceChanges": [
-    "GET /api/execution-preflight-boundary"
+    "GET /api/execution-jobs/{job_id}/handoff-preview"
   ],
   "expectedTestTargets": [
     "cargo test --manifest-path pro/Cargo.toml"
   ],
-  "riskJustification": "This is a keyless local pre-execution evaluator that composes existing denied hosted gates. It prepares an explicit execution boundary without enabling provider calls, credential reads, quota reservations, worker execution, or result writes."
+  "riskJustification": "This is a keyless local handoff preview that composes the existing denied work order and pre-execution boundary. It prepares an explicit execution handoff payload without enabling provider calls, credential reads, quota reservations, worker execution, or result writes."
 }

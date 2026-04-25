@@ -349,6 +349,7 @@ dependencies = [
 name = "retrocause-pro-queue"
 version = "0.1.0"
 dependencies = [
+ "retrocause-pro-domain",
  "retrocause-pro-provider-routing",
  "serde",
 ]

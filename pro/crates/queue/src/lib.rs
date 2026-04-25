@@ -1,3 +1,4 @@
+use retrocause_pro_domain::{ExecutionPreflightBoundary, execution_preflight_boundary};
 use retrocause_pro_provider_routing::{
     RoutingPreviewError, RoutingPreviewPlan, RoutingPreviewRequest, RoutingStep,
     build_routing_preview,
@@ -54,6 +55,20 @@ pub struct ExecutionWorkOrder {
     pub route_steps: Vec<RoutingStep>,
     pub routing_warnings: Vec<String>,
     pub safeguards: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ExecutionHandoffPreview {
+    pub job_id: String,
+    pub workspace_id: String,
+    pub query: String,
+    pub mode: ExecutionHandoffMode,
+    pub execution_allowed: bool,
+    pub work_order: ExecutionWorkOrder,
+    pub preflight: ExecutionPreflightBoundary,
+    pub blocking_reasons: Vec<String>,
+    pub safeguards: Vec<String>,
+    pub next_required_step: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -133,6 +148,12 @@ pub enum ExecutionJobStatus {
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionWorkOrderMode {
     PreviewOnly,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionHandoffMode {
+    PreviewOnlyDenied,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
@@ -483,6 +504,10 @@ impl ExecutionQueue {
     pub fn get_work_order(&self, job_id: &str) -> Option<ExecutionWorkOrder> {
         self.get_job(job_id).map(|job| job.work_order())
     }
+
+    pub fn get_handoff_preview(&self, job_id: &str) -> Option<ExecutionHandoffPreview> {
+        self.get_job(job_id).map(|job| job.handoff_preview())
+    }
 }
 
 impl ExecutionJob {
@@ -517,6 +542,32 @@ impl ExecutionJob {
             ],
         }
     }
+
+    pub fn handoff_preview(&self) -> ExecutionHandoffPreview {
+        let work_order = self.work_order();
+        let preflight = execution_preflight_boundary();
+        let mut blocking_reasons = preflight.blocking_reasons.clone();
+        if !work_order.execution_allowed {
+            blocking_reasons.push("work_order_execution_disabled".to_string());
+        }
+        let mut safeguards = work_order.safeguards.clone();
+        safeguards.extend(preflight.safeguards.clone());
+        safeguards.push("handoff_preview_only_no_execution".to_string());
+
+        ExecutionHandoffPreview {
+            job_id: self.id.clone(),
+            workspace_id: self.workspace_id.clone(),
+            query: self.query.clone(),
+            mode: ExecutionHandoffMode::PreviewOnlyDenied,
+            execution_allowed: work_order.execution_allowed && preflight.execution_allowed,
+            work_order,
+            preflight,
+            blocking_reasons,
+            safeguards,
+            next_required_step: "Implement hosted auth, vault-handle issuance, quota reservation, worker lease, and idempotent result commit before live handoff."
+                .to_string(),
+        }
+    }
 }
 
 fn unix_epoch_seconds() -> u64 {
@@ -540,9 +591,9 @@ impl std::error::Error for ExecutionQueueError {}
 #[cfg(test)]
 mod tests {
     use super::{
-        ExecutionJobStatus, ExecutionLifecycleMode, ExecutionQueue, ExecutionQueueError,
-        ExecutionWorkOrderMode, WorkerLeaseMode, WorkerLeaseRuleStatus, execution_lifecycle_spec,
-        worker_lease_boundary,
+        ExecutionHandoffMode, ExecutionJobStatus, ExecutionLifecycleMode, ExecutionQueue,
+        ExecutionQueueError, ExecutionWorkOrderMode, WorkerLeaseMode, WorkerLeaseRuleStatus,
+        execution_lifecycle_spec, worker_lease_boundary,
     };
     use retrocause_pro_provider_routing::{RoutingPreviewRequest, RoutingScenario, SourcePolicy};
 
@@ -627,6 +678,49 @@ mod tests {
                 .safeguards
                 .contains(&"credential_access_forbidden".to_string())
         );
+    }
+
+    #[test]
+    fn handoff_preview_composes_work_order_and_preflight_blockers() {
+        let queue = ExecutionQueue::new();
+        let created = queue
+            .enqueue_preview(request("Preview the handoff boundary"))
+            .expect("job should be created");
+
+        let preview = queue
+            .get_handoff_preview(&created.id)
+            .expect("created job should expose handoff preview");
+
+        assert_eq!(preview.job_id, created.id);
+        assert_eq!(preview.mode, ExecutionHandoffMode::PreviewOnlyDenied);
+        assert!(!preview.execution_allowed);
+        assert_eq!(preview.work_order.job_id, preview.job_id);
+        assert!(!preview.work_order.execution_allowed);
+        assert!(!preview.preflight.execution_allowed);
+        assert!(
+            preview
+                .blocking_reasons
+                .contains(&"quota_reservation_required".to_string())
+        );
+        assert!(
+            preview
+                .blocking_reasons
+                .contains(&"work_order_execution_disabled".to_string())
+        );
+        assert!(
+            preview
+                .safeguards
+                .contains(&"handoff_preview_only_no_execution".to_string())
+        );
+
+        let combined = format!(
+            "{:?} {:?} {}",
+            preview.blocking_reasons, preview.safeguards, preview.next_required_step
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
+        assert!(!combined.contains("bearer "));
     }
 
     #[test]

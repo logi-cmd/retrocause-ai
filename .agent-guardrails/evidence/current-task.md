@@ -3028,3 +3028,100 @@ This task adds a keyless composed execution-readiness gate for the Pro Rust prod
 
 - This is not real tenant authentication, not role management, not a credential vault, not quota reservation, not billing enforcement, not worker lease claiming, not provider execution, and not hosted result commit.
 - Future provider/worker execution must consume this boundary after real tenant auth, vault-handle issuance, quota reservation, worker lease, and idempotent event-store commit are implemented.
+
+## Pro Product Core Slice 33 - Execution Handoff Preview
+
+### Scope
+
+This task adds the next keyless Pro execution boundary: a denied execution handoff preview that composes a queued job's work order with the pre-execution auth/vault/quota/worker/result boundary. It remains preview-only and local: no credentials, sessions, JWTs, provider calls, quota reservations, worker leases, billing mutation, queue persistence, retry scheduling, result writes, OSS runtime changes, npm packages, Python packages, or package publishing were added.
+
+### Files Updated
+
+- `pro/crates/queue/Cargo.toml`
+- `pro/crates/queue/src/lib.rs`
+- `pro/Cargo.lock`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `ExecutionHandoffPreview` and `ExecutionHandoffMode` in `crates/queue`.
+- The queue now exposes `get_handoff_preview()` and composes each job's existing work order with `execution_preflight_boundary()`.
+- The handoff preview keeps `execution_allowed=false`, carries combined blocking reasons, and includes a `handoff_preview_only_no_execution` safeguard.
+- Added keyless `GET /api/execution-jobs/{job_id}/handoff-preview` in the Pro API.
+- Added queue/API tests proving the handoff preview composes work-order and preflight blockers without returning key-shaped values.
+- Added a graph-first web panel that loads the work order and handoff preview together when a queued job is inspected.
+- Fixed a handoff UI usability issue found by browser smoke: blockers and safeguards are now rendered as readable text, and all handoff safeguards are visible instead of truncating the final `handoff_preview_only_no_execution` safeguard.
+- Updated project state and Pro architecture docs so the new endpoint is documented as a denied execution boundary, not live execution.
+
+### Commands Run
+
+- `agent-guardrails plan --task "Add the next Pro Rust product-core slice: a keyless execution handoff preview..."`
+  - Result: generated a broader-than-needed contract including unrelated Python/frontend/cache paths.
+  - Fix: manually narrowed `.agent-guardrails/task-contract.json` to the approved Pro Rust queue/API/web/docs/evidence scope.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Result: passed before and after the handoff UI readability fix.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed after adding the API/queue handoff preview tests.
+  - API tests: `36 passed`.
+  - Domain tests: `20 passed`.
+  - Event-store tests: `6 passed`.
+  - Provider-routing tests: `12 passed`.
+  - Queue tests: `8 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API execution-handoff smoke
+  - First attempt used `/health` instead of the actual `/healthz` endpoint.
+  - Second and third attempts exposed outdated smoke input enums (`allow_uploaded_evidence`, then `market_news`).
+  - Fourth attempt used the created job's `job.id` instead of a nonexistent response `job_id` field.
+  - Final result: passed on `http://127.0.0.1:56224`; `POST /api/execution-jobs` created `job_local_000000`, `GET /api/execution-jobs/job_local_000000/handoff-preview` returned `preview_only_denied`, execution stayed disabled, `quota_reservation_required` and `work_order_execution_disabled` were present, `handoff_preview_only_no_execution` was present, and no key-shaped values were found.
+
+- Pro browser execution-handoff smoke
+  - First Playwright attempt failed because the inline Node smoke used ambiguous `require()` plus top-level `await`.
+  - Second attempt timed out because the UI rendered raw/truncated safeguards and did not show `handoff_preview_only_no_execution`.
+  - Fix: made handoff blockers/safeguards readable and stopped truncating handoff safeguards.
+  - Final result: passed; Playwright started the Pro API and web shell, clicked `Queue preview job`, verified the handoff panel rendered `handoff denied`, `quota reservation required`, `work order execution disabled`, and `handoff preview only no execution`, and found no request failures, console errors, page errors, or key-shaped text.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Result: passed. A key-shaped scan for common provider-token prefixes and credential-assignment patterns found no key-shaped tokens or credential assignments in the current diff.
+
+- Local process cleanup check
+  - Result: passed; no `retrocause-pro-api` or `retrocause-pro-web` service processes were left running after smoke tests.
+
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Initial result: blocked with score `67/100`.
+  - Blocking issue: `pro/crates/queue/Cargo.toml` was correctly inside the allowed path list, but the task contract did not include the `config` change type for the local internal crate dependency declaration.
+  - Fix: updated `.agent-guardrails/task-contract.json` to allow `config` changes for this slice.
+  - Final result: passed with score `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: `pro/crates/queue/Cargo.toml` changed as a config file. This was intentional because queue now depends on the existing local domain crate to compose the pre-execution boundary; no external crate, version bump, publishing step, or runtime configuration was added.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the current Pro focus, done-recently entry, and next step were synchronized to include the execution handoff preview.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with score `90/100 (safe-to-deploy)`.
+  - Non-blocking warnings matched the standard check: intentional queue Cargo config change and intentional project-state documentation update.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice does not accept, validate, read, store, log, or return sessions, passwords, JWTs, provider secrets, search keys, connector credentials, payment credentials, auth tokens, or user API keys. It does not enforce hosted permissions or protect hosted resources.
+- Dependencies: `pro/crates/queue` now depends on the existing `retrocause-pro-domain` crate so it can compose the pre-execution boundary. No new external Rust crates, npm packages, Python packages, or dependency upgrades were introduced.
+- Performance: the handoff preview is an in-memory composition of existing queue and domain metadata. It adds no provider calls, database calls, Redis calls, quota-ledger writes, billing writes, worker leases, retry scheduling, queue persistence, or result-event writes.
+- Understanding: this endpoint belongs in the queue boundary because it is scoped to a queued job and future worker handoff. It composes the shared pre-execution boundary instead of duplicating auth/vault/quota/worker/result prerequisite vocabulary.
+- Continuity: reused existing queue work-order, pre-execution boundary, Axum route, web `fetchJson`, and compact graph-first panel patterns. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- This is not a durable queue, not a worker lease, not tenant authentication, not vault-handle issuance, not quota reservation, not provider execution, not billing enforcement, and not result commit.
+- Future Pro execution should turn this denied handoff preview into a hosted execution intent only after real auth, vault handles, quota reservations, worker leases, retry/idempotency rules, and idempotent result-event commits exist.

@@ -29,8 +29,9 @@ use retrocause_pro_provider_routing::{
     provider_adapter_gate_check,
 };
 use retrocause_pro_queue::{
-    ExecutionJob, ExecutionJobSummary, ExecutionLifecycleSpec, ExecutionQueue, ExecutionQueueError,
-    ExecutionWorkOrder, WorkerLeaseBoundary, execution_lifecycle_spec, worker_lease_boundary,
+    ExecutionHandoffPreview, ExecutionJob, ExecutionJobSummary, ExecutionLifecycleSpec,
+    ExecutionQueue, ExecutionQueueError, ExecutionWorkOrder, WorkerLeaseBoundary,
+    execution_lifecycle_spec, worker_lease_boundary,
 };
 use retrocause_pro_run_store::{
     FileRunStore, HostedStorageMigrationPlan, RunStoreError, hosted_storage_migration_plan,
@@ -161,6 +162,10 @@ fn router() -> Router {
         .route(
             "/api/execution-jobs/{job_id}/work-order",
             get(get_execution_work_order),
+        )
+        .route(
+            "/api/execution-jobs/{job_id}/handoff-preview",
+            get(get_execution_handoff_preview),
         )
         .route("/api/execution-lifecycle", get(execution_lifecycle))
         .route("/api/worker-lease-boundary", get(worker_lease))
@@ -452,6 +457,17 @@ async fn get_execution_work_order(
     state
         .execution_queue
         .get_work_order(&job_id)
+        .map(Json)
+        .ok_or_else(|| job_not_found(job_id))
+}
+
+async fn get_execution_handoff_preview(
+    State(state): State<AppState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<ExecutionHandoffPreview>, ApiError> {
+    state
+        .execution_queue
+        .get_handoff_preview(&job_id)
         .map(Json)
         .ok_or_else(|| job_not_found(job_id))
 }
@@ -1451,6 +1467,57 @@ mod tests {
                 .safeguards
                 .contains(&"provider_execution_disabled".to_string())
         );
+    }
+
+    #[tokio::test]
+    async fn execution_handoff_preview_composes_preflight_with_work_order() {
+        let state = AppState::seeded();
+
+        let (_, Json(created)) = create_execution_job(
+            State(state.clone()),
+            Json(RoutingPreviewRequest {
+                workspace_id: Some("workspace_executor".to_string()),
+                query: "Why should handoff stay denied?".to_string(),
+                scenario: None,
+                source_policy: None,
+            }),
+        )
+        .await
+        .expect("valid request should create preview job");
+
+        let preview = get_execution_handoff_preview(State(state), Path(created.id.clone()))
+            .await
+            .expect("created job should expose handoff preview")
+            .0;
+
+        assert_eq!(preview.job_id, created.id);
+        assert_eq!(preview.work_order.job_id, created.id);
+        assert!(!preview.execution_allowed);
+        assert!(!preview.preflight.execution_allowed);
+        assert!(
+            preview
+                .blocking_reasons
+                .contains(&"quota_reservation_required".to_string())
+        );
+        assert!(
+            preview
+                .blocking_reasons
+                .contains(&"work_order_execution_disabled".to_string())
+        );
+        assert!(
+            preview
+                .safeguards
+                .contains(&"handoff_preview_only_no_execution".to_string())
+        );
+
+        let combined = format!(
+            "{:?} {:?} {}",
+            preview.blocking_reasons, preview.safeguards, preview.next_required_step
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
+        assert!(!combined.contains("bearer "));
     }
 
     #[tokio::test]
