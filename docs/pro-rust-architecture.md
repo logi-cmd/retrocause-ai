@@ -1,6 +1,6 @@
 # RetroCause Pro Rust Architecture
 
-Last updated: 2026-04-25
+Last updated: 2026-04-26
 
 ## Why a separate Rust workspace
 
@@ -13,7 +13,7 @@ The Rust rewrite lives under `pro/` inside this repository so the product and ar
 1. Establish a clean Rust workspace boundary.
  2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, usage ledger entries, provider quota ownership, and cooldown state.
 3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, run-scoped local event replay, preview-only worker result dry-runs, result snapshot readiness gates, worker result commit intents, workspace access-gate decisions, composed execution-readiness decisions, reusable execution admission decisions, hosted intent create-request previews, pre-execution auth/vault/quota boundaries, keyless provider/search quota status, routing previews, preview-only execution jobs, execution handoff previews, execution intent previews, and a planned execution intent-store boundary.
-4. Render a graph-first web shell from the same shared Rust payload and wire it to the local API create/read flow, provider-status view, execution-readiness panel, execution-admission panel, hosted intent create-request panel, pre-execution boundary panel, execution handoff preview panel, execution intent preview panel, and execution intent-store boundary panel.
+4. Render a graph-first web shell from the same shared Rust payload, follow the root `DESIGN.md` black/spectral-white mission-control direction, and wire it to the local API create/read flow, provider-status view, execution-readiness panel, execution-admission panel, hosted intent create-request panel, pre-execution boundary panel, execution handoff preview panel, execution intent preview panel, and execution intent-store boundary panel.
 5. Keep Pro separate from the OSS Python/FastAPI + Next.js runtime.
 
 ## Workspace layout
@@ -56,6 +56,8 @@ This is a deliberate tradeoff:
 - deferred: richer client-side graph interaction, drag behavior, zoom state persistence, incremental hydration
 
 If the graph workspace proves out, the next phase can move the web shell toward Leptos or another Rust-heavy client strategy without changing the domain model or API boundary.
+
+The active visual direction is captured in the root `DESIGN.md`. It adapts a stark monochrome, futuristic system to the Pro product without copying or implying any external brand affiliation: black canvas, spectral-white text, uppercase DIN-like typography, transparent HUD controls, ghost buttons, no remote imagery, no new font dependency, no dashboard gradients, and no decorative card stack. Because Pro is an operator workspace rather than a marketing homepage, the graph itself acts as the cinematic scene; the surrounding inputs and safety boundaries are kept as mission-control HUD surfaces so existing preview-only controls remain usable.
 
 ## Shared domain
 
@@ -250,6 +252,7 @@ The current run and event stores are intentionally local-file-backed. They are u
 Initial responsibility:
 
 - render the graph-first Pro workspace
+- apply the root `DESIGN.md` visual system: graph as the primary scene, transparent HUD rails, uppercase spectral-white controls, and ghost actions
 - visualize the canonical run, including evidence anchors, challenge checks, source health, and usage ledger state
 - create new in-memory runs through `POST /api/runs`
 - reload run summaries, run detail, and graph payloads from the Pro API
@@ -592,6 +595,13 @@ The hosted intent create-request preview slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `POST /api/execution-intents/create-request` proving the payload keeps create requests, persistence, and execution rejected while exposing admission, intent-store, worker-lease, request-field, write-plan, and idempotency blockers without secret-shaped fields
 - a browser smoke that starts the Pro API and web shell, clicks `Preview intent create request`, and verifies that the panel renders create-request rejection, admission denial, disconnected intent store, persistence off, no durable intent id, blocked write steps, and no-persistence safeguards
+
+The `DESIGN.md` Pro shell redesign slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- a browser smoke that starts the Pro API and web shell, loads `http://127.0.0.1:3007/`, captures the redesigned shell, and verifies the graph remains visible while existing preview-only controls still render without provider calls, credential fields, worker execution, quota/billing mutation, or new dependencies
 
 The pre-execution boundary slice adds:
 

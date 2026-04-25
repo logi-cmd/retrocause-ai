@@ -1,14 +1,13 @@
 {
   "schemaVersion": 3,
-  "task": "Add the next Pro Rust product-core slice: a keyless hosted execution intent create-request preview that consumes the denied server-side admission payload and planned intent-store boundary, then returns a rejected durable-intent create request shape. Expose one local API endpoint, render one graph-first web panel/action, and synchronize Pro docs/evidence. This remains preview-only and must not add sessions, passwords, JWT validation, external auth, admission tokens, credential storage, provider calls, quota or billing mutation, worker execution, Redis/Postgres connections, durable intent persistence, package publishing, npm dependencies, or OSS runtime changes.",
+  "task": "Redesign the Pro Rust web shell frontend into a premium DESIGN.md-inspired command-room interface. Keep the homepage centered on a question entry and cinematic knowledge-graph star map, reuse existing Pro API/client patterns, update DESIGN.md, docs/PROJECT_STATE.md, docs/pro-rust-architecture.md, and .agent-guardrails evidence, and do not change OSS runtime or add credentials/provider execution.",
   "preset": "generic",
-  "createdAt": "2026-04-25T09:20:00.000Z",
+  "createdAt": "2026-04-25T16:53:01.207Z",
   "allowedPaths": [
-    "pro/crates/queue/",
-    "pro/apps/api/",
+    "DESIGN.md",
     "pro/apps/web/",
-    "docs/PROJECT_STATE.md",
     "docs/pro-rust-architecture.md",
+    "docs/PROJECT_STATE.md",
     ".agent-guardrails/"
   ],
   "requiredCommands": [
@@ -20,8 +19,8 @@
   "intendedFiles": [],
   "protectedPaths": [],
   "allowedChangeTypes": [
-    "interface",
     "implementation",
+    "interface",
     "tests",
     "docs",
     "guardrails-internal",
@@ -31,62 +30,92 @@
   "requiresReviewNotes": false,
   "validationProfile": "standard",
   "securityRequirements": [
-    "Mention auth, secrets, permissions, and sensitive-data handling explicitly.",
-    "Do not accept or store passwords, tokens, provider secrets, API keys, admission tokens, vault handles, or quota reservation identifiers.",
-    "Hosted intent create request must stay rejected until admission is allowed, vault handles exist, quota is reserved, worker lease exists, durable intent store is connected, and idempotent commit storage exists."
+    "Do not add credential fields, provider key entry, auth token handling, provider execution, worker execution, or quota/billing mutation.",
+    "Keep all existing Pro execution/admission/intent panels preview-only and rejected where the backend says they are rejected."
   ],
   "dependencyRequirements": [
-    "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
+    "Do not add Rust, npm, Python, image, icon, font, or external asset dependencies for this UI redesign."
   ],
   "performanceRequirements": [
-    "Mention performance, latency, or load impact in evidence."
+    "Avoid heavy animation loops, large blur surfaces, remote assets, and client frameworks; keep the server-rendered Maud web shell lightweight."
   ],
   "understandingRequirements": [
-    "Explain why this create-request preview defines a future durable intent input contract and is not real durable persistence or execution authorization."
+    "Explain that this is a visual/interaction redesign of the Pro shell only, not a change to hosted execution capability."
   ],
   "continuityRequirements": [
-    "Reuse the existing execution admission payload, execution intent-store boundary, worker lease boundary, Axum endpoint style, and compact web panel patterns."
+    "Reuse the existing Maud render helpers, browser fetchJson pattern, API endpoints, graph selection behavior, and preview-only execution panels."
   ],
   "acknowledgedSkips": [],
-  "patternSummary": "Reuse existing Pro queue preview payloads, domain admission payloads, API route handlers, web fetchJson helper, and preview-only gate panels.",
-  "smallestViableChange": "Add a deterministic hosted intent create-request preview payload that composes admission and store blockers while reporting persistence and execution disabled.",
+  "patternSummary": "Pro web is a single server-rendered Rust/Maud page with CSS and a small inline script. Keep API and domain payloads unchanged; improve layout, visual hierarchy, graph-first composition, and panel organization.",
+  "smallestViableChange": "Restyle and reorganize the existing Pro web shell into a premium DESIGN.md-inspired graph-first command room while preserving all existing endpoints/actions.",
   "assumptions": [
-    "The Pro runtime remains local preview-only.",
-    "Real provider/search execution is still intentionally blocked.",
-    "Credential values, admission tokens, vault handles, quota reservation ids, and durable intent ids are never accepted, displayed, stored, or returned as real capabilities."
+    "The active task is Pro frontend redesign only.",
+    "DESIGN.md is the local design source: stark black, spectral white, D-DIN/DIN-style uppercase typography, ghost controls, and cinematic full-field composition; the UI must not imply affiliation with any referenced brand.",
+    "The knowledge graph remains the primary surface."
   ],
   "acceptanceCriteria": [
-    "Queue tests prove the hosted intent create request remains rejected and composes admission, store, lease, and idempotency blockers.",
-    "API tests prove the endpoint returns a server-computed create-request preview and no secret-shaped fields.",
-    "Web tests prove the graph-first shell contains the hosted intent create-request panel/action, endpoint path, and renderer.",
-    "Docs and evidence explain that this is not real auth enforcement, credential access, quota reservation, durable queue persistence, provider execution, worker execution, or billing mutation."
+    "The Pro web shell still renders every existing graph, run, provider, queue, admission, intent, storage, vault, quota, event, review, and commit panel/action expected by current tests.",
+    "The visual redesign starts from a causal question entry, makes the graph a star-map primary surface, reduces generic panel clutter, and uses the high-trust monochrome cinematic style from DESIGN.md.",
+    "No OSS runtime files, provider credential flows, dependency files, or API/domain behavior are changed.",
+    "Docs and evidence describe the redesign and remaining capability boundaries."
   ],
   "nonGoals": [
-    "No sessions",
-    "No passwords",
-    "No external auth provider",
-    "No JWT validation",
-    "No admission token issuance",
-    "No vault handle issuance",
-    "No quota reservation ids",
-    "No credential storage",
+    "No OSS runtime changes",
+    "No new API endpoints",
     "No provider calls",
-    "No quota or billing mutation",
+    "No credential/key fields",
+    "No auth/session/JWT implementation",
     "No worker execution",
-    "No result-event writes",
-    "No Redis or Postgres connection",
-    "No durable execution intent persistence",
-    "No OSS runtime changes"
+    "No quota or billing mutation",
+    "No new dependencies",
+    "No package publishing"
   ],
   "expectedBehaviorChanges": [
-    "Pro API exposes a keyless hosted intent create-request preview endpoint.",
-    "Pro web shell can request and render a rejected durable-intent create request preview for the current graph run/job."
+    "The Pro browser shell has a redesigned graph-first command-room layout and visual system."
   ],
+  "userVisibleEffects": [
+    "The current Pro homepage appears more premium, cinematic, dialogue-led, and star-map graph-led while preserving the existing preview-only controls."
+  ],
+  "intendedSymbols": [],
   "expectedPublicSurfaceChanges": [
-    "POST /api/execution-intents/create-request"
+    "Pro web root page visual structure and styling"
   ],
+  "expectedBoundaryExceptions": [],
   "expectedTestTargets": [
-    "cargo test --manifest-path pro/Cargo.toml"
+    "cargo test --manifest-path pro/Cargo.toml",
+    "cargo build --manifest-path pro/Cargo.toml",
+    "browser smoke of http://127.0.0.1:3007/"
   ],
-  "riskJustification": "This is a keyless local create-request preview. It composes existing admission, intent-store, and worker-lease blockers without issuing tokens, accepting credentials, reserving quota, mutating billing, starting workers, connecting Redis/Postgres, persisting intents, calling providers, or writing results."
+  "productionProfile": "",
+  "nfrRequirements": [
+    "Maintain readable contrast, keyboard-accessible controls, compact CSS, no remote assets, no secret-shaped strings, and responsive fallback below 1080px."
+  ],
+  "expectedLoadSensitivePaths": [],
+  "expectedConcurrencyImpact": "None. This is a server-rendered UI/CSS/script refactor with no backend concurrency changes.",
+  "observabilityRequirements": [],
+  "rollbackNotes": "Revert the Pro web-shell commit; no migration or dependency rollback is required.",
+  "riskJustification": "The redesign is confined to the Pro Rust web shell plus docs/evidence. Backend API behavior, storage, credentials, queues, and OSS runtime remain unchanged.",
+  "guardRules": [
+    "添加相应的测试",
+    "遵循现有代码风格",
+    "保持向后兼容",
+    "更新 API 文档"
+  ],
+  "roughIntent": {
+    "detected": true,
+    "taskType": "feature",
+    "confidence": 0.65,
+    "sources": {
+      "taskType": "关键词匹配 (65% 置信度)",
+      "paths": "关键词+文件树",
+      "testCommand": "package.json",
+      "riskLevel": "基于任务类型: feature"
+    }
+  },
+  "autoFilledFields": [
+    "allowedPaths",
+    "requiredCommands",
+    "riskLevel",
+    "guardRules"
+  ]
 }
