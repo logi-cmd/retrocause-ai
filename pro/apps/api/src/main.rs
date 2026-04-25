@@ -8,10 +8,11 @@ use axum::{
     routing::{get, post},
 };
 use retrocause_pro_domain::{
-    CreateRunRequest, CredentialVaultBoundary, KnowledgeGraph, ProRun, ProviderStatusSnapshot,
-    QuotaLedgerBoundary, ResultCommitBoundary, RunEventTimeline, RunReviewComparison, RunStatus,
-    RunSummary, WorkspaceAccessContext, WorkspaceAccessGateDecision, WorkspaceAccessGateRequest,
-    credential_vault_boundary, provider_status_snapshot, quota_ledger_boundary,
+    CreateRunRequest, CredentialVaultBoundary, ExecutionPreflightBoundary, KnowledgeGraph, ProRun,
+    ProviderStatusSnapshot, QuotaLedgerBoundary, ResultCommitBoundary, RunEventTimeline,
+    RunReviewComparison, RunStatus, RunSummary, WorkspaceAccessContext,
+    WorkspaceAccessGateDecision, WorkspaceAccessGateRequest, credential_vault_boundary,
+    execution_preflight_boundary, provider_status_snapshot, quota_ledger_boundary,
     result_commit_boundary, run_event_timeline, run_review_comparison, sample_run,
     workspace_access_context, workspace_access_gate,
 };
@@ -97,6 +98,10 @@ fn router() -> Router {
         .route(
             "/api/execution-readiness",
             post(execution_readiness).options(cors_preflight),
+        )
+        .route(
+            "/api/execution-preflight-boundary",
+            get(execution_preflight),
         )
         .route("/api/credential-vault-boundary", get(credential_vault))
         .route("/api/quota-ledger-boundary", get(quota_ledger))
@@ -204,6 +209,10 @@ async fn execution_readiness(
     Json(request): Json<ExecutionReadinessRequest>,
 ) -> Json<ExecutionReadinessDecision> {
     Json(execution_readiness_gate(request))
+}
+
+async fn execution_preflight() -> Json<ExecutionPreflightBoundary> {
+    Json(execution_preflight_boundary())
 }
 
 async fn credential_vault() -> Json<CredentialVaultBoundary> {
@@ -740,6 +749,55 @@ mod tests {
         .to_lowercase();
         assert!(!combined.contains("sk-"));
         assert!(!combined.contains("api_key"));
+    }
+
+    #[tokio::test]
+    async fn execution_preflight_exposes_keyless_hosted_prerequisite_boundary() {
+        let payload = execution_preflight().await.0;
+
+        assert!(matches!(
+            payload.status,
+            retrocause_pro_domain::ExecutionPreflightStatus::DeniedRequiresHostedPrerequisites
+        ));
+        assert!(!payload.execution_allowed);
+        assert!(!payload.auth_enforced);
+        assert!(!payload.credential_vault_handle_issued);
+        assert!(!payload.quota_reservation_allowed);
+        assert!(!payload.worker_handoff_allowed);
+        assert!(!payload.secret_values_returned);
+        assert!(!payload.ledger_mutation_enabled);
+        assert!(
+            payload
+                .requirements
+                .iter()
+                .any(|item| item.id == "tenant_auth_context")
+        );
+        assert!(
+            payload
+                .requirements
+                .iter()
+                .any(|item| item.id == "credential_vault_handle")
+        );
+        assert!(
+            payload
+                .requirements
+                .iter()
+                .any(|item| item.id == "quota_reservation")
+        );
+        assert!(payload.handoff_rules.iter().all(|rule| !rule.allowed_now));
+        assert!(
+            payload
+                .blocking_reasons
+                .contains(&"quota_reservation_required".to_string())
+        );
+        let combined = format!(
+            "{:?} {:?} {:?}",
+            payload.requirements, payload.handoff_rules, payload.safeguards
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
+        assert!(!combined.contains("bearer "));
     }
 
     #[tokio::test]

@@ -152,6 +152,42 @@ pub struct WorkspaceAccessGateDecision {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExecutionPreflightBoundary {
+    pub mode: ExecutionPreflightMode,
+    pub status: ExecutionPreflightStatus,
+    pub execution_allowed: bool,
+    pub auth_enforced: bool,
+    pub credential_vault_handle_issued: bool,
+    pub quota_reservation_allowed: bool,
+    pub worker_handoff_allowed: bool,
+    pub result_commit_allowed: bool,
+    pub secret_values_returned: bool,
+    pub ledger_mutation_enabled: bool,
+    pub requirements: Vec<ExecutionPreflightRequirement>,
+    pub handoff_rules: Vec<ExecutionPreflightHandoffRule>,
+    pub blocking_reasons: Vec<String>,
+    pub safeguards: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExecutionPreflightRequirement {
+    pub id: String,
+    pub label: String,
+    pub owner: String,
+    pub status: ExecutionPreflightRequirementStatus,
+    pub requirement: String,
+    pub blocks_execution: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExecutionPreflightHandoffRule {
+    pub id: String,
+    pub stage: String,
+    pub allowed_now: bool,
+    pub requirement: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CredentialVaultBoundary {
     pub mode: CredentialVaultMode,
     pub connections_enabled: bool,
@@ -547,6 +583,28 @@ pub enum WorkspaceAccessGateStatus {
     DeniedRequiresHostedAuth,
     DeniedRequiresHostedWorker,
     DeniedUnknownWorkspace,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionPreflightMode {
+    PreviewOnlyNoExecution,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionPreflightStatus {
+    DeniedRequiresHostedPrerequisites,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionPreflightRequirementStatus {
+    MissingHostedAuth,
+    MissingVaultHandle,
+    MissingQuotaReservation,
+    MissingWorkerLease,
+    MissingIdempotentCommit,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -1671,6 +1729,142 @@ pub fn result_commit_boundary() -> ResultCommitBoundary {
     }
 }
 
+pub fn execution_preflight_boundary() -> ExecutionPreflightBoundary {
+    let provider_access_gate = workspace_access_gate(WorkspaceAccessGateRequest {
+        workspace_id: Some(s("workspace_demo")),
+        action: WorkspaceAction::ExecuteProviderCalls,
+        resource: Some(s("future_provider_call")),
+    });
+    let vault = credential_vault_boundary();
+    let quota = quota_ledger_boundary();
+    let commit = result_commit_boundary();
+
+    ExecutionPreflightBoundary {
+        mode: ExecutionPreflightMode::PreviewOnlyNoExecution,
+        status: ExecutionPreflightStatus::DeniedRequiresHostedPrerequisites,
+        execution_allowed: false,
+        auth_enforced: provider_access_gate.allowed,
+        credential_vault_handle_issued: false,
+        quota_reservation_allowed: false,
+        worker_handoff_allowed: false,
+        result_commit_allowed: commit.commit_writes_enabled,
+        secret_values_returned: vault.secret_values_returned,
+        ledger_mutation_enabled: quota.ledger_mutation_enabled,
+        requirements: vec![
+            ExecutionPreflightRequirement {
+                id: s("tenant_auth_context"),
+                label: s("Hosted tenant auth context"),
+                owner: s("control_plane_later"),
+                status: ExecutionPreflightRequirementStatus::MissingHostedAuth,
+                requirement: s(
+                    "Resolve tenant, actor, role, and workspace permissions from hosted auth before provider execution.",
+                ),
+                blocks_execution: true,
+            },
+            ExecutionPreflightRequirement {
+                id: s("workspace_access_gate"),
+                label: s("Server workspace access gate"),
+                owner: s("api_control_plane_later"),
+                status: ExecutionPreflightRequirementStatus::MissingHostedAuth,
+                requirement: s(
+                    "ExecuteProviderCalls must pass a server-computed hosted gate, not local preview context.",
+                ),
+                blocks_execution: true,
+            },
+            ExecutionPreflightRequirement {
+                id: s("credential_vault_handle"),
+                label: s("Credential vault handle"),
+                owner: s("security_worker_later"),
+                status: ExecutionPreflightRequirementStatus::MissingVaultHandle,
+                requirement: s(
+                    "Workers may receive scoped provider handles only after auth, lease, and quota checks pass.",
+                ),
+                blocks_execution: true,
+            },
+            ExecutionPreflightRequirement {
+                id: s("quota_reservation"),
+                label: s("Quota reservation"),
+                owner: s("quota_ledger_later"),
+                status: ExecutionPreflightRequirementStatus::MissingQuotaReservation,
+                requirement: s(
+                    "Reserve tenant-scoped quota before any provider call and reconcile unused capacity after commit.",
+                ),
+                blocks_execution: true,
+            },
+            ExecutionPreflightRequirement {
+                id: s("worker_lease"),
+                label: s("Durable worker lease"),
+                owner: s("worker_pool_later"),
+                status: ExecutionPreflightRequirementStatus::MissingWorkerLease,
+                requirement: s(
+                    "Live execution must be worker-owned with lease expiry, retry policy, and duplicate-call prevention.",
+                ),
+                blocks_execution: true,
+            },
+            ExecutionPreflightRequirement {
+                id: s("idempotent_result_commit"),
+                label: s("Idempotent result commit"),
+                owner: s("event_store_later"),
+                status: ExecutionPreflightRequirementStatus::MissingIdempotentCommit,
+                requirement: s(
+                    "Provider results must commit through an idempotent event sequence before run state changes.",
+                ),
+                blocks_execution: true,
+            },
+        ],
+        handoff_rules: vec![
+            ExecutionPreflightHandoffRule {
+                id: s("api_to_worker_queue"),
+                stage: s("api_to_worker_queue"),
+                allowed_now: false,
+                requirement: s(
+                    "The API may describe a work order, but cannot enqueue live provider work until hosted auth and quota reservation exist.",
+                ),
+            },
+            ExecutionPreflightHandoffRule {
+                id: s("worker_to_provider_adapter"),
+                stage: s("worker_to_provider_adapter"),
+                allowed_now: false,
+                requirement: s(
+                    "A worker must hold a lease, quota reservation, and vault handle before calling a provider adapter.",
+                ),
+            },
+            ExecutionPreflightHandoffRule {
+                id: s("worker_to_event_store_commit"),
+                stage: s("worker_to_event_store_commit"),
+                allowed_now: false,
+                requirement: s(
+                    "Worker result commits require an idempotency key and durable event-store transaction.",
+                ),
+            },
+            ExecutionPreflightHandoffRule {
+                id: s("usage_to_quota_reconcile"),
+                stage: s("usage_to_quota_reconcile"),
+                allowed_now: false,
+                requirement: s(
+                    "Usage rows and quota reservation reconciliation must be atomic with result commit metadata.",
+                ),
+            },
+        ],
+        blocking_reasons: vec![
+            s("hosted_tenant_auth_required"),
+            s("credential_vault_handle_required"),
+            s("quota_reservation_required"),
+            s("durable_worker_lease_required"),
+            s("idempotent_result_commit_required"),
+            s("provider_execution_remains_disabled"),
+        ],
+        safeguards: vec![
+            s("no_sessions_passwords_jwts_or_provider_keys_accepted"),
+            s("no_secret_values_in_requests_or_responses"),
+            s("no_quota_reservation_or_billing_mutation"),
+            s("no_worker_lease_claimed"),
+            s("no_provider_calls_or_result_writes"),
+            s("api_returns_requirement_metadata_only"),
+        ],
+    }
+}
+
 pub fn run_event_timeline(run: &ProRun) -> RunEventTimeline {
     let mut events = Vec::new();
     push_run_event(
@@ -2249,14 +2443,16 @@ fn status_vocabulary_entry(
 mod tests {
     use super::{
         CooldownKind, CreateRunRequest, CredentialStorageStatus, CredentialVaultMode,
+        ExecutionPreflightMode, ExecutionPreflightRequirementStatus, ExecutionPreflightStatus,
         ProviderReadiness, QuotaAccountingStatus, QuotaLedgerMode, QuotaOwner, ResultCommitMode,
         ResultCommitStageStatus, ReviewComparisonMode, ReviewDeltaKind, RunEventKind,
         RunEventSource, RunStatus, WorkspaceAccessGateRequest, WorkspaceAccessGateStatus,
         WorkspaceAction, WorkspaceEnforcementMode, WorkspacePermissionStatus,
-        create_run_from_request, credential_vault_boundary, provider_status_snapshot,
-        quota_ledger_boundary, result_commit_boundary, run_event_timeline, run_review_comparison,
-        run_status_vocabulary, sample_run, sample_run_by_id, sample_run_summaries,
-        validate_run_references, workspace_access_context, workspace_access_gate,
+        create_run_from_request, credential_vault_boundary, execution_preflight_boundary,
+        provider_status_snapshot, quota_ledger_boundary, result_commit_boundary,
+        run_event_timeline, run_review_comparison, run_status_vocabulary, sample_run,
+        sample_run_by_id, sample_run_summaries, validate_run_references, workspace_access_context,
+        workspace_access_gate,
     };
     use std::collections::HashSet;
 
@@ -2579,6 +2775,73 @@ mod tests {
             let combined = format!("{} {} {}", lane.id, lane.label, lane.note).to_lowercase();
             !combined.contains("sk-") && !combined.contains("api_key")
         }));
+    }
+
+    #[test]
+    fn execution_preflight_boundary_denies_until_hosted_prerequisites_exist() {
+        let boundary = execution_preflight_boundary();
+
+        assert_eq!(
+            boundary.mode,
+            ExecutionPreflightMode::PreviewOnlyNoExecution
+        );
+        assert_eq!(
+            boundary.status,
+            ExecutionPreflightStatus::DeniedRequiresHostedPrerequisites
+        );
+        assert!(!boundary.execution_allowed);
+        assert!(!boundary.auth_enforced);
+        assert!(!boundary.credential_vault_handle_issued);
+        assert!(!boundary.quota_reservation_allowed);
+        assert!(!boundary.worker_handoff_allowed);
+        assert!(!boundary.result_commit_allowed);
+        assert!(!boundary.secret_values_returned);
+        assert!(!boundary.ledger_mutation_enabled);
+
+        let requirement_ids: HashSet<&str> = boundary
+            .requirements
+            .iter()
+            .map(|requirement| requirement.id.as_str())
+            .collect();
+        for id in [
+            "tenant_auth_context",
+            "credential_vault_handle",
+            "quota_reservation",
+            "worker_lease",
+            "idempotent_result_commit",
+        ] {
+            assert!(requirement_ids.contains(id), "missing requirement {id}");
+        }
+        assert!(
+            boundary
+                .requirements
+                .iter()
+                .all(|item| item.blocks_execution)
+        );
+        assert!(boundary.requirements.iter().any(|item| {
+            item.id == "quota_reservation"
+                && item.status == ExecutionPreflightRequirementStatus::MissingQuotaReservation
+        }));
+        assert!(boundary.handoff_rules.iter().all(|rule| !rule.allowed_now));
+        assert!(
+            boundary
+                .blocking_reasons
+                .contains(&"quota_reservation_required".to_string())
+        );
+        assert!(
+            boundary
+                .safeguards
+                .contains(&"no_provider_calls_or_result_writes".to_string())
+        );
+
+        let combined = format!(
+            "{:?} {:?} {:?}",
+            boundary.requirements, boundary.handoff_rules, boundary.safeguards
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
+        assert!(!combined.contains("bearer "));
     }
 
     #[test]

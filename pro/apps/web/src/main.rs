@@ -34,11 +34,6 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                 meta charset="utf-8";
                 meta name="viewport" content="width=device-width, initial-scale=1";
                 title { "RetroCause Pro" }
-                link rel="preconnect" href="https://fonts.googleapis.com";
-                link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="";
-                link
-                    href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap"
-                    rel="stylesheet";
                 style { (PreEscaped(styles())) }
             }
             body data-api-base=(api_base) {
@@ -301,6 +296,15 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                         p { "Lifecycle states load from the Pro API; execution remains disabled." }
                                     }
                                     span class="quota-state quota-state--deferred" { "planned" }
+                                }
+                            }
+                            div id="execution-preflight-panel" class="preflight-panel" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "Pre-execution boundary" }
+                                        p { "Hosted auth, vault handles, quota reservations, and worker leases must exist before live calls." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "denied" }
                                 }
                             }
                             div id="worker-lease-panel" class="lease-panel" {
@@ -1357,6 +1361,65 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderExecutionPreflightBoundary(boundary) {
+    const panel = byId("execution-preflight-panel");
+    if (!panel) return;
+    if (!boundary) {
+      panel.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>Pre-execution boundary</strong>
+            <p>Hosted auth, vault handles, quota reservations, and worker leases must exist before live calls.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">denied</span>
+        </article>
+      `;
+      return;
+    }
+
+    const requirements = (boundary.requirements || []).slice(0, 6).map((item) => `
+      <li>
+        <strong>${escapeHtml(item.label || item.id)}</strong>
+        <span>${escapeHtml(readable(item.status))} / ${item.blocks_execution ? "blocks execution" : "informational"}</span>
+        <small>${escapeHtml(item.owner)}: ${escapeHtml(item.requirement)}</small>
+      </li>
+    `).join("");
+    const handoffs = (boundary.handoff_rules || []).slice(0, 4).map((rule) => `
+      <li>
+        <strong>${escapeHtml(readable(rule.stage || rule.id))}</strong>
+        <span>${rule.allowed_now ? "allowed now" : "blocked now"}</span>
+        <small>${escapeHtml(rule.requirement)}</small>
+      </li>
+    `).join("");
+    const safeguards = (boundary.safeguards || [])
+      .slice(0, 5)
+      .map((guard) => `<li>${escapeHtml(guard)}</li>`)
+      .join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card preflight-card">
+        <div class="work-order-header">
+          <strong>Pre-execution boundary</strong>
+          <span class="quota-state quota-state--deferred">${boundary.execution_allowed ? "execution on" : "execution denied"}</span>
+          <p>${escapeHtml(readable(boundary.mode || "preview_only_no_execution"))} / ${escapeHtml(readable(boundary.status || "denied_requires_hosted_prerequisites"))}</p>
+          <small>auth: ${boundary.auth_enforced ? "enforced" : "missing"} / vault handle: ${boundary.credential_vault_handle_issued ? "issued" : "missing"} / quota reservation: ${boundary.quota_reservation_allowed ? "allowed" : "blocked"}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Hosted prerequisites</p>
+          <ol class="work-order-list">${requirements || "<li>No requirements returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Execution handoffs</p>
+          <ul class="work-order-list">${handoffs || "<li>No handoff rules returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Preflight safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>No safeguards returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   function renderExecutionJobs(jobs) {
     const list = byId("execution-job-list");
     if (!list) return;
@@ -2250,6 +2313,7 @@ fn client_script() -> &'static str {
   renderProviderAdapterCandidates(null);
   renderProviderAdapterGateCheck(null);
   renderExecutionReadiness(null);
+  renderExecutionPreflightBoundary(null);
   renderExecutionJobs([]);
   renderWorkOrder(null);
   renderExecutionLifecycle(null);
@@ -2300,6 +2364,11 @@ fn client_script() -> &'static str {
     .then(renderExecutionLifecycle)
     .catch(() => {
       renderExecutionLifecycle(null);
+    });
+  fetchJson("/api/execution-preflight-boundary")
+    .then(renderExecutionPreflightBoundary)
+    .catch(() => {
+      renderExecutionPreflightBoundary(null);
     });
   fetchJson("/api/worker-lease-boundary")
     .then(renderWorkerLeaseBoundary)
@@ -2475,7 +2544,7 @@ fn styles() -> &'static str {
 
 body {
   margin: 0;
-  font-family: "Hanken Grotesk", sans-serif;
+  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   background:
     linear-gradient(color-mix(in oklch, var(--text) 4%, transparent) 1px, transparent 1px),
     linear-gradient(90deg, color-mix(in oklch, var(--text) 4%, transparent) 1px, transparent 1px),
@@ -2543,7 +2612,7 @@ body {
   border-radius: 8px;
   background: var(--accent);
   color: oklch(0.18 0.018 148);
-  font-family: "Sora", sans-serif;
+  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   font-weight: 700;
 }
 
@@ -2746,7 +2815,7 @@ p {
 h1,
 h2,
 h3 {
-  font-family: "Sora", sans-serif;
+  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   font-weight: 600;
 }
 
@@ -2897,7 +2966,8 @@ p {
 
 #provider-adapter-candidate-panel,
 #live-adapter-gate-check-result,
-#execution-readiness-result {
+#execution-readiness-result,
+#execution-preflight-panel {
   display: grid;
   gap: 0.65rem;
 }
@@ -3321,12 +3391,14 @@ mod tests {
         assert!(page.contains("live-adapter-gate-check-result"));
         assert!(page.contains("execution-readiness-button"));
         assert!(page.contains("execution-readiness-result"));
+        assert!(page.contains("execution-preflight-panel"));
         assert!(page.contains("/api/provider-status"));
         assert!(page.contains("/api/provider-adapter-contract"));
         assert!(page.contains("/api/provider-adapter/dry-run"));
         assert!(page.contains("/api/provider-adapter/candidates"));
         assert!(page.contains("/api/provider-adapter/gate-check"));
         assert!(page.contains("/api/execution-readiness"));
+        assert!(page.contains("/api/execution-preflight-boundary"));
         assert!(page.contains("execution-job-list"));
         assert!(page.contains("execution-work-order-detail"));
         assert!(page.contains("execution-lifecycle-panel"));
@@ -3373,6 +3445,7 @@ mod tests {
         assert!(page.contains("function renderProviderAdapterCandidates"));
         assert!(page.contains("function renderProviderAdapterGateCheck"));
         assert!(page.contains("function renderExecutionReadiness"));
+        assert!(page.contains("function renderExecutionPreflightBoundary"));
         assert!(page.contains("function runProviderAdapterDryRun"));
         assert!(page.contains("function runProviderAdapterGateCheck"));
         assert!(page.contains("function checkExecutionReadiness"));

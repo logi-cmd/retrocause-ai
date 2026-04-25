@@ -2936,3 +2936,95 @@ This task adds a keyless composed execution-readiness gate for the Pro Rust prod
 
 - This is not real tenant authentication, not role management, not a credential vault, not a quota reservation system, not a worker runtime, not a hosted result committer, and not a persisted result snapshot.
 - Real provider/search execution must remain blocked until hosted auth, vault handles, quota reservations, worker leases, retry/idempotency rules, and result-event writes exist and consume this readiness gate.
+
+## Pro Product Core Slice 32 - Pre-Execution Boundary
+
+### Scope
+
+- `pro/crates/domain/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `ExecutionPreflightBoundary`, requirement/handoff rule types, status/mode enums, and `execution_preflight_boundary()` in `crates/domain`.
+- The preflight boundary names hosted auth, workspace access, credential-vault handle, quota reservation, worker lease, and idempotent result commit as blocking prerequisites.
+- Added keyless `GET /api/execution-preflight-boundary` in the Pro API.
+- Added domain and API tests proving execution stays denied, hosted prerequisites block execution, handoff rules remain disabled, no vault values are returned, and no quota ledger mutation is enabled.
+- Added a graph-first web panel that renders pre-execution mode/status, hosted prerequisites, handoff rules, and safeguards.
+- Removed external Google Fonts loading from the Pro Rust web shell and switched to system fonts so the local preview and browser smoke do not depend on network font fetches.
+- Updated project state and Pro architecture docs to record the pre-execution boundary as prerequisite vocabulary, not hosted auth, vault, quota, worker, provider, billing, or result execution.
+
+### Commands Run
+
+- `agent-guardrails plan --task "Add the next Pro Rust product-core slice: a keyless pre-execution boundary for hosted auth, credential-vault handles, and quota reservation prerequisites..."`
+  - Result: generated an overly broad auth-task scope including unrelated frontend/Python/cache paths.
+  - Fix: manually narrowed `.agent-guardrails/task-contract.json` to the approved Pro Rust domain/API/web/docs/evidence scope.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Initial result: failed because Rustfmt wanted to reflow the new route and assertions.
+  - Fix: ran `cargo fmt --manifest-path pro/Cargo.toml --all`.
+  - Final result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `35 passed`.
+  - Domain tests: `20 passed`.
+  - Event-store tests: `6 passed`.
+  - Provider-routing tests: `12 passed`.
+  - Queue tests: `7 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - First parallel attempt failed on Windows because `cargo test` still held the web executable lock.
+  - A second attempt still failed because earlier smoke wrappers left child `retrocause-pro-api` / `retrocause-pro-web` processes running.
+  - Fix: stopped the leftover local Pro service processes and reran build by itself.
+  - Final result: passed.
+
+- Pro API preflight smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8857` with temporary `RETROCAUSE_PRO_RUN_STORE_PATH` and `RETROCAUSE_PRO_EVENT_STORE_PATH`.
+  - Called `GET /api/execution-preflight-boundary`.
+  - Result: passed; status was `denied_requires_hosted_prerequisites`, execution stayed disabled, secret values and ledger mutation stayed false, all five key hosted prerequisites were present, all handoff rules were blocked, and no key-shaped values were found.
+
+- Pro browser preflight smoke
+  - First attempt timed out waiting for `domcontentloaded` because the page was still waiting on external Google Fonts.
+  - Second attempt opened the page but saw only the initial panel before the script finished.
+  - Debug attempt confirmed the font request timed out and delayed page load; the API preflight fetch itself returned HTTP 200.
+  - Fix: removed Google Fonts links and switched Pro web to system fonts.
+  - Final result: passed on `http://127.0.0.1:3071/`; Playwright verified the preflight panel rendered `execution denied`, hosted prerequisites including quota reservation and credential vault handle, and `no_provider_calls_or_result_writes`; no request failures or key-shaped text were found.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Result: passed. A key-shaped scan for common provider-token prefixes and credential-assignment patterns found no key-shaped tokens or credential assignments in the current diff.
+
+- Local process cleanup check
+  - Result: passed; no `retrocause-pro-api` or `retrocause-pro-web` service processes were left running after smoke tests.
+
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed.
+  - Score: `95/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the current Pro focus, done-recently entry, and next step were synchronized to include the pre-execution boundary slice.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with the same non-blocking `docs/PROJECT_STATE.md` state-file warning.
+  - Score: `95/100 (safe-to-deploy)`.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice does not accept, validate, read, store, log, or return sessions, passwords, JWTs, provider secrets, search keys, connector credentials, payment credentials, auth tokens, or user API keys. It does not enforce hosted permissions or protect hosted resources.
+- Dependencies: no new Rust crates, npm packages, Python packages, lockfile changes, or dependency upgrades were introduced. The web shell now has one fewer external runtime dependency because Google Fonts links were removed.
+- Performance: the preflight boundary is static in-memory metadata. It adds no provider calls, database calls, Redis calls, quota-ledger writes, billing writes, worker leases, retry scheduling, or result-event writes. Removing external font fetches makes local page load more deterministic.
+- Understanding: this boundary belongs in `crates/domain` because hosted auth, vault handles, quota reservations, worker leases, and idempotent commits are execution prerequisites shared across adapters, not OfoxAI/provider-specific behavior.
+- Continuity: reused existing workspace access-gate, credential-vault, quota-ledger, result-commit, Axum route, web `fetchJson`, and compact graph-first panel patterns. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- This is not real tenant authentication, not role management, not a credential vault, not quota reservation, not billing enforcement, not worker lease claiming, not provider execution, and not hosted result commit.
+- Future provider/worker execution must consume this boundary after real tenant auth, vault-handle issuance, quota reservation, worker lease, and idempotent event-store commit are implemented.

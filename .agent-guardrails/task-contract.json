@@ -1,11 +1,10 @@
 {
   "schemaVersion": 3,
-  "task": "Add the next Pro Rust product-core slice: a keyless execution readiness gate that composes the existing workspace access gate with provider-adapter gate checks and worker/result-commit blockers before any live provider, credential, quota, worker, or result-write execution can be enabled. Expose one local API endpoint, render one graph-first web panel, and synchronize Pro docs/evidence. This remains preview-only and must not add provider calls, credentials, auth enforcement, quota mutation, billing, worker execution, package publishing, npm dependencies, or OSS runtime changes.",
+  "task": "Add the next Pro Rust product-core slice: a keyless pre-execution boundary for hosted auth, credential-vault handles, and quota reservation prerequisites. Expose one local API endpoint, render one graph-first web panel, and synchronize Pro docs/evidence. This remains preview-only and must not add sessions, passwords, JWT validation, external auth, credential storage, provider calls, quota or billing mutation, worker execution, package publishing, npm dependencies, or OSS runtime changes.",
   "preset": "generic",
   "createdAt": "2026-04-25T06:10:00.000Z",
   "allowedPaths": [
     "pro/crates/domain/",
-    "pro/crates/provider-routing/",
     "pro/apps/api/",
     "pro/apps/web/",
     "docs/PROJECT_STATE.md",
@@ -34,7 +33,7 @@
   "securityRequirements": [
     "Mention auth, secrets, permissions, and sensitive-data handling explicitly.",
     "Do not accept or store passwords, tokens, provider secrets, or API keys.",
-    "Execution readiness must deny live/provider/worker/result-write paths until hosted gates exist."
+    "Pre-execution boundary must deny live/provider/worker/result-write paths until hosted auth, vault-handle, and quota-reservation gates exist."
   ],
   "dependencyRequirements": [
     "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
@@ -43,23 +42,24 @@
     "Mention performance, latency, or load impact in evidence."
   ],
   "understandingRequirements": [
-    "Explain why this gate composes existing boundary vocabulary instead of enabling execution."
+    "Explain why this boundary composes existing hosted auth, vault, quota, worker, and commit vocabulary instead of enabling execution."
   ],
   "continuityRequirements": [
-    "Reuse the existing workspace access-gate, provider-adapter gate vocabulary, Axum endpoint style, and compact web panel patterns."
+    "Reuse the existing workspace access-gate, credential-vault, quota-ledger, Axum endpoint style, and compact web panel patterns."
   ],
   "acknowledgedSkips": [],
-  "patternSummary": "Reuse the existing Pro domain gate payloads, API route handlers, web fetchJson helpers, and preview-only boundary panels.",
-  "smallestViableChange": "Add a deterministic execution readiness payload that reports live execution denied until workspace, provider, vault, quota, worker, and result-commit gates are satisfied.",
+  "patternSummary": "Reuse the existing Pro domain boundary payloads, API route handlers, web fetchJson helpers, and preview-only boundary panels.",
+  "smallestViableChange": "Add a deterministic pre-execution payload that reports live execution denied until hosted auth, credential-vault handle, quota reservation, worker lease, and idempotent commit gates are satisfied.",
   "assumptions": [
     "The Pro runtime remains local preview-only.",
-    "Real provider/search execution is still intentionally blocked."
+    "Real provider/search execution is still intentionally blocked.",
+    "Credential values are never accepted, displayed, stored, or returned by this boundary."
   ],
   "acceptanceCriteria": [
-    "Domain tests prove preview execution readiness denies live provider calls while showing satisfied preview observations and remaining hosted blockers.",
-    "API tests prove the endpoint returns a server-computed readiness payload and no secret-shaped fields.",
-    "Web tests prove the graph-first shell contains the readiness panel, endpoint path, and renderer.",
-    "Docs and evidence explain that this is not real provider execution or auth enforcement."
+    "Domain tests prove the pre-execution boundary denies live provider calls and marks hosted auth, vault-handle, quota-reservation, worker-lease, and idempotent-commit prerequisites as blocking.",
+    "API tests prove the endpoint returns a server-computed pre-execution payload and no secret-shaped fields.",
+    "Web tests prove the graph-first shell contains the pre-execution panel, endpoint path, and renderer.",
+    "Docs and evidence explain that this is not real provider execution, credential access, quota mutation, or auth enforcement."
   ],
   "nonGoals": [
     "No sessions",
@@ -74,14 +74,14 @@
     "No OSS runtime changes"
   ],
   "expectedBehaviorChanges": [
-    "Pro API exposes a keyless execution readiness endpoint.",
-    "Pro web shell renders whether live execution is still denied and which gates block it."
+    "Pro API exposes a keyless pre-execution boundary endpoint.",
+    "Pro web shell renders whether live execution is still denied and which hosted prerequisites block it."
   ],
   "expectedPublicSurfaceChanges": [
-    "POST /api/execution-readiness"
+    "GET /api/execution-preflight-boundary"
   ],
   "expectedTestTargets": [
     "cargo test --manifest-path pro/Cargo.toml"
   ],
-  "riskJustification": "This is a keyless local readiness evaluator that composes existing denied gates. It prepares an explicit execution boundary without enabling provider calls, credential reads, quota reservations, worker execution, or result writes."
+  "riskJustification": "This is a keyless local pre-execution evaluator that composes existing denied hosted gates. It prepares an explicit execution boundary without enabling provider calls, credential reads, quota reservations, worker execution, or result writes."
 }
