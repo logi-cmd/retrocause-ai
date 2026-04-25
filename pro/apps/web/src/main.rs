@@ -89,6 +89,26 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "preview" }
                                 }
                             }
+                            div class="create-grid" {
+                                select id="workspace-access-action" aria-label="Workspace gate action" {
+                                    option value="inspect_knowledge_graph" selected="" { "Inspect graph" }
+                                    option value="execute_provider_calls" { "Execute provider calls" }
+                                    option value="commit_worker_result" { "Commit worker result" }
+                                }
+                                button id="workspace-access-gate-button" type="button" { "Check access gate" }
+                            }
+                            p id="workspace-access-gate-status" class="console-status" {
+                                "Server gate evaluates preview access before live execution exists."
+                            }
+                            div id="workspace-access-gate-panel" class="workspace-access-panel" {
+                                article class="access-card access-card--empty" {
+                                    div {
+                                        strong { "Workspace access gate" }
+                                        p { "Choose an action to see the server-computed access decision." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "idle" }
+                                }
+                            }
                             div id="run-event-panel" class="run-event-panel" {
                                 article class="event-card event-card--empty" {
                                     div {
@@ -826,6 +846,68 @@ fn client_script() -> &'static str {
         <section>
           <p class="work-order-label">Safeguards</p>
           <ul class="work-order-list">${safeguards || "<li>No safeguards returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
+  function renderWorkspaceAccessGate(decision) {
+    const panel = byId("workspace-access-gate-panel");
+    if (!panel) return;
+    if (!decision) {
+      panel.innerHTML = `
+        <article class="access-card access-card--empty">
+          <div>
+            <strong>Workspace access gate</strong>
+            <p>Choose an action to see the server-computed access decision.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">idle</span>
+        </article>
+      `;
+      return;
+    }
+
+    const blockers = (decision.blocking_reasons || [])
+      .slice(0, 5)
+      .map((reason) => `<li>${escapeHtml(reason)}</li>`)
+      .join("");
+    const safeguards = (decision.safeguards || [])
+      .slice(0, 4)
+      .map((guard) => `<li>${escapeHtml(guard)}</li>`)
+      .join("");
+    const sensitiveRules = (decision.sensitive_data_rules || [])
+      .slice(0, 3)
+      .map((rule) => `<li>${escapeHtml(rule)}</li>`)
+      .join("");
+
+    panel.innerHTML = `
+      <article class="access-card">
+        <div class="work-order-header">
+          <strong>Workspace access gate</strong>
+          <span class="quota-state quota-state--deferred">${decision.allowed ? "preview allowed" : "access denied"}</span>
+          <p>${escapeHtml(readable(decision.action || "unknown_action"))} / ${escapeHtml(readable(decision.status || "unknown_status"))}</p>
+          <small>${escapeHtml(decision.workspace_id || "workspace")} / ${escapeHtml(decision.actor_id || "actor")} / resource: ${escapeHtml(decision.resource || "none")}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Decision</p>
+          <ul class="work-order-list">
+            <li>${decision.preview_only ? "preview only" : "not preview only"}</li>
+            <li>${decision.requires_auth ? "hosted auth required" : "hosted auth not required"}</li>
+            <li>${decision.requires_worker ? "worker required" : "worker not required"}</li>
+            <li>permission: ${escapeHtml(decision.matched_permission_id || "none")}</li>
+          </ul>
+        </section>
+        <section>
+          <p class="work-order-label">Blocking reasons</p>
+          <ul class="work-order-list">${blockers || "<li>No blockers returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>No safeguards returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Sensitive data rules</p>
+          <ul class="work-order-list">${sensitiveRules || "<li>No sensitive-data rules returned.</li>"}</ul>
         </section>
       </article>
     `;
@@ -1989,6 +2071,28 @@ fn client_script() -> &'static str {
     );
   }
 
+  async function checkWorkspaceAccessGate() {
+    const action = byId("workspace-access-action")?.value || "inspect_knowledge_graph";
+    const resource = action === "execute_provider_calls"
+      ? "ofoxai_model_candidate"
+      : (currentRun?.id || "run_semiconductor_controls_001");
+    setText("workspace-access-gate-status", "Checking server access gate...");
+    const decision = await fetchJson("/api/workspace/access-gate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspace_id: "workspace_demo",
+        action,
+        resource,
+      }),
+    });
+    renderWorkspaceAccessGate(decision);
+    setText(
+      "workspace-access-gate-status",
+      `Gate ${decision.allowed ? "allows preview access" : "denies hosted access"} for ${readable(decision.action)}.`,
+    );
+  }
+
   byId("run-create-form")?.addEventListener("submit", (event) => {
     createRun(event).catch((error) => setStatus(`API error: ${error.message}`));
   });
@@ -2013,6 +2117,10 @@ fn client_script() -> &'static str {
     prepareWorkerResultCommitIntent()
       .catch((error) => setText("worker-result-commit-intent-status", `Commit intent error: ${error.message}`));
   });
+  byId("workspace-access-gate-button")?.addEventListener("click", () => {
+    checkWorkspaceAccessGate()
+      .catch((error) => setText("workspace-access-gate-status", `Access gate error: ${error.message}`));
+  });
   byId("provider-adapter-dry-run-button")?.addEventListener("click", () => {
     runProviderAdapterDryRun()
       .catch((error) => setText("provider-adapter-dry-run-status", `Dry-run error: ${error.message}`));
@@ -2035,6 +2143,7 @@ fn client_script() -> &'static str {
 
   renderRun(seed);
   renderWorkspaceAccess(null);
+  renderWorkspaceAccessGate(null);
   renderRunEvents(null);
   renderEventReplay(null);
   renderReviewComparison(null);
@@ -2693,7 +2802,8 @@ p {
   gap: 0.65rem;
 }
 
-#workspace-access-panel {
+#workspace-access-panel,
+#workspace-access-gate-panel {
   display: grid;
   gap: 0.65rem;
 }
@@ -3083,8 +3193,13 @@ mod tests {
         assert!(page.contains("function focusReviewItem"));
         assert!(page.contains("run-create-form"));
         assert!(page.contains("workspace-access-panel"));
+        assert!(page.contains("workspace-access-gate-panel"));
+        assert!(page.contains("workspace-access-gate-button"));
         assert!(page.contains("/api/workspace/access-context"));
+        assert!(page.contains("/api/workspace/access-gate"));
         assert!(page.contains("function renderWorkspaceAccess"));
+        assert!(page.contains("function renderWorkspaceAccessGate"));
+        assert!(page.contains("function checkWorkspaceAccessGate"));
         assert!(page.contains("run-event-panel"));
         assert!(page.contains("/api/runs/${encodeURIComponent(runId)}/events"));
         assert!(page.contains("function renderRunEvents"));

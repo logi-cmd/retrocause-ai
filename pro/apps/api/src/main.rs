@@ -10,9 +10,10 @@ use axum::{
 use retrocause_pro_domain::{
     CreateRunRequest, CredentialVaultBoundary, KnowledgeGraph, ProRun, ProviderStatusSnapshot,
     QuotaLedgerBoundary, ResultCommitBoundary, RunEventTimeline, RunReviewComparison, RunStatus,
-    RunSummary, WorkspaceAccessContext, credential_vault_boundary, provider_status_snapshot,
-    quota_ledger_boundary, result_commit_boundary, run_event_timeline, run_review_comparison,
-    sample_run, workspace_access_context,
+    RunSummary, WorkspaceAccessContext, WorkspaceAccessGateDecision, WorkspaceAccessGateRequest,
+    credential_vault_boundary, provider_status_snapshot, quota_ledger_boundary,
+    result_commit_boundary, run_event_timeline, run_review_comparison, sample_run,
+    workspace_access_context, workspace_access_gate,
 };
 use retrocause_pro_event_store::{
     EventStoreEntry, EventStoreError, EventStoreReplay, FileEventStore, ResultSnapshotReadiness,
@@ -88,6 +89,10 @@ fn router() -> Router {
         .route("/healthz", get(health))
         .route("/api/graph/seed", get(seed_graph))
         .route("/api/workspace/access-context", get(workspace_access))
+        .route(
+            "/api/workspace/access-gate",
+            post(workspace_access_gate_decision).options(cors_preflight),
+        )
         .route("/api/credential-vault-boundary", get(credential_vault))
         .route("/api/quota-ledger-boundary", get(quota_ledger))
         .route("/api/result-commit-boundary", get(result_commit))
@@ -182,6 +187,12 @@ async fn seed_graph(State(state): State<AppState>) -> Json<ProRun> {
 
 async fn workspace_access() -> Json<WorkspaceAccessContext> {
     Json(workspace_access_context())
+}
+
+async fn workspace_access_gate_decision(
+    Json(request): Json<WorkspaceAccessGateRequest>,
+) -> Json<WorkspaceAccessGateDecision> {
+    Json(workspace_access_gate(request))
 }
 
 async fn credential_vault() -> Json<CredentialVaultBoundary> {
@@ -546,6 +557,7 @@ async fn main() {
 mod tests {
     use super::*;
     use axum::response::IntoResponse;
+    use retrocause_pro_domain::WorkspaceAction;
     use std::path::PathBuf;
 
     impl AppState {
@@ -623,6 +635,49 @@ mod tests {
                 && permission.status
                     == retrocause_pro_domain::WorkspacePermissionStatus::RequiresAuthLater
         }));
+    }
+
+    #[tokio::test]
+    async fn workspace_access_gate_allows_preview_and_denies_live_actions() {
+        let preview = workspace_access_gate_decision(Json(WorkspaceAccessGateRequest {
+            workspace_id: Some("workspace_demo".to_string()),
+            action: WorkspaceAction::InspectKnowledgeGraph,
+            resource: Some("run_semiconductor_controls_001".to_string()),
+        }))
+        .await
+        .0;
+
+        assert_eq!(preview.workspace_id, "workspace_demo");
+        assert!(preview.allowed);
+        assert!(preview.preview_only);
+        assert!(!preview.requires_auth);
+        assert_eq!(
+            preview.matched_permission_id.as_deref(),
+            Some("inspect_knowledge_graph")
+        );
+
+        let live = workspace_access_gate_decision(Json(WorkspaceAccessGateRequest {
+            workspace_id: Some("workspace_demo".to_string()),
+            action: WorkspaceAction::ExecuteProviderCalls,
+            resource: Some("ofoxai_model_candidate".to_string()),
+        }))
+        .await
+        .0;
+
+        assert!(!live.allowed);
+        assert!(live.requires_auth);
+        assert!(live.requires_worker);
+        assert!(
+            live.blocking_reasons
+                .contains(&"credential_vault_handle_required".to_string())
+        );
+        let combined = format!(
+            "{} {:?} {:?}",
+            live.actor_id, live.blocking_reasons, live.safeguards
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
     }
 
     #[tokio::test]

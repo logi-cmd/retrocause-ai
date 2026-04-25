@@ -12,7 +12,7 @@ The Rust rewrite lives under `pro/` inside this repository so the product and ar
 
 1. Establish a clean Rust workspace boundary.
  2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, usage ledger entries, provider quota ownership, and cooldown state.
-3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, run-scoped local event replay, preview-only worker result dry-runs, result snapshot readiness gates, worker result commit intents, keyless provider/search quota status, routing previews, and preview-only execution jobs.
+3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, run-scoped local event replay, preview-only worker result dry-runs, result snapshot readiness gates, worker result commit intents, workspace access-gate decisions, keyless provider/search quota status, routing previews, and preview-only execution jobs.
 4. Render a graph-first web shell from the same shared Rust payload and wire it to the local API create/read flow plus provider-status view.
 5. Keep Pro separate from the OSS Python/FastAPI + Next.js runtime.
 
@@ -71,6 +71,7 @@ The first shared crate now defines:
 - usage ledger entries
 - provider/search quota ownership entries
 - workspace access context entries
+- workspace access-gate decision entries
 - credential-vault boundary entries
 - quota-ledger and billing boundary entries
 - result-commit and event-store boundary entries
@@ -84,6 +85,8 @@ The first shared crate now defines:
 This keeps the API and web kickoff honest: they render the same shape instead of drifting into two separate demos.
 
 The workspace access context is deliberately non-enforcing in this slice. It names the demo workspace, preview actor, preview-allowed actions, actions that require real auth later, and safeguards such as no sessions, no cookie issuance, no token validation, no credential reads, and no billing/quota mutation. It is an inspectable contract, not a login system.
+
+The workspace access gate is also deliberately local and keyless in this slice. It evaluates a requested Pro action against the same preview workspace/actor context, allows only preview-safe actions such as graph inspection or preview-run creation, denies live/provider/worker/write actions, and returns blockers plus sensitive-data rules without accepting passwords, sessions, tokens, provider keys, or external auth assertions.
 
 The credential-vault boundary is deliberately keyless and disconnected in this slice. It names future credential classes, metadata-only visibility, worker-scoped access requirements, rotation ownership, and safeguards while returning `secret_values_returned=false` and `connections_enabled=false`.
 
@@ -187,6 +190,7 @@ Initial responsibility:
 - `POST /api/runs/{run_id}/worker-result-commit-intent`
 - `GET /api/runs/{run_id}/review-comparison`
 - `GET /api/workspace/access-context`
+- `POST /api/workspace/access-gate`
 - `GET /api/credential-vault-boundary`
 - `GET /api/quota-ledger-boundary`
 - `GET /api/result-commit-boundary`
@@ -210,11 +214,12 @@ Initial responsibility:
 - preview-only worker result dry-runs through `crates/event-store`, derived from local replay and blocked from result-event writes
 - preview-only result snapshot readiness gates through `crates/event-store`, derived from worker result dry-runs and blocked from snapshot persistence
 - preview-only worker result commit intents through `crates/event-store`, derived from snapshot readiness and blocked from result-event writes plus snapshot persistence
+- local preview workspace access-gate decisions through `crates/domain`, blocking live/provider/worker/write actions until hosted auth, vault, quota, worker, and idempotent storage gates exist
 - no-connection hosted storage migration plan through `crates/run-store`
 - local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
 - future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current run and event stores are intentionally local-file-backed. They are useful for proving the API behavior, graph payload contract, restart continuity, and local event replay, but they should not be treated as the hosted Pro data layer. The workspace access context, credential-vault boundary, quota-ledger boundary, result-commit boundary, derived run-events, local event-log/replay, worker result dry-run, result snapshot readiness, worker result commit intent, review-comparison, provider-status, provider-route preview, execution-job, lifecycle, worker-lease, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, result/event commit vocabulary, snapshot-persistence vocabulary, run status vocabulary, replay vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, retry/idempotency semantics, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, opening database/Redis connections, enforcing auth, claiming worker leases, scheduling retries, or calling real providers. Only the local event-log/replay endpoints write derived run-scoped events to the local JSON replay file; result-commit/provider/worker result dry-run/result snapshot readiness/worker result commit intent routes still cannot write provider result events or persisted snapshots. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current run and event stores are intentionally local-file-backed. They are useful for proving the API behavior, graph payload contract, restart continuity, and local event replay, but they should not be treated as the hosted Pro data layer. The workspace access context, workspace access gate, credential-vault boundary, quota-ledger boundary, result-commit boundary, derived run-events, local event-log/replay, worker result dry-run, result snapshot readiness, worker result commit intent, review-comparison, provider-status, provider-route preview, execution-job, lifecycle, worker-lease, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, result/event commit vocabulary, snapshot-persistence vocabulary, run status vocabulary, replay vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, queue shape, worker states, retry/idempotency semantics, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, opening database/Redis connections, enforcing auth, claiming worker leases, scheduling retries, or calling real providers. Only the local event-log/replay endpoints write derived run-scoped events to the local JSON replay file; result-commit/provider/worker result dry-run/result snapshot readiness/worker result commit intent/workspace access-gate routes still cannot write provider result events, persisted snapshots, credentials, sessions, or quota rows. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -225,6 +230,7 @@ Initial responsibility:
 - create new in-memory runs through `POST /api/runs`
 - reload run summaries, run detail, and graph payloads from the Pro API
 - render the non-enforcing workspace/auth context from `GET /api/workspace/access-context`
+- check the server-side preview workspace access gate through `POST /api/workspace/access-gate`, showing allow/deny status, blockers, safeguards, and sensitive-data rules before live execution exists
 - render the planned credential-vault boundary from `GET /api/credential-vault-boundary`, showing credential classes, blocked access rules, and safeguards without showing values
 - render the planned quota-ledger/billing boundary from `GET /api/quota-ledger-boundary`, showing quota lanes, metering rules, and billing safeguards without writing usage or connecting payment infrastructure
 - render the planned result-commit/event-store boundary from `GET /api/result-commit-boundary`, showing commit stages, event write rules, partial-result reconciliation, and safeguards without writing durable events
@@ -284,6 +290,8 @@ Those semantics should remain explicit in both API payloads and the graph worksp
 The current `POST /api/runs` path uses `queued` runs and managed/user-provided quota labels without calling model or search providers. The current `GET /api/provider-status` path exposes static ownership lanes for managed Pro quota, workspace-managed search quota, BYOK-later search, uploaded-evidence-only input, and an example market-search cooldown bucket. The current `POST /api/execution-jobs` path records a preview-only queue job from the routing plan, and `GET /api/execution-jobs/{job_id}/work-order` exposes the non-executing work-order contract a future worker should consume. Live provider credentials, BYOK storage, workspace quotas, real cooldown enforcement, and real worker execution remain future work.
 
 The current `GET /api/workspace/access-context` path exposes a static local preview actor and permission vocabulary. It does not authenticate, authorize, issue sessions, validate tokens, store credentials, mutate billing/quota, or protect hosted resources. Future auth work should replace this preview context with real tenant and actor resolution before any provider execution is enabled.
+
+The current `POST /api/workspace/access-gate` path evaluates a requested action against that preview context. It allows preview-safe actions, denies unknown workspaces, denies live provider calls, credential management, billing/quota viewing, worker result commits, and snapshot persistence until hosted auth and worker-owned gates exist. It does not accept passwords, tokens, sessions, provider credentials, or external auth claims, and it does not protect hosted resources yet. Future hosted Pro should make provider execution, credential reads, quota reservations, worker leases, and result commits consume this gate after real tenant/actor resolution exists.
 
 The current `GET /api/credential-vault-boundary` path exposes planned credential classes, access rules, rotation rules, and safeguards. It does not accept credential input, read or store secrets, open a vault connection, return values, or enable workers. Future hosted Pro should replace it with metadata-only vault status after auth, quota ledger, and worker leases exist.
 
@@ -422,6 +430,14 @@ The workspace/auth boundary preview slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `GET /api/workspace/access-context` proving the context stays non-enforcing, shows preview and gated permissions, and names auth safeguards
 - a browser smoke that starts the Pro API and web shell and verifies that the workspace access panel renders the preview actor, preview permissions, gated provider execution, and safeguards
+
+The workspace access-gate slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `POST /api/workspace/access-gate` proving preview graph inspection is allowed while provider execution, worker result commits, and unknown workspaces are denied without accepting secrets
+- a browser smoke that starts the Pro API and web shell, clicks `Check access gate`, and verifies that the gate panel renders server-computed allow/deny status, blockers, safeguards, and sensitive-data rules
 
 The run event/status vocabulary slice adds:
 

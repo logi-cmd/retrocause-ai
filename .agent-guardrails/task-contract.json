@@ -1,10 +1,10 @@
 {
   "schemaVersion": 3,
-  "task": "Add the next preview-only Pro Rust worker result commit intent gate: derive a non-writing worker-owned commit-intent payload from the existing result snapshot readiness/local replay path, expose a keyless API endpoint, render a compact graph-first web panel with idempotency and hosted gate blockers, and synchronize Pro docs/evidence. Keep this local-only and keyless: do not add persisted snapshots, real result-event writes, Postgres/Redis, hosted auth enforcement, real workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, package publishing, or live provider calls.",
+  "task": "Add the next Pro Rust product-core slice: a server-side workspace access gate that evaluates a requested Pro action against the local preview workspace/actor context, exposes a keyless API endpoint for gate decisions, renders the decision in the graph-first web shell, and synchronizes Pro docs/evidence. Keep this local-only and keyless: do not add sessions, passwords, external auth providers, JWT validation, credential storage, provider execution, quota/billing mutation, worker execution, OSS runtime changes, npm dependencies, package publishing, or live provider calls.",
   "preset": "generic",
-  "createdAt": "2026-04-25T00:28:00.000Z",
+  "createdAt": "2026-04-25T01:35:00.000Z",
   "allowedPaths": [
-    "pro/crates/event-store/",
+    "pro/crates/domain/",
     "pro/apps/api/",
     "pro/apps/web/",
     "docs/PROJECT_STATE.md",
@@ -19,12 +19,20 @@
   ],
   "intendedFiles": [],
   "protectedPaths": [],
-  "allowedChangeTypes": [],
+  "allowedChangeTypes": [
+    "interface",
+    "implementation",
+    "tests",
+    "docs",
+    "guardrails-internal",
+    "other"
+  ],
   "riskLevel": "standard",
   "requiresReviewNotes": false,
   "validationProfile": "standard",
   "securityRequirements": [
-    "Mention auth, secrets, permissions, and sensitive-data handling explicitly."
+    "Mention auth, secrets, permissions, and sensitive-data handling explicitly.",
+    "Do not accept or store passwords, tokens, provider secrets, or API keys."
   ],
   "dependencyRequirements": [
     "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
@@ -39,39 +47,49 @@
     "Mention reuse targets and any deliberate continuity break in evidence."
   ],
   "acknowledgedSkips": [],
-  "patternSummary": "",
-  "smallestViableChange": "",
-  "assumptions": [],
-  "acceptanceCriteria": [],
+  "patternSummary": "Reuse the existing domain payload builders, Axum state/endpoint style, web fetchJson helper, and compact graph-first panels.",
+  "smallestViableChange": "Add a deterministic local workspace access gate payload and surface it through one API endpoint plus one web panel.",
+  "assumptions": [
+    "The active Pro slice remains local preview-only.",
+    "The OSS runtime remains keyless and untouched."
+  ],
+  "acceptanceCriteria": [
+    "Domain tests prove preview/read actions can pass while live/provider/worker/write actions remain denied.",
+    "API tests prove the endpoint returns server-computed decisions and no secret-shaped fields.",
+    "Web tests prove the graph-first shell contains the new gate panel, endpoint path, and renderer.",
+    "Docs and evidence explain that this is not real hosted auth."
+  ],
   "nonGoals": [
-    "No persisted result snapshots",
-    "No real result-event writes",
+    "No sessions",
+    "No passwords",
+    "No external auth provider",
+    "No JWT validation",
+    "No credential storage",
     "No provider calls",
-    "No credential access",
-    "No auth enforcement",
     "No quota or billing mutation",
+    "No worker execution",
     "No OSS runtime changes"
   ],
   "expectedBehaviorChanges": [
-    "Pro API exposes a keyless preview-only worker result commit intent endpoint.",
-    "Pro web shell renders commit idempotency requirements, rejected write steps, and hosted blockers from the current run."
+    "Pro API exposes a keyless workspace access gate decision endpoint.",
+    "Pro web shell renders whether a requested action is allowed, preview-only, or denied by hosted blockers."
   ],
   "userVisibleEffects": [
-    "The Pro graph-first shell can show the future worker-owned commit envelope and why it is still rejected."
+    "The Pro graph-first shell can show the first server-side access decision boundary before live execution exists."
   ],
   "expectedPublicSurfaceChanges": [
-    "POST /api/runs/{run_id}/worker-result-commit-intent"
+    "POST /api/workspace/access-gate"
   ],
   "expectedTestTargets": [
     "cargo test --manifest-path pro/Cargo.toml"
   ],
-  "riskJustification": "This is a preview-only contract surface. It intentionally makes future worker-owned commit prerequisites visible without creating a write path or enabling hosted execution.",
+  "riskJustification": "This is a keyless local gate evaluator that denies live/provider/worker/write actions. It prepares a real server-side decision boundary without enabling auth sessions, credentials, provider execution, or billing.",
   "session": {
     "version": 1,
-    "sessionId": "5c6480b6-f3e0-4d9c-a7c5-worker-result-commit-intent",
-    "createdAt": "2026-04-25T00:28:00.000Z",
+    "sessionId": "pro-workspace-access-gate-2026-04-25",
+    "createdAt": "2026-04-25T01:35:00.000Z",
     "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Add the next preview-only Pro Rust worker result commit intent gate: derive a non-writing worker-owned commit-intent payload from the existing result snapshot readiness/local replay path, expose a keyless API endpoint, render a compact graph-first web panel with idempotency and hosted gate blockers, and synchronize Pro docs/evidence. Keep this local-only and keyless: do not add persisted snapshots, real result-event writes, Postgres/Redis, hosted auth enforcement, real workers, provider execution, credential access, quota/billing mutation, OSS runtime changes, npm dependencies, package publishing, or live provider calls.",
+    "taskRequest": "Continue Pro by adding a server-side workspace access gate before real provider/search execution.",
     "contractSource": "manual-scope-after-plan-mismatch",
     "selectedFiles": [],
     "changedFiles": [],
@@ -81,7 +99,8 @@
     "evidencePathSuggested": ".agent-guardrails/evidence/current-task.md",
     "riskDimensions": {
       "securityRequirements": [
-        "Mention auth, secrets, permissions, and sensitive-data handling explicitly."
+        "Mention auth, secrets, permissions, and sensitive-data handling explicitly.",
+        "Do not accept or store passwords, tokens, provider secrets, or API keys."
       ],
       "dependencyRequirements": [
         "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
@@ -99,17 +118,15 @@
     "finishCheckHints": [
       "Report the commands you actually ran: cargo test --manifest-path pro/Cargo.toml",
       "Keep the evidence note current: .agent-guardrails/evidence/current-task.md",
-      "Keep security, dependency, performance, understanding, and continuity concerns explicit in the evidence note and review summary.",
       "Finish with agent-guardrails check --review before handing off or merging."
     ],
     "archaeologyNotes": [
-      "The automated guardrails plan inferred generic src/routes paths; the contract was manually narrowed to the Rust Pro workspace paths actually used by this repository."
+      "The automated guardrails plan inferred build artifacts and OSS paths; the contract was manually narrowed to the Rust Pro workspace paths actually used by this slice."
     ],
     "nextActions": [
-      "Implement the smallest change that fits the contract.",
-      "Run required commands: cargo test --manifest-path pro/Cargo.toml",
-      "Update evidence: .agent-guardrails/evidence/current-task.md",
-      "Run agent-guardrails check --review before completing the task."
+      "Inspect the existing domain workspace access payload and API/web patterns.",
+      "Implement the smallest server-side gate evaluator.",
+      "Run required commands and update evidence."
     ]
   }
 }

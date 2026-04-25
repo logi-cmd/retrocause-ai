@@ -127,6 +127,31 @@ pub struct WorkspaceAccessContext {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkspaceAccessGateRequest {
+    pub workspace_id: Option<String>,
+    pub action: WorkspaceAction,
+    pub resource: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkspaceAccessGateDecision {
+    pub workspace_id: String,
+    pub actor_id: String,
+    pub actor_role: WorkspaceRole,
+    pub action: WorkspaceAction,
+    pub resource: Option<String>,
+    pub status: WorkspaceAccessGateStatus,
+    pub allowed: bool,
+    pub preview_only: bool,
+    pub requires_auth: bool,
+    pub requires_worker: bool,
+    pub matched_permission_id: Option<String>,
+    pub blocking_reasons: Vec<String>,
+    pub safeguards: Vec<String>,
+    pub sensitive_data_rules: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CredentialVaultBoundary {
     pub mode: CredentialVaultMode,
     pub connections_enabled: bool,
@@ -500,6 +525,28 @@ pub enum WorkspaceRole {
 pub enum WorkspacePermissionStatus {
     PreviewAllowed,
     RequiresAuthLater,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceAction {
+    CreatePreviewRun,
+    InspectKnowledgeGraph,
+    EnqueuePreviewJob,
+    ExecuteProviderCalls,
+    ManageWorkspaceCredentials,
+    ViewBillingAndQuota,
+    CommitWorkerResult,
+    PersistResultSnapshot,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceAccessGateStatus {
+    AllowedPreview,
+    DeniedRequiresHostedAuth,
+    DeniedRequiresHostedWorker,
+    DeniedUnknownWorkspace,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -1208,6 +1255,136 @@ pub fn workspace_access_context() -> WorkspaceAccessContext {
             s("workspace_id_is_demo_tenant_not_acl"),
         ],
     }
+}
+
+pub fn workspace_access_gate(request: WorkspaceAccessGateRequest) -> WorkspaceAccessGateDecision {
+    let context = workspace_access_context();
+    let requested_workspace =
+        non_empty_or_default(request.workspace_id, context.workspace_id.as_str());
+
+    if requested_workspace != context.workspace_id {
+        return WorkspaceAccessGateDecision {
+            workspace_id: requested_workspace,
+            actor_id: context.actor.actor_id,
+            actor_role: context.actor.role,
+            action: request.action,
+            resource: request.resource,
+            status: WorkspaceAccessGateStatus::DeniedUnknownWorkspace,
+            allowed: false,
+            preview_only: true,
+            requires_auth: true,
+            requires_worker: workspace_action_requires_worker(request.action),
+            matched_permission_id: None,
+            blocking_reasons: vec![
+                s("workspace_not_in_local_preview_context"),
+                s("hosted_tenant_auth_required_before_access"),
+            ],
+            safeguards: workspace_gate_safeguards(),
+            sensitive_data_rules: context.sensitive_data_rules,
+        };
+    }
+
+    let permission_id = workspace_action_permission_id(request.action);
+    let permission = context
+        .permissions
+        .iter()
+        .find(|permission| permission.id == permission_id);
+    let status = match permission.map(|permission| permission.status) {
+        Some(WorkspacePermissionStatus::PreviewAllowed) => {
+            WorkspaceAccessGateStatus::AllowedPreview
+        }
+        Some(WorkspacePermissionStatus::RequiresAuthLater) => {
+            WorkspaceAccessGateStatus::DeniedRequiresHostedAuth
+        }
+        None => WorkspaceAccessGateStatus::DeniedRequiresHostedWorker,
+    };
+    let allowed = status == WorkspaceAccessGateStatus::AllowedPreview;
+
+    WorkspaceAccessGateDecision {
+        workspace_id: context.workspace_id,
+        actor_id: context.actor.actor_id,
+        actor_role: context.actor.role,
+        action: request.action,
+        resource: request.resource,
+        status,
+        allowed,
+        preview_only: true,
+        requires_auth: !allowed,
+        requires_worker: workspace_action_requires_worker(request.action),
+        matched_permission_id: permission.map(|permission| permission.id.clone()),
+        blocking_reasons: if allowed {
+            vec![s("local_preview_only_no_hosted_resource_access")]
+        } else {
+            workspace_action_blocking_reasons(request.action)
+        },
+        safeguards: workspace_gate_safeguards(),
+        sensitive_data_rules: context.sensitive_data_rules,
+    }
+}
+
+fn workspace_action_permission_id(action: WorkspaceAction) -> &'static str {
+    match action {
+        WorkspaceAction::CreatePreviewRun => "create_preview_run",
+        WorkspaceAction::InspectKnowledgeGraph => "inspect_knowledge_graph",
+        WorkspaceAction::EnqueuePreviewJob => "enqueue_preview_job",
+        WorkspaceAction::ExecuteProviderCalls => "execute_provider_calls",
+        WorkspaceAction::ManageWorkspaceCredentials => "manage_workspace_credentials",
+        WorkspaceAction::ViewBillingAndQuota => "view_billing_and_quota",
+        WorkspaceAction::CommitWorkerResult | WorkspaceAction::PersistResultSnapshot => {
+            "worker_owned_result_writes"
+        }
+    }
+}
+
+fn workspace_action_requires_worker(action: WorkspaceAction) -> bool {
+    matches!(
+        action,
+        WorkspaceAction::ExecuteProviderCalls
+            | WorkspaceAction::CommitWorkerResult
+            | WorkspaceAction::PersistResultSnapshot
+    )
+}
+
+fn workspace_action_blocking_reasons(action: WorkspaceAction) -> Vec<String> {
+    match action {
+        WorkspaceAction::ExecuteProviderCalls => vec![
+            s("hosted_tenant_auth_required"),
+            s("credential_vault_handle_required"),
+            s("quota_reservation_required"),
+            s("worker_execution_required"),
+        ],
+        WorkspaceAction::ManageWorkspaceCredentials => vec![
+            s("hosted_tenant_auth_required"),
+            s("workspace_admin_role_required"),
+            s("credential_vault_connection_required"),
+        ],
+        WorkspaceAction::ViewBillingAndQuota => vec![
+            s("hosted_tenant_auth_required"),
+            s("quota_ledger_connection_required"),
+            s("billing_policy_required"),
+        ],
+        WorkspaceAction::CommitWorkerResult | WorkspaceAction::PersistResultSnapshot => vec![
+            s("durable_worker_lease_required"),
+            s("idempotent_event_store_write_required"),
+            s("tenant_auth_required_before_result_write"),
+            s("quota_and_vault_gates_required"),
+        ],
+        WorkspaceAction::CreatePreviewRun
+        | WorkspaceAction::InspectKnowledgeGraph
+        | WorkspaceAction::EnqueuePreviewJob => {
+            vec![s("local_preview_only_no_hosted_resource_access")]
+        }
+    }
+}
+
+fn workspace_gate_safeguards() -> Vec<String> {
+    vec![
+        s("server_computed_workspace_gate_decision"),
+        s("no_sessions_passwords_tokens_or_provider_keys_accepted"),
+        s("no_provider_credentials_read"),
+        s("no_provider_or_worker_execution"),
+        s("no_quota_or_billing_mutation"),
+    ]
 }
 
 pub fn credential_vault_boundary() -> CredentialVaultBoundary {
@@ -2074,11 +2251,12 @@ mod tests {
         CooldownKind, CreateRunRequest, CredentialStorageStatus, CredentialVaultMode,
         ProviderReadiness, QuotaAccountingStatus, QuotaLedgerMode, QuotaOwner, ResultCommitMode,
         ResultCommitStageStatus, ReviewComparisonMode, ReviewDeltaKind, RunEventKind,
-        RunEventSource, RunStatus, WorkspaceEnforcementMode, WorkspacePermissionStatus,
+        RunEventSource, RunStatus, WorkspaceAccessGateRequest, WorkspaceAccessGateStatus,
+        WorkspaceAction, WorkspaceEnforcementMode, WorkspacePermissionStatus,
         create_run_from_request, credential_vault_boundary, provider_status_snapshot,
         quota_ledger_boundary, result_commit_boundary, run_event_timeline, run_review_comparison,
         run_status_vocabulary, sample_run, sample_run_by_id, sample_run_summaries,
-        validate_run_references, workspace_access_context,
+        validate_run_references, workspace_access_context, workspace_access_gate,
     };
     use std::collections::HashSet;
 
@@ -2222,6 +2400,122 @@ mod tests {
                 .sensitive_data_rules
                 .contains(&"workspace_id_is_demo_tenant_not_acl".to_string())
         );
+    }
+
+    #[test]
+    fn workspace_access_gate_allows_preview_actions_only() {
+        let create_decision = workspace_access_gate(WorkspaceAccessGateRequest {
+            workspace_id: Some("workspace_demo".to_string()),
+            action: WorkspaceAction::CreatePreviewRun,
+            resource: Some("run_preview".to_string()),
+        });
+
+        assert_eq!(
+            create_decision.status,
+            WorkspaceAccessGateStatus::AllowedPreview
+        );
+        assert!(create_decision.allowed);
+        assert!(create_decision.preview_only);
+        assert!(!create_decision.requires_auth);
+        assert!(!create_decision.requires_worker);
+        assert_eq!(
+            create_decision.matched_permission_id.as_deref(),
+            Some("create_preview_run")
+        );
+        assert!(
+            create_decision
+                .safeguards
+                .contains(&"server_computed_workspace_gate_decision".to_string())
+        );
+
+        let inspect_decision = workspace_access_gate(WorkspaceAccessGateRequest {
+            workspace_id: None,
+            action: WorkspaceAction::InspectKnowledgeGraph,
+            resource: Some("run_semiconductor_controls_001".to_string()),
+        });
+
+        assert_eq!(
+            inspect_decision.status,
+            WorkspaceAccessGateStatus::AllowedPreview
+        );
+        assert!(inspect_decision.allowed);
+        assert_eq!(inspect_decision.workspace_id, "workspace_demo");
+    }
+
+    #[test]
+    fn workspace_access_gate_denies_live_worker_and_write_actions() {
+        let provider_decision = workspace_access_gate(WorkspaceAccessGateRequest {
+            workspace_id: Some("workspace_demo".to_string()),
+            action: WorkspaceAction::ExecuteProviderCalls,
+            resource: Some("ofoxai_model_candidate".to_string()),
+        });
+
+        assert_eq!(
+            provider_decision.status,
+            WorkspaceAccessGateStatus::DeniedRequiresHostedAuth
+        );
+        assert!(!provider_decision.allowed);
+        assert!(provider_decision.requires_auth);
+        assert!(provider_decision.requires_worker);
+        assert_eq!(
+            provider_decision.matched_permission_id.as_deref(),
+            Some("execute_provider_calls")
+        );
+        assert!(
+            provider_decision
+                .blocking_reasons
+                .contains(&"credential_vault_handle_required".to_string())
+        );
+
+        let commit_decision = workspace_access_gate(WorkspaceAccessGateRequest {
+            workspace_id: Some("workspace_demo".to_string()),
+            action: WorkspaceAction::CommitWorkerResult,
+            resource: Some("run_semiconductor_controls_001".to_string()),
+        });
+
+        assert_eq!(
+            commit_decision.status,
+            WorkspaceAccessGateStatus::DeniedRequiresHostedWorker
+        );
+        assert!(!commit_decision.allowed);
+        assert!(commit_decision.requires_auth);
+        assert!(commit_decision.requires_worker);
+        assert!(
+            commit_decision
+                .blocking_reasons
+                .contains(&"idempotent_event_store_write_required".to_string())
+        );
+    }
+
+    #[test]
+    fn workspace_access_gate_denies_unknown_workspace_without_sensitive_values() {
+        let decision = workspace_access_gate(WorkspaceAccessGateRequest {
+            workspace_id: Some("workspace_other".to_string()),
+            action: WorkspaceAction::CreatePreviewRun,
+            resource: None,
+        });
+
+        assert_eq!(
+            decision.status,
+            WorkspaceAccessGateStatus::DeniedUnknownWorkspace
+        );
+        assert!(!decision.allowed);
+        assert!(decision.requires_auth);
+        assert_eq!(decision.workspace_id, "workspace_other");
+        assert!(decision.matched_permission_id.is_none());
+        assert!(
+            decision
+                .blocking_reasons
+                .contains(&"workspace_not_in_local_preview_context".to_string())
+        );
+
+        let combined = format!(
+            "{} {:?} {:?}",
+            decision.actor_id, decision.blocking_reasons, decision.safeguards
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
     }
 
     #[test]
