@@ -20,9 +20,10 @@ use retrocause_pro_event_store::{
     WorkerResultCommitIntent, WorkerResultDryRun,
 };
 use retrocause_pro_provider_routing::{
-    ProviderAdapterCandidateCatalog, ProviderAdapterContract, ProviderAdapterDryRunRequest,
-    ProviderAdapterDryRunResult, ProviderAdapterGateCheckRequest, ProviderAdapterGateCheckResult,
-    RoutingPreviewError, RoutingPreviewPlan, RoutingPreviewRequest, build_routing_preview,
+    ExecutionReadinessDecision, ExecutionReadinessRequest, ProviderAdapterCandidateCatalog,
+    ProviderAdapterContract, ProviderAdapterDryRunRequest, ProviderAdapterDryRunResult,
+    ProviderAdapterGateCheckRequest, ProviderAdapterGateCheckResult, RoutingPreviewError,
+    RoutingPreviewPlan, RoutingPreviewRequest, build_routing_preview, execution_readiness_gate,
     provider_adapter_candidates, provider_adapter_contract, provider_adapter_dry_run,
     provider_adapter_gate_check,
 };
@@ -92,6 +93,10 @@ fn router() -> Router {
         .route(
             "/api/workspace/access-gate",
             post(workspace_access_gate_decision).options(cors_preflight),
+        )
+        .route(
+            "/api/execution-readiness",
+            post(execution_readiness).options(cors_preflight),
         )
         .route("/api/credential-vault-boundary", get(credential_vault))
         .route("/api/quota-ledger-boundary", get(quota_ledger))
@@ -193,6 +198,12 @@ async fn workspace_access_gate_decision(
     Json(request): Json<WorkspaceAccessGateRequest>,
 ) -> Json<WorkspaceAccessGateDecision> {
     Json(workspace_access_gate(request))
+}
+
+async fn execution_readiness(
+    Json(request): Json<ExecutionReadinessRequest>,
+) -> Json<ExecutionReadinessDecision> {
+    Json(execution_readiness_gate(request))
 }
 
 async fn credential_vault() -> Json<CredentialVaultBoundary> {
@@ -674,6 +685,57 @@ mod tests {
         let combined = format!(
             "{} {:?} {:?}",
             live.actor_id, live.blocking_reasons, live.safeguards
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
+    }
+
+    #[tokio::test]
+    async fn execution_readiness_denies_live_execution_with_composed_blockers() {
+        let payload = execution_readiness(Json(ExecutionReadinessRequest {
+            workspace_id: Some("workspace_demo".to_string()),
+            run_id: Some("run_semiconductor_controls_001".to_string()),
+            candidate_id: Some("ofoxai_model_candidate".to_string()),
+            dry_run_observed: true,
+            auth_context_observed: true,
+            quota_owner_confirmed: true,
+            event_timeline_observed: true,
+            work_order_observed: true,
+            commit_intent_observed: true,
+        }))
+        .await
+        .0;
+
+        assert_eq!(payload.workspace_id, "workspace_demo");
+        assert!(!payload.execution_allowed);
+        assert!(matches!(
+            payload.status,
+            retrocause_pro_provider_routing::ExecutionReadinessStatus::DeniedRequiresHostedGates
+        ));
+        assert!(!payload.workspace_gate.allowed);
+        assert!(!payload.provider_gate.execution_allowed);
+        assert!(!payload.worker_commit_gate.allowed);
+        assert!(!payload.snapshot_persistence_gate.allowed);
+        assert!(
+            payload
+                .preview_observations
+                .iter()
+                .all(|item| item.observed)
+        );
+        assert!(
+            payload
+                .blocking_reasons
+                .contains(&"provider_gate:workspace_auth_enforced".to_string())
+        );
+        assert!(
+            payload
+                .safeguards
+                .contains(&"no_credential_reads".to_string())
+        );
+        let combined = format!(
+            "{:?} {:?} {:?}",
+            payload.blocking_reasons, payload.safeguards, payload.next_required_step
         )
         .to_lowercase();
         assert!(!combined.contains("sk-"));

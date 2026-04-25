@@ -1,17 +1,19 @@
 {
   "schemaVersion": 3,
-  "task": "Fix OSS hosted-search undated result filtering so Chinese current-day market fallback graph tests accept Tavily/Brave-style transient search results without provider keys or live calls.",
+  "task": "Add the next Pro Rust product-core slice: a keyless execution readiness gate that composes the existing workspace access gate with provider-adapter gate checks and worker/result-commit blockers before any live provider, credential, quota, worker, or result-write execution can be enabled. Expose one local API endpoint, render one graph-first web panel, and synchronize Pro docs/evidence. This remains preview-only and must not add provider calls, credentials, auth enforcement, quota mutation, billing, worker execution, package publishing, npm dependencies, or OSS runtime changes.",
   "preset": "generic",
-  "createdAt": "2026-04-25T05:30:16.708Z",
+  "createdAt": "2026-04-25T06:10:00.000Z",
   "allowedPaths": [
-    "retrocause/evidence_access.py",
-    "tests/test_auto_collect.py",
-    "tests/test_evidence_access.py",
+    "pro/crates/domain/",
+    "pro/crates/provider-routing/",
+    "pro/apps/api/",
+    "pro/apps/web/",
     "docs/PROJECT_STATE.md",
+    "docs/pro-rust-architecture.md",
     ".agent-guardrails/"
   ],
   "requiredCommands": [
-    "npm test"
+    "cargo test --manifest-path pro/Cargo.toml"
   ],
   "evidencePaths": [
     ".agent-guardrails/evidence/current-task.md"
@@ -19,85 +21,67 @@
   "intendedFiles": [],
   "protectedPaths": [],
   "allowedChangeTypes": [
+    "interface",
     "implementation",
     "tests",
     "docs",
     "guardrails-internal",
     "other"
   ],
-  "riskLevel": "high",
+  "riskLevel": "standard",
   "requiresReviewNotes": false,
   "validationProfile": "standard",
   "securityRequirements": [
-    "Do not add or expose provider keys, API keys, user credentials, or live provider calls.",
-    "Keep the OSS browser/API path keyless."
+    "Mention auth, secrets, permissions, and sensitive-data handling explicitly.",
+    "Do not accept or store passwords, tokens, provider secrets, or API keys.",
+    "Execution readiness must deny live/provider/worker/result-write paths until hosted gates exist."
   ],
   "dependencyRequirements": [
-    "Do not add packages or lockfile changes."
+    "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
   ],
   "performanceRequirements": [
-    "Keep filtering deterministic and local with no extra network calls."
+    "Mention performance, latency, or load impact in evidence."
   ],
   "understandingRequirements": [
-    "Explain why hosted search results can be accepted without explicit published dates."
+    "Explain why this gate composes existing boundary vocabulary instead of enabling execution."
   ],
   "continuityRequirements": [
-    "Reuse the existing evidence access hosted-search cache policy and result time filtering patterns."
+    "Reuse the existing workspace access-gate, provider-adapter gate vocabulary, Axum endpoint style, and compact web panel patterns."
   ],
   "acknowledgedSkips": [],
-  "patternSummary": "Reuse evidence_access result time filtering and hosted-search/transient cache policy semantics.",
-  "smallestViableChange": "Recognize Tavily/Brave-style hosted search metadata as transient hosted search results during relative date filtering, with regression coverage.",
+  "patternSummary": "Reuse the existing Pro domain gate payloads, API route handlers, web fetchJson helpers, and preview-only boundary panels.",
+  "smallestViableChange": "Add a deterministic execution readiness payload that reports live execution denied until workspace, provider, vault, quota, worker, and result-commit gates are satisfied.",
   "assumptions": [
-    "Hosted search adapters often return fresh ranked results without a published date.",
-    "Accepting undated hosted-search results is safer than dropping all evidence for current-day Chinese market questions, as long as no live calls or keys are added."
+    "The Pro runtime remains local preview-only.",
+    "Real provider/search execution is still intentionally blocked."
   ],
   "acceptanceCriteria": [
-    "The focused Chinese market fallback graph test passes.",
-    "Hosted-search result filtering has a direct regression for provider metadata.",
-    "OSS remains keyless and no provider execution path or credential field is added."
+    "Domain tests prove preview execution readiness denies live provider calls while showing satisfied preview observations and remaining hosted blockers.",
+    "API tests prove the endpoint returns a server-computed readiness payload and no secret-shaped fields.",
+    "Web tests prove the graph-first shell contains the readiness panel, endpoint path, and renderer.",
+    "Docs and evidence explain that this is not real provider execution or auth enforcement."
   ],
   "nonGoals": [
-    "No new providers",
-    "No provider keys",
-    "No live calls",
-    "No hosted credential storage",
-    "No Pro runtime changes"
+    "No sessions",
+    "No passwords",
+    "No external auth provider",
+    "No JWT validation",
+    "No credential storage",
+    "No provider calls",
+    "No quota or billing mutation",
+    "No worker execution",
+    "No result-event writes",
+    "No OSS runtime changes"
   ],
   "expectedBehaviorChanges": [
-    "Relative-date filtering accepts undated hosted-search results when metadata clearly identifies Tavily/Brave-style transient search output."
+    "Pro API exposes a keyless execution readiness endpoint.",
+    "Pro web shell renders whether live execution is still denied and which gates block it."
   ],
-  "userVisibleEffects": [],
-  "intendedSymbols": [],
-  "expectedPublicSurfaceChanges": [],
-  "expectedBoundaryExceptions": [],
-  "expectedTestTargets": [],
-  "productionProfile": "",
-  "nfrRequirements": [],
-  "expectedLoadSensitivePaths": [],
-  "expectedConcurrencyImpact": "",
-  "observabilityRequirements": [],
-  "rollbackNotes": "",
-  "riskJustification": "",
-  "guardRules": [
-    "保留原有行为",
-    "添加回归测试",
-    "记录修复原因"
+  "expectedPublicSurfaceChanges": [
+    "POST /api/execution-readiness"
   ],
-  "roughIntent": {
-    "detected": true,
-    "taskType": "bugfix",
-    "confidence": 0.65,
-    "sources": {
-      "taskType": "关键词匹配 (65% 置信度)",
-      "paths": "关键词+文件树",
-      "testCommand": "package.json",
-      "riskLevel": "基于任务类型: bugfix"
-    }
-  },
-  "autoFilledFields": [
-    "allowedPaths",
-    "requiredCommands",
-    "riskLevel",
-    "guardRules"
-  ]
+  "expectedTestTargets": [
+    "cargo test --manifest-path pro/Cargo.toml"
+  ],
+  "riskJustification": "This is a keyless local readiness evaluator that composes existing denied gates. It prepares an explicit execution boundary without enabling provider calls, credential reads, quota reservations, worker execution, or result writes."
 }

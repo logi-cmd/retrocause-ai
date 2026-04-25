@@ -1,6 +1,7 @@
 use retrocause_pro_domain::{
     CooldownKind, LedgerCategory, ProviderQuotaStatus, ProviderReadiness, ProviderStatusSnapshot,
-    QuotaOwner, provider_status_snapshot,
+    QuotaOwner, WorkspaceAccessGateDecision, WorkspaceAccessGateRequest, WorkspaceAccessGateStatus,
+    WorkspaceAction, provider_status_snapshot, workspace_access_gate,
 };
 use serde::{Deserialize, Serialize};
 
@@ -110,6 +111,45 @@ pub struct ProviderAdapterGateCheckResult {
     pub next_required_step: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct ExecutionReadinessRequest {
+    pub workspace_id: Option<String>,
+    pub run_id: Option<String>,
+    pub candidate_id: Option<String>,
+    pub dry_run_observed: bool,
+    pub auth_context_observed: bool,
+    pub quota_owner_confirmed: bool,
+    pub event_timeline_observed: bool,
+    pub work_order_observed: bool,
+    pub commit_intent_observed: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ExecutionReadinessDecision {
+    pub workspace_id: String,
+    pub run_id: String,
+    pub candidate_id: String,
+    pub mode: ExecutionReadinessMode,
+    pub status: ExecutionReadinessStatus,
+    pub execution_allowed: bool,
+    pub workspace_gate: WorkspaceAccessGateDecision,
+    pub provider_gate: ProviderAdapterGateCheckResult,
+    pub worker_commit_gate: WorkspaceAccessGateDecision,
+    pub snapshot_persistence_gate: WorkspaceAccessGateDecision,
+    pub preview_observations: Vec<ExecutionReadinessObservation>,
+    pub blocking_reasons: Vec<String>,
+    pub safeguards: Vec<String>,
+    pub next_required_step: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ExecutionReadinessObservation {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub observed: bool,
+    pub required_before_live_execution: bool,
+}
+
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderAdapterContractMode {
@@ -132,6 +172,19 @@ pub enum ProviderAdapterCandidateMode {
 #[serde(rename_all = "snake_case")]
 pub enum ProviderAdapterGateCheckMode {
     DeniedPreviewOnly,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionReadinessMode {
+    ComposedPreviewOnly,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionReadinessStatus {
+    DeniedRequiresHostedGates,
+    DeniedUnknownWorkspace,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
@@ -559,6 +612,156 @@ pub fn provider_adapter_gate_check(
     }
 }
 
+pub fn execution_readiness_gate(request: ExecutionReadinessRequest) -> ExecutionReadinessDecision {
+    let workspace_id = request
+        .workspace_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("workspace_demo")
+        .to_string();
+    let run_id = request
+        .run_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("run_semiconductor_controls_001")
+        .to_string();
+    let candidate_id = request
+        .candidate_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("ofoxai_model_candidate")
+        .to_string();
+
+    let workspace_gate = workspace_access_gate(WorkspaceAccessGateRequest {
+        workspace_id: Some(workspace_id.clone()),
+        action: WorkspaceAction::ExecuteProviderCalls,
+        resource: Some(candidate_id.clone()),
+    });
+    let provider_gate = provider_adapter_gate_check(ProviderAdapterGateCheckRequest {
+        workspace_id: Some(workspace_id.clone()),
+        candidate_id: Some(candidate_id.clone()),
+        dry_run_observed: request.dry_run_observed,
+        auth_context_observed: request.auth_context_observed,
+        quota_owner_confirmed: request.quota_owner_confirmed,
+        event_timeline_observed: request.event_timeline_observed,
+    });
+    let worker_commit_gate = workspace_access_gate(WorkspaceAccessGateRequest {
+        workspace_id: Some(workspace_id.clone()),
+        action: WorkspaceAction::CommitWorkerResult,
+        resource: Some(run_id.clone()),
+    });
+    let snapshot_persistence_gate = workspace_access_gate(WorkspaceAccessGateRequest {
+        workspace_id: Some(workspace_id.clone()),
+        action: WorkspaceAction::PersistResultSnapshot,
+        resource: Some(run_id.clone()),
+    });
+
+    let preview_observations = vec![
+        readiness_observation(
+            "adapter_dry_run_observed",
+            "Adapter dry-run observed",
+            request.dry_run_observed,
+        ),
+        readiness_observation(
+            "workspace_access_context_observed",
+            "Workspace access context observed",
+            request.auth_context_observed,
+        ),
+        readiness_observation(
+            "quota_owner_confirmed",
+            "Quota owner confirmed",
+            request.quota_owner_confirmed,
+        ),
+        readiness_observation(
+            "run_event_timeline_observed",
+            "Run event timeline observed",
+            request.event_timeline_observed,
+        ),
+        readiness_observation(
+            "worker_work_order_observed",
+            "Worker work order observed",
+            request.work_order_observed,
+        ),
+        readiness_observation(
+            "worker_commit_intent_observed",
+            "Worker commit intent observed",
+            request.commit_intent_observed,
+        ),
+    ];
+
+    let mut blocking_reasons = Vec::new();
+    if workspace_gate.status == WorkspaceAccessGateStatus::DeniedUnknownWorkspace {
+        blocking_reasons.push("workspace_gate_denied_unknown_workspace".to_string());
+    }
+    blocking_reasons.extend(
+        workspace_gate
+            .blocking_reasons
+            .iter()
+            .map(|reason| format!("workspace_gate:{reason}")),
+    );
+    blocking_reasons.extend(
+        provider_gate
+            .blocking_reasons
+            .iter()
+            .map(|reason| format!("provider_gate:{reason}")),
+    );
+    blocking_reasons.extend(
+        worker_commit_gate
+            .blocking_reasons
+            .iter()
+            .map(|reason| format!("worker_commit_gate:{reason}")),
+    );
+    blocking_reasons.extend(
+        snapshot_persistence_gate
+            .blocking_reasons
+            .iter()
+            .map(|reason| format!("snapshot_gate:{reason}")),
+    );
+    for observation in &preview_observations {
+        if !observation.observed {
+            blocking_reasons.push(format!("missing_preview_observation:{}", observation.id));
+        }
+    }
+    blocking_reasons = dedupe_strings(blocking_reasons);
+
+    let status = if workspace_gate.status == WorkspaceAccessGateStatus::DeniedUnknownWorkspace {
+        ExecutionReadinessStatus::DeniedUnknownWorkspace
+    } else {
+        ExecutionReadinessStatus::DeniedRequiresHostedGates
+    };
+
+    ExecutionReadinessDecision {
+        workspace_id,
+        run_id,
+        candidate_id,
+        mode: ExecutionReadinessMode::ComposedPreviewOnly,
+        status,
+        execution_allowed: false,
+        workspace_gate,
+        provider_gate,
+        worker_commit_gate,
+        snapshot_persistence_gate,
+        preview_observations,
+        blocking_reasons,
+        safeguards: vec![
+            "execution_readiness_is_preview_only".to_string(),
+            "workspace_access_gate_checked_before_execution".to_string(),
+            "provider_gate_checked_before_execution".to_string(),
+            "worker_and_result_commit_gates_checked_before_execution".to_string(),
+            "no_provider_calls".to_string(),
+            "no_credential_reads".to_string(),
+            "no_quota_or_billing_mutation".to_string(),
+            "no_worker_execution_or_result_writes".to_string(),
+        ],
+        next_required_step:
+            "Implement hosted auth, vault handles, quota reservations, worker leases, and idempotent result-event writes before enabling execution."
+                .to_string(),
+    }
+}
+
 pub fn build_routing_preview_from_status(
     request: RoutingPreviewRequest,
     snapshot: ProviderStatusSnapshot,
@@ -706,6 +909,19 @@ fn preview_gate_status(observed: bool) -> ProviderAdapterGateStatus {
     }
 }
 
+fn readiness_observation(
+    id: &'static str,
+    label: &'static str,
+    observed: bool,
+) -> ExecutionReadinessObservation {
+    ExecutionReadinessObservation {
+        id,
+        label,
+        observed,
+        required_before_live_execution: true,
+    }
+}
+
 fn gate(
     id: &'static str,
     label: &'static str,
@@ -722,6 +938,16 @@ fn gate(
     }
 }
 
+fn dedupe_strings(items: Vec<String>) -> Vec<String> {
+    let mut deduped = Vec::new();
+    for item in items {
+        if !deduped.contains(&item) {
+            deduped.push(item);
+        }
+    }
+    deduped
+}
+
 impl std::fmt::Display for RoutingPreviewError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -735,12 +961,13 @@ impl std::error::Error for RoutingPreviewError {}
 #[cfg(test)]
 mod tests {
     use super::{
+        ExecutionReadinessMode, ExecutionReadinessRequest, ExecutionReadinessStatus,
         ProviderAdapterCandidateMode, ProviderAdapterContractMode, ProviderAdapterDryRunMode,
         ProviderAdapterDryRunRequest, ProviderAdapterGateCheckMode,
         ProviderAdapterGateCheckRequest, ProviderAdapterGateStatus, RoutingDecision,
         RoutingPreviewError, RoutingPreviewRequest, RoutingScenario, SourcePolicy,
-        build_routing_preview, provider_adapter_candidates, provider_adapter_contract,
-        provider_adapter_dry_run, provider_adapter_gate_check,
+        build_routing_preview, execution_readiness_gate, provider_adapter_candidates,
+        provider_adapter_contract, provider_adapter_dry_run, provider_adapter_gate_check,
     };
 
     #[test]
@@ -969,5 +1196,97 @@ mod tests {
                 .warnings
                 .contains(&"requested_candidate_not_registered".to_string())
         );
+    }
+
+    #[test]
+    fn execution_readiness_composes_workspace_provider_and_worker_gates() {
+        let decision = execution_readiness_gate(ExecutionReadinessRequest {
+            workspace_id: Some(" workspace_demo ".to_string()),
+            run_id: Some("run_semiconductor_controls_001".to_string()),
+            candidate_id: Some("ofoxai_model_candidate".to_string()),
+            dry_run_observed: true,
+            auth_context_observed: true,
+            quota_owner_confirmed: true,
+            event_timeline_observed: true,
+            work_order_observed: true,
+            commit_intent_observed: true,
+        });
+
+        assert_eq!(decision.workspace_id, "workspace_demo");
+        assert_eq!(decision.candidate_id, "ofoxai_model_candidate");
+        assert_eq!(decision.mode, ExecutionReadinessMode::ComposedPreviewOnly);
+        assert_eq!(
+            decision.status,
+            ExecutionReadinessStatus::DeniedRequiresHostedGates
+        );
+        assert!(!decision.execution_allowed);
+        assert!(!decision.workspace_gate.allowed);
+        assert!(!decision.provider_gate.execution_allowed);
+        assert!(!decision.worker_commit_gate.allowed);
+        assert!(!decision.snapshot_persistence_gate.allowed);
+        assert!(
+            decision
+                .preview_observations
+                .iter()
+                .all(|item| item.observed)
+        );
+        assert!(
+            decision
+                .blocking_reasons
+                .contains(&"provider_gate:workspace_auth_enforced".to_string())
+        );
+        assert!(
+            decision
+                .blocking_reasons
+                .contains(&"worker_commit_gate:idempotent_event_store_write_required".to_string())
+        );
+        assert!(
+            decision
+                .safeguards
+                .contains(&"no_provider_calls".to_string())
+        );
+    }
+
+    #[test]
+    fn execution_readiness_reports_missing_preview_observations_and_unknown_workspace() {
+        let decision = execution_readiness_gate(ExecutionReadinessRequest {
+            workspace_id: Some("workspace_other".to_string()),
+            run_id: None,
+            candidate_id: Some("missing_candidate".to_string()),
+            dry_run_observed: false,
+            auth_context_observed: false,
+            quota_owner_confirmed: false,
+            event_timeline_observed: false,
+            work_order_observed: false,
+            commit_intent_observed: false,
+        });
+
+        assert_eq!(
+            decision.status,
+            ExecutionReadinessStatus::DeniedUnknownWorkspace
+        );
+        assert!(!decision.execution_allowed);
+        assert!(
+            decision
+                .blocking_reasons
+                .contains(&"workspace_gate_denied_unknown_workspace".to_string())
+        );
+        assert!(
+            decision
+                .blocking_reasons
+                .contains(&"provider_gate:candidate_not_registered".to_string())
+        );
+        assert!(
+            decision
+                .blocking_reasons
+                .contains(&"missing_preview_observation:adapter_dry_run_observed".to_string())
+        );
+        let combined = format!(
+            "{:?} {:?} {:?}",
+            decision.blocking_reasons, decision.safeguards, decision.next_required_step
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
     }
 }

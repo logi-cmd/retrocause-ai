@@ -2848,3 +2848,91 @@ This task fixes a regression found while validating the merged Pro access-gate w
 
 - This does not prove the hosted result is truly same-day; it only preserves transient hosted-search results when the adapter metadata identifies them as such. User-facing output must still show source health and uncertainty rather than treating the result as verified causal truth.
 - Active OSS remains keyless/local. Real provider/search execution belongs to the separate Pro line after credential, quota, queue, and auth gates exist.
+
+## Pro Product Core Slice 30 - Execution Readiness Gate
+
+### Scope
+
+This task adds a keyless composed execution-readiness gate for the Pro Rust product core. The gate combines the existing workspace access gate, provider-adapter gate check, worker-result commit blockers, snapshot-persistence blockers, and observed preview prerequisites into one denied readiness payload. This remains local preview-only: no sessions, passwords, JWT validation, external auth provider, provider credentials, provider calls, quota reservations, billing mutation, worker execution, result-event writes, persisted snapshots, OSS runtime changes, npm dependencies, or package publishing were added.
+
+### Files Updated
+
+- `pro/crates/provider-routing/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `ExecutionReadinessRequest`, `ExecutionReadinessDecision`, observation/status/mode types, and `execution_readiness_gate()` in `crates/provider-routing`.
+- The readiness gate calls the existing workspace access gate for provider execution, worker result commit, and snapshot persistence, then composes those decisions with the existing provider-adapter gate check.
+- Added keyless `POST /api/execution-readiness` in the Pro API.
+- Added provider-routing and API tests proving live execution stays denied, unknown workspaces are denied, missing preview observations are reported, and secret-shaped values are not emitted.
+- Added a graph-first web button/panel for `Check execution readiness`, including observed prerequisites, blocking reasons, and visible safeguards such as `no_provider_calls` and `no_credential_reads`.
+- Fixed a small Pro web usability issue found during browser smoke: the execution console now sits above the bottom command/payload overlays so the `Queue preview job` button remains clickable in the tested viewport.
+- Updated project state and Pro architecture docs to record the execution-readiness gate as a composed preview checkpoint, not real execution or hosted authorization.
+
+### Commands Run
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Initial result: failed because Rustfmt wanted to reflow new imports and assertions.
+  - Fix: ran `cargo fmt --manifest-path pro/Cargo.toml --all`.
+  - Final result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed.
+  - API tests: `34 passed`.
+  - Domain tests: `19 passed`.
+  - Event-store tests: `6 passed`.
+  - Provider-routing tests: `12 passed`.
+  - Queue tests: `7 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API execution-readiness smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:8856` with temporary `RETROCAUSE_PRO_RUN_STORE_PATH` and `RETROCAUSE_PRO_EVENT_STORE_PATH`.
+  - Called `POST /api/execution-readiness` with all preview observations set to true.
+  - Result: passed; status was `denied_requires_hosted_gates`, execution stayed disabled, the payload returned `16` blockers and `6` observations, included `provider_gate:workspace_auth_enforced`, included `no_credential_reads`, and contained no key-shaped values.
+
+- Pro browser execution-readiness smoke
+  - First attempt failed because the readiness script waited for the wrong workspace panel text.
+  - Second attempt reached the adapter dry-run but waited for `calls disabled`; the panel's actual state text is `calls off`.
+  - Third attempt found an actual clickability issue: the bottom command/payload overlays could intercept clicks on `Queue preview job`.
+  - Fix: raised the execution console z-index above those bottom overlays.
+  - Fourth attempt reached the readiness panel but `no_credential_reads` was hidden because only five safeguards were rendered.
+  - Fix: rendered up to eight readiness safeguards.
+  - Final result: passed on `http://127.0.0.1:3065/`; Playwright clicked `Dry-run adapter`, `Check live gates`, `Queue preview job`, `Prepare commit intent`, and `Check execution readiness`, then verified `execution denied`, `provider_gate:workspace_auth_enforced`, and `no_credential_reads`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Result: passed. A key-shaped scan for common provider-token prefixes and credential-assignment patterns found no key-shaped tokens or credential assignments in the current diff.
+
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed.
+  - Score: `95/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the current Pro focus and done-recently entries were synchronized to include the execution-readiness gate slice.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with the same non-blocking `docs/PROJECT_STATE.md` state-file warning.
+  - Score: `95/100 (safe-to-deploy)`.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice does not accept, read, store, log, or return passwords, sessions, JWTs, provider secrets, search keys, payment credentials, auth tokens, or user API keys. It does not enforce hosted permissions or protect hosted resources. It is a deterministic preview gate over local ids and observed-preview booleans.
+- Dependencies: no new Rust crates, npm packages, Python packages, lockfile changes, or dependency upgrades were introduced.
+- Performance: the readiness gate is an in-memory composition of existing static/local decisions. It adds no provider calls, database calls, Redis calls, quota-ledger writes, billing writes, worker leases, retry scheduling, or result-event writes.
+- Understanding: the deliberate tradeoff is to compose existing boundary vocabulary before adding execution. Future provider/worker endpoints should consume one explicit readiness decision instead of hiding provider, vault, quota, worker, or result-commit checks inside adapters.
+- Continuity: reused the existing workspace access-gate, provider-adapter gate check, Axum route style, web `fetchJson` helper, and compact graph-first panel patterns. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- This is not real tenant authentication, not role management, not a credential vault, not a quota reservation system, not a worker runtime, not a hosted result committer, and not a persisted result snapshot.
+- Real provider/search execution must remain blocked until hosted auth, vault handles, quota reservations, worker leases, retry/idempotency rules, and result-event writes exist and consume this readiness gate.

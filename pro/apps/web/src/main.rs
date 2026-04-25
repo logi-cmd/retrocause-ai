@@ -252,6 +252,21 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "denied" }
                                 }
                             }
+                            button id="execution-readiness-button" type="button" {
+                                "Check execution readiness"
+                            }
+                            p id="execution-readiness-status" class="console-status" {
+                                "Composed readiness checks workspace, provider, worker, and commit gates without executing."
+                            }
+                            div id="execution-readiness-result" class="execution-readiness-result" {
+                                article class="quota-meter quota-meter--empty" {
+                                    div {
+                                        strong { "Execution readiness" }
+                                        p { "Run the check before any future live execution path is enabled." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "blocked" }
+                                }
+                            }
                         }
 
                         aside class="execution-console" aria-label="Execution queue" {
@@ -598,6 +613,8 @@ fn client_script() -> &'static str {
   let workspaceAccessLoaded = false;
   let providerStatusLoaded = Boolean(providerSeed?.entries?.length);
   let runEventsLoaded = false;
+  let workOrderLoaded = false;
+  let commitIntentLoaded = false;
   let selectedAdapterCandidateId = "ofoxai_model_candidate";
 
   function escapeHtml(value) {
@@ -1291,6 +1308,55 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderExecutionReadiness(result) {
+    const panel = byId("execution-readiness-result");
+    if (!panel) return;
+    if (!result) {
+      panel.innerHTML = `
+        <article class="quota-meter quota-meter--empty">
+          <div>
+            <strong>Execution readiness</strong>
+            <p>Run the check before any future live execution path is enabled.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">blocked</span>
+        </article>
+      `;
+      return;
+    }
+
+    const observations = (result.preview_observations || []).slice(0, 6).map((item) => `
+      <li>
+        <strong>${escapeHtml(item.label || item.id)}</strong>
+        <span>${item.observed ? "observed" : "missing"} / ${item.required_before_live_execution ? "required" : "optional"}</span>
+      </li>
+    `).join("");
+    const blockers = (result.blocking_reasons || []).slice(0, 8).map((reason) => `<li>${escapeHtml(reason)}</li>`).join("");
+    const safeguards = (result.safeguards || []).slice(0, 8).map((guard) => `<li>${escapeHtml(guard)}</li>`).join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card adapter-card">
+        <div class="work-order-header">
+          <strong>Execution readiness</strong>
+          <span class="quota-state quota-state--deferred">${result.execution_allowed ? "execution on" : "execution denied"}</span>
+          <p>${escapeHtml(readable(result.mode || "composed_preview_only"))} / ${escapeHtml(readable(result.status || "denied_requires_hosted_gates"))}</p>
+          <small>${escapeHtml(result.workspace_id || "workspace")} / ${escapeHtml(result.run_id || "run")} / ${escapeHtml(result.candidate_id || "candidate")}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Observed prerequisites</p>
+          <ol class="work-order-list">${observations || "<li>No observations returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Blocking reasons</p>
+          <ul class="work-order-list">${blockers || "<li>No blockers returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Readiness safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>No safeguards returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   function renderExecutionJobs(jobs) {
     const list = byId("execution-job-list");
     if (!list) return;
@@ -1323,6 +1389,7 @@ fn client_script() -> &'static str {
   function renderWorkOrder(order) {
     const detail = byId("execution-work-order-detail");
     if (!detail) return;
+    workOrderLoaded = Boolean(order);
     if (!order) {
       detail.innerHTML = `
         <article class="queue-meter queue-meter--empty">
@@ -1676,6 +1743,7 @@ fn client_script() -> &'static str {
   function renderWorkerResultCommitIntent(intent) {
     const panel = byId("worker-result-commit-intent-panel");
     if (!panel) return;
+    commitIntentLoaded = Boolean(intent);
     if (!intent) {
       panel.innerHTML = `
         <article class="queue-meter queue-meter--empty">
@@ -2020,6 +2088,31 @@ fn client_script() -> &'static str {
     );
   }
 
+  async function checkExecutionReadiness() {
+    const runId = currentRun?.id || "run_semiconductor_controls_001";
+    setText("execution-readiness-status", "Checking composed execution readiness...");
+    const result = await fetchJson("/api/execution-readiness", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspace_id: currentRun?.workspace_id || "workspace_demo",
+        run_id: runId,
+        candidate_id: selectedAdapterCandidateId,
+        dry_run_observed: Boolean(lastAdapterDryRun),
+        auth_context_observed: workspaceAccessLoaded,
+        quota_owner_confirmed: providerStatusLoaded,
+        event_timeline_observed: runEventsLoaded,
+        work_order_observed: workOrderLoaded,
+        commit_intent_observed: commitIntentLoaded,
+      }),
+    });
+    renderExecutionReadiness(result);
+    setText(
+      "execution-readiness-status",
+      `Execution remains ${result.execution_allowed ? "allowed" : "denied"}; ${result.blocking_reasons?.length || 0} blockers returned.`,
+    );
+  }
+
   async function runWorkerResultDryRun() {
     const runId = currentRun?.id;
     if (!runId) {
@@ -2129,6 +2222,10 @@ fn client_script() -> &'static str {
     runProviderAdapterGateCheck()
       .catch((error) => setText("live-adapter-gate-check-status", `Gate check error: ${error.message}`));
   });
+  byId("execution-readiness-button")?.addEventListener("click", () => {
+    checkExecutionReadiness()
+      .catch((error) => setText("execution-readiness-status", `Readiness error: ${error.message}`));
+  });
   document.addEventListener("click", (event) => {
     const button = event.target.closest("[data-review-kind][data-review-id]");
     if (!button) return;
@@ -2152,6 +2249,7 @@ fn client_script() -> &'static str {
   renderProviderAdapterDryRun(null);
   renderProviderAdapterCandidates(null);
   renderProviderAdapterGateCheck(null);
+  renderExecutionReadiness(null);
   renderExecutionJobs([]);
   renderWorkOrder(null);
   renderExecutionLifecycle(null);
@@ -2756,6 +2854,7 @@ p {
 .execution-console {
   right: 1rem;
   top: 35.2rem;
+  z-index: 7;
   width: min(380px, calc(100% - 2rem));
   max-height: 13rem;
   overflow: auto;
@@ -2797,7 +2896,8 @@ p {
 }
 
 #provider-adapter-candidate-panel,
-#live-adapter-gate-check-result {
+#live-adapter-gate-check-result,
+#execution-readiness-result {
   display: grid;
   gap: 0.65rem;
 }
@@ -3219,11 +3319,14 @@ mod tests {
         assert!(page.contains("provider-adapter-candidate-panel"));
         assert!(page.contains("live-adapter-gate-check-button"));
         assert!(page.contains("live-adapter-gate-check-result"));
+        assert!(page.contains("execution-readiness-button"));
+        assert!(page.contains("execution-readiness-result"));
         assert!(page.contains("/api/provider-status"));
         assert!(page.contains("/api/provider-adapter-contract"));
         assert!(page.contains("/api/provider-adapter/dry-run"));
         assert!(page.contains("/api/provider-adapter/candidates"));
         assert!(page.contains("/api/provider-adapter/gate-check"));
+        assert!(page.contains("/api/execution-readiness"));
         assert!(page.contains("execution-job-list"));
         assert!(page.contains("execution-work-order-detail"));
         assert!(page.contains("execution-lifecycle-panel"));
@@ -3269,8 +3372,10 @@ mod tests {
         assert!(page.contains("function renderProviderAdapterDryRun"));
         assert!(page.contains("function renderProviderAdapterCandidates"));
         assert!(page.contains("function renderProviderAdapterGateCheck"));
+        assert!(page.contains("function renderExecutionReadiness"));
         assert!(page.contains("function runProviderAdapterDryRun"));
         assert!(page.contains("function runProviderAdapterGateCheck"));
+        assert!(page.contains("function checkExecutionReadiness"));
         assert!(page.contains("queue-preview-button"));
         assert!(page.contains("fetch(`${apiBase}${path}`"));
         assert!(page.contains("POST"));
