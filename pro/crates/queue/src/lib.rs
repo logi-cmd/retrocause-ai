@@ -72,6 +72,24 @@ pub struct ExecutionHandoffPreview {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub struct ExecutionIntentPreview {
+    pub job_id: String,
+    pub workspace_id: String,
+    pub query: String,
+    pub mode: ExecutionIntentMode,
+    pub intent_id_preview: String,
+    pub idempotency_key_preview: String,
+    pub intent_creation_allowed: bool,
+    pub execution_allowed: bool,
+    pub handoff: ExecutionHandoffPreview,
+    pub worker_lease_boundary: WorkerLeaseBoundary,
+    pub blocking_reasons: Vec<String>,
+    pub required_capabilities: Vec<String>,
+    pub safeguards: Vec<String>,
+    pub next_required_step: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct ExecutionLifecycleSpec {
     pub mode: ExecutionLifecycleMode,
     pub execution_allowed: bool,
@@ -154,6 +172,12 @@ pub enum ExecutionWorkOrderMode {
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionHandoffMode {
     PreviewOnlyDenied,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionIntentMode {
+    PreviewOnlyRejected,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
@@ -508,6 +532,10 @@ impl ExecutionQueue {
     pub fn get_handoff_preview(&self, job_id: &str) -> Option<ExecutionHandoffPreview> {
         self.get_job(job_id).map(|job| job.handoff_preview())
     }
+
+    pub fn get_intent_preview(&self, job_id: &str) -> Option<ExecutionIntentPreview> {
+        self.get_job(job_id).map(|job| job.intent_preview())
+    }
 }
 
 impl ExecutionJob {
@@ -568,6 +596,53 @@ impl ExecutionJob {
                 .to_string(),
         }
     }
+
+    pub fn intent_preview(&self) -> ExecutionIntentPreview {
+        let handoff = self.handoff_preview();
+        let worker_lease_boundary = worker_lease_boundary();
+        let mut blocking_reasons = handoff.blocking_reasons.clone();
+        if !worker_lease_boundary.lease_store_connected {
+            blocking_reasons.push("worker_lease_store_not_connected".to_string());
+        }
+        if !worker_lease_boundary.retry_scheduler_enabled {
+            blocking_reasons.push("retry_scheduler_disabled".to_string());
+        }
+        if !worker_lease_boundary.execution_allowed {
+            blocking_reasons.push("worker_lease_execution_disabled".to_string());
+        }
+        blocking_reasons.push("execution_intent_persistence_disabled".to_string());
+
+        let mut safeguards = handoff.safeguards.clone();
+        safeguards.extend(worker_lease_boundary.safeguards.clone());
+        safeguards.push("intent_preview_only_no_persistence".to_string());
+
+        let required_capabilities = worker_lease_boundary
+            .lease_rules
+            .iter()
+            .map(|rule| format!("{}: {}", rule.id, rule.requirement))
+            .collect();
+
+        ExecutionIntentPreview {
+            job_id: self.id.clone(),
+            workspace_id: self.workspace_id.clone(),
+            query: self.query.clone(),
+            mode: ExecutionIntentMode::PreviewOnlyRejected,
+            intent_id_preview: format!("intent_preview_{}", self.id),
+            idempotency_key_preview: format!(
+                "{}:{}:execution_intent_preview:v1",
+                self.workspace_id, self.id
+            ),
+            intent_creation_allowed: false,
+            execution_allowed: false,
+            handoff,
+            worker_lease_boundary,
+            blocking_reasons,
+            required_capabilities,
+            safeguards,
+            next_required_step: "Persist execution intents only after hosted auth, vault handles, quota reservations, worker leases, retry scheduling, and idempotent result commits exist."
+                .to_string(),
+        }
+    }
 }
 
 fn unix_epoch_seconds() -> u64 {
@@ -591,9 +666,9 @@ impl std::error::Error for ExecutionQueueError {}
 #[cfg(test)]
 mod tests {
     use super::{
-        ExecutionHandoffMode, ExecutionJobStatus, ExecutionLifecycleMode, ExecutionQueue,
-        ExecutionQueueError, ExecutionWorkOrderMode, WorkerLeaseMode, WorkerLeaseRuleStatus,
-        execution_lifecycle_spec, worker_lease_boundary,
+        ExecutionHandoffMode, ExecutionIntentMode, ExecutionJobStatus, ExecutionLifecycleMode,
+        ExecutionQueue, ExecutionQueueError, ExecutionWorkOrderMode, WorkerLeaseMode,
+        WorkerLeaseRuleStatus, execution_lifecycle_spec, worker_lease_boundary,
     };
     use retrocause_pro_provider_routing::{RoutingPreviewRequest, RoutingScenario, SourcePolicy};
 
@@ -716,6 +791,66 @@ mod tests {
         let combined = format!(
             "{:?} {:?} {}",
             preview.blocking_reasons, preview.safeguards, preview.next_required_step
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
+        assert!(!combined.contains("bearer "));
+    }
+
+    #[test]
+    fn intent_preview_composes_handoff_and_worker_lease_blockers() {
+        let queue = ExecutionQueue::new();
+        let created = queue
+            .enqueue_preview(request("Preview the execution intent"))
+            .expect("job should be created");
+
+        let preview = queue
+            .get_intent_preview(&created.id)
+            .expect("created job should expose intent preview");
+
+        assert_eq!(preview.job_id, created.id);
+        assert_eq!(preview.mode, ExecutionIntentMode::PreviewOnlyRejected);
+        assert!(!preview.intent_creation_allowed);
+        assert!(!preview.execution_allowed);
+        assert_eq!(preview.handoff.job_id, preview.job_id);
+        assert!(!preview.handoff.execution_allowed);
+        assert!(!preview.worker_lease_boundary.execution_allowed);
+        assert!(
+            preview
+                .blocking_reasons
+                .contains(&"quota_reservation_required".to_string())
+        );
+        assert!(
+            preview
+                .blocking_reasons
+                .contains(&"worker_lease_store_not_connected".to_string())
+        );
+        assert!(
+            preview
+                .blocking_reasons
+                .contains(&"execution_intent_persistence_disabled".to_string())
+        );
+        assert!(
+            preview
+                .safeguards
+                .contains(&"intent_preview_only_no_persistence".to_string())
+        );
+        assert!(preview.intent_id_preview.contains(&created.id));
+        assert!(preview.idempotency_key_preview.contains(&created.id));
+        assert!(
+            preview
+                .required_capabilities
+                .iter()
+                .any(|capability| capability.contains("claim_requires_durable_job"))
+        );
+
+        let combined = format!(
+            "{:?} {:?} {} {}",
+            preview.blocking_reasons,
+            preview.safeguards,
+            preview.idempotency_key_preview,
+            preview.next_required_step
         )
         .to_lowercase();
         assert!(!combined.contains("sk-"));

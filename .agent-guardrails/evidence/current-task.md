@@ -3125,3 +3125,93 @@ This task adds the next keyless Pro execution boundary: a denied execution hando
 
 - This is not a durable queue, not a worker lease, not tenant authentication, not vault-handle issuance, not quota reservation, not provider execution, not billing enforcement, and not result commit.
 - Future Pro execution should turn this denied handoff preview into a hosted execution intent only after real auth, vault handles, quota reservations, worker leases, retry/idempotency rules, and idempotent result-event commits exist.
+
+## Pro Product Core Slice 34 - Execution Intent Preview
+
+### Scope
+
+This task adds the next keyless Pro execution boundary: a rejected execution intent preview that derives a non-persisted intent envelope from a preview job's denied handoff and the worker lease boundary. It remains preview-only and local: no credentials, sessions, JWTs, provider calls, quota reservations, worker leases, billing mutation, durable queue intent persistence, retry scheduling, result writes, OSS runtime changes, npm packages, Python packages, or package publishing were added.
+
+### Files Updated
+
+- `pro/crates/queue/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `ExecutionIntentPreview` and `ExecutionIntentMode` in `crates/queue`.
+- The queue now exposes `get_intent_preview()` and derives rejected intent envelopes from `handoff_preview()` plus `worker_lease_boundary()`.
+- The intent preview keeps `intent_creation_allowed=false` and `execution_allowed=false`, includes preview intent/idempotency ids, combines handoff and lease blockers, and includes `intent_preview_only_no_persistence`.
+- Added keyless `GET /api/execution-jobs/{job_id}/intent-preview` in the Pro API.
+- Added queue/API tests proving the intent preview composes handoff plus worker lease blockers and does not return key-shaped values.
+- Added a graph-first web panel that loads the work order, handoff preview, and intent preview together when a queued job is inspected.
+- Updated project state and Pro architecture docs so the endpoint is documented as a rejected intent boundary, not real queue persistence or execution.
+
+### Commands Run
+
+- Updated `.agent-guardrails/task-contract.json`
+  - Result: narrowed the previous slice's handoff contract to the approved Pro Rust queue/API/web/docs/evidence scope for execution intent preview.
+  - No new external dependencies or Cargo config changes were needed.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Initial result: failed because Rustfmt wanted to reflow the Pro API queue imports.
+  - Fix: ran `cargo fmt --manifest-path pro/Cargo.toml --all`.
+  - Final result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed after adding the API/queue intent preview tests.
+  - API tests: `37 passed`.
+  - Domain tests: `20 passed`.
+  - Event-store tests: `6 passed`.
+  - Provider-routing tests: `12 passed`.
+  - Queue tests: `9 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API execution-intent smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:64356` with temporary `RETROCAUSE_PRO_RUN_STORE_PATH` and `RETROCAUSE_PRO_EVENT_STORE_PATH`.
+  - Called `POST /api/execution-jobs`, then `GET /api/execution-jobs/job_local_000000/intent-preview`.
+  - Result: passed; mode was `preview_only_rejected`, `intent_creation_allowed=false`, execution stayed disabled, `quota_reservation_required`, `worker_lease_store_not_connected`, and `execution_intent_persistence_disabled` were present, `intent_preview_only_no_persistence` was present, and no key-shaped values were found.
+
+- Pro browser execution-intent smoke
+  - Started the Pro API and web shell on dynamic localhost ports.
+  - Playwright clicked `Queue preview job` and verified the intent panel rendered `intent rejected`, `worker lease store not connected`, `execution intent persistence disabled`, and `intent preview only no persistence`.
+  - Result: passed; no request failures, console errors, page errors, or key-shaped text were found.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Result: passed. A key-shaped scan for common provider-token prefixes and credential-assignment patterns found no key-shaped tokens or credential assignments in the current diff.
+
+- Local process cleanup check
+  - Result: passed; no `retrocause-pro-api` or `retrocause-pro-web` service processes were left running after smoke tests.
+
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with score `95/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the current Pro focus, done-recently entry, and next step were synchronized to include the execution intent preview.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with score `95/100 (safe-to-deploy)`.
+  - Non-blocking warning matched the standard check: intentional project-state documentation update.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice does not accept, validate, read, store, log, or return sessions, passwords, JWTs, provider secrets, search keys, connector credentials, payment credentials, auth tokens, or user API keys. It does not enforce hosted permissions or protect hosted resources.
+- Dependencies: no new Rust crates, npm packages, Python packages, lockfile changes, or dependency upgrades were introduced.
+- Performance: the intent preview is an in-memory composition of existing queue handoff and worker lease metadata. It adds no provider calls, database calls, Redis calls, quota-ledger writes, billing writes, worker leases, retry scheduling, queue persistence, or result-event writes.
+- Understanding: this endpoint belongs in the queue boundary because execution intents are a future queue/worker handoff concept. It derives from the existing denied handoff and worker lease boundary instead of inventing a second hidden auth/quota/lease vocabulary.
+- Continuity: reused existing queue handoff, worker lease boundary, Axum route, web `fetchJson`, and compact graph-first panel patterns. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- This is not durable execution-intent persistence, not tenant authentication, not a credential vault, not quota reservation, not worker lease claiming, not retry scheduling, not provider execution, not billing enforcement, and not result commit.
+- Future Pro execution should replace this rejected preview with durable hosted intent creation only after real tenant auth, vault handles, quota reservations, lease-store connections, retry scheduling, and idempotent result-event commits exist.

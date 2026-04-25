@@ -298,6 +298,15 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "denied" }
                                 }
                             }
+                            div id="execution-intent-panel" class="intent-panel" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "Execution intent preview" }
+                                        p { "Inspect a queued job to see why hosted intent persistence remains blocked." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "rejected" }
+                                }
+                            }
                             div id="execution-lifecycle-panel" class="lifecycle-panel" {
                                 article class="queue-meter queue-meter--empty" {
                                     div {
@@ -1444,6 +1453,7 @@ fn client_script() -> &'static str {
       `;
       renderWorkOrder(null);
       renderExecutionHandoffPreview(null);
+      renderExecutionIntentPreview(null);
       return;
     }
     list.innerHTML = jobs.slice(0, 4).map((job) => `
@@ -1560,16 +1570,63 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderExecutionIntentPreview(preview) {
+    const panel = byId("execution-intent-panel");
+    if (!panel) return;
+    if (!preview) {
+      panel.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>Execution intent preview</strong>
+            <p>Inspect a queued job to see why hosted intent persistence remains blocked.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">rejected</span>
+        </article>
+      `;
+      return;
+    }
+
+    const blockers = (preview.blocking_reasons || []).map((reason) => `<li title="${escapeHtml(reason)}">${escapeHtml(readable(reason))}</li>`).join("");
+    const capabilities = (preview.required_capabilities || []).slice(0, 5).map((capability) => `<li>${escapeHtml(capability)}</li>`).join("");
+    const safeguards = (preview.safeguards || []).map((guard) => `<li title="${escapeHtml(guard)}">${escapeHtml(readable(guard))}</li>`).join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card intent-card">
+        <div class="work-order-header">
+          <strong>Execution intent preview</strong>
+          <span class="quota-state quota-state--deferred">${preview.intent_creation_allowed ? "intent allowed" : "intent rejected"}</span>
+          <p>${escapeHtml(readable(preview.mode || "preview_only_rejected"))} / ${escapeHtml(preview.intent_id_preview || "intent preview")}</p>
+          <small>Idempotency preview: ${escapeHtml(preview.idempotency_key_preview || "not available")}</small>
+          <small>${escapeHtml(preview.next_required_step || "Hosted prerequisites must exist before intent persistence.")}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Intent blockers</p>
+          <ul class="work-order-list">${blockers || "<li>No blockers returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Required capabilities</p>
+          <ul class="work-order-list">${capabilities || "<li>No capabilities returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Intent safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>No safeguards returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   async function inspectWorkOrder(jobId) {
     if (!jobId) return;
     setText("execution-queue-status", `Inspecting ${jobId} work order...`);
-    const [order, handoff] = await Promise.all([
+    const [order, handoff, intent] = await Promise.all([
       fetchJson(`/api/execution-jobs/${encodeURIComponent(jobId)}/work-order`),
       fetchJson(`/api/execution-jobs/${encodeURIComponent(jobId)}/handoff-preview`),
+      fetchJson(`/api/execution-jobs/${encodeURIComponent(jobId)}/intent-preview`),
     ]);
     renderWorkOrder(order);
     renderExecutionHandoffPreview(handoff);
-    setText("execution-queue-status", `Loaded ${jobId} route and handoff blockers; execution remains disabled.`);
+    renderExecutionIntentPreview(intent);
+    setText("execution-queue-status", `Loaded ${jobId} route, handoff, and intent blockers; execution remains disabled.`);
   }
 
   function renderExecutionLifecycle(spec) {
@@ -2381,6 +2438,7 @@ fn client_script() -> &'static str {
   renderExecutionJobs([]);
   renderWorkOrder(null);
   renderExecutionHandoffPreview(null);
+  renderExecutionIntentPreview(null);
   renderExecutionLifecycle(null);
   renderWorkerLeaseBoundary(null);
   renderResultCommitBoundary(null);
@@ -3061,6 +3119,7 @@ p {
 
 #execution-work-order-detail,
 #execution-handoff-panel,
+#execution-intent-panel,
 #execution-lifecycle-panel,
 #worker-lease-panel,
 #result-commit-panel,
@@ -3133,6 +3192,10 @@ p {
 
 .ledger-card {
   background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.62 0.07 75));
+}
+
+.intent-card {
+  background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.56 0.08 210));
 }
 
 .adapter-card {
@@ -3468,6 +3531,7 @@ mod tests {
         assert!(page.contains("execution-job-list"));
         assert!(page.contains("execution-work-order-detail"));
         assert!(page.contains("execution-handoff-panel"));
+        assert!(page.contains("execution-intent-panel"));
         assert!(page.contains("execution-lifecycle-panel"));
         assert!(page.contains("worker-lease-panel"));
         assert!(page.contains("result-commit-panel"));
@@ -3483,6 +3547,7 @@ mod tests {
         assert!(page.contains("/api/execution-jobs"));
         assert!(page.contains("/work-order"));
         assert!(page.contains("/handoff-preview"));
+        assert!(page.contains("/intent-preview"));
         assert!(page.contains("/api/execution-lifecycle"));
         assert!(page.contains("/api/worker-lease-boundary"));
         assert!(page.contains("/api/result-commit-boundary"));
@@ -3497,6 +3562,7 @@ mod tests {
         assert!(page.contains("data-work-order-job-id"));
         assert!(page.contains("function renderWorkOrder"));
         assert!(page.contains("function renderExecutionHandoffPreview"));
+        assert!(page.contains("function renderExecutionIntentPreview"));
         assert!(page.contains("function renderExecutionLifecycle"));
         assert!(page.contains("function renderWorkerLeaseBoundary"));
         assert!(page.contains("function renderResultCommitBoundary"));
