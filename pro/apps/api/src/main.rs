@@ -30,9 +30,10 @@ use retrocause_pro_provider_routing::{
     provider_adapter_gate_check,
 };
 use retrocause_pro_queue::{
-    ExecutionHandoffPreview, ExecutionIntentPreview, ExecutionIntentStoreBoundary, ExecutionJob,
-    ExecutionJobSummary, ExecutionLifecycleSpec, ExecutionQueue, ExecutionQueueError,
-    ExecutionWorkOrder, WorkerLeaseBoundary, execution_intent_store_boundary,
+    ExecutionHandoffPreview, ExecutionIntentCreateRequestPreview, ExecutionIntentPreview,
+    ExecutionIntentStoreBoundary, ExecutionJob, ExecutionJobSummary, ExecutionLifecycleSpec,
+    ExecutionQueue, ExecutionQueueError, ExecutionWorkOrder, WorkerLeaseBoundary,
+    execution_intent_create_request_preview, execution_intent_store_boundary,
     execution_lifecycle_spec, worker_lease_boundary,
 };
 use retrocause_pro_run_store::{
@@ -105,6 +106,10 @@ fn router() -> Router {
         .route(
             "/api/execution-admission",
             post(execution_admission_check).options(cors_preflight),
+        )
+        .route(
+            "/api/execution-intents/create-request",
+            post(execution_intent_create_request).options(cors_preflight),
         )
         .route(
             "/api/execution-preflight-boundary",
@@ -234,6 +239,12 @@ async fn execution_admission_check(
     Json(request): Json<ExecutionAdmissionRequest>,
 ) -> Json<ExecutionAdmissionDecision> {
     Json(execution_admission(request))
+}
+
+async fn execution_intent_create_request(
+    Json(request): Json<ExecutionAdmissionRequest>,
+) -> Json<ExecutionIntentCreateRequestPreview> {
+    Json(execution_intent_create_request_preview(request))
 }
 
 async fn execution_preflight() -> Json<ExecutionPreflightBoundary> {
@@ -851,6 +862,74 @@ mod tests {
         assert!(!combined.contains("sk-"));
         assert!(!combined.contains("api_key"));
         assert!(!combined.contains("bearer "));
+    }
+
+    #[tokio::test]
+    async fn execution_intent_create_request_returns_rejected_preview_payload() {
+        let payload = execution_intent_create_request(Json(ExecutionAdmissionRequest {
+            workspace_id: Some("workspace_demo".to_string()),
+            run_id: Some("run_semiconductor_controls_001".to_string()),
+            job_id: Some("job_local_000000".to_string()),
+            action: Some(WorkspaceAction::ExecuteProviderCalls),
+        }))
+        .await
+        .0;
+
+        assert_eq!(payload.workspace_id, "workspace_demo");
+        assert!(matches!(
+            payload.status,
+            retrocause_pro_queue::ExecutionIntentCreateRequestStatus::RejectedRequiresAdmissionAndStore
+        ));
+        assert!(!payload.create_request_allowed);
+        assert!(!payload.intent_persistence_allowed);
+        assert!(!payload.execution_allowed);
+        assert!(!payload.durable_intent_id_issued);
+        assert!(payload.intent_id_preview.is_none());
+        assert!(!payload.admission.admitted);
+        assert!(!payload.admission.admission_token_issued);
+        assert!(!payload.admission.vault_handle_issued);
+        assert!(!payload.admission.quota_reserved);
+        assert!(!payload.intent_store.intent_store_connected);
+        assert!(!payload.intent_store.persistence_allowed);
+        assert!(!payload.worker_lease_boundary.lease_store_connected);
+        assert!(
+            payload
+                .request_fields
+                .iter()
+                .any(|field| field.id == "quota_reservation" && !field.accepted_now)
+        );
+        assert!(payload.write_plan.iter().all(|step| !step.allowed_now));
+        assert!(
+            payload
+                .blocking_reasons
+                .contains(&"execution_admission_denied".to_string())
+        );
+        assert!(
+            payload
+                .blocking_reasons
+                .contains(&"intent_store_not_connected".to_string())
+        );
+        assert!(
+            payload
+                .safeguards
+                .contains(&"create_request_preview_only_no_persistence".to_string())
+        );
+        assert!(payload.idempotency_key_preview.contains("job_local_000000"));
+
+        let combined = format!(
+            "{:?} {:?} {:?} {:?} {} {}",
+            payload.request_fields,
+            payload.write_plan,
+            payload.blocking_reasons,
+            payload.safeguards,
+            payload.idempotency_key_preview,
+            payload.next_required_step
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
+        assert!(!combined.contains("bearer "));
+        assert!(!combined.contains("token:"));
     }
 
     #[tokio::test]

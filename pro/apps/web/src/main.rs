@@ -286,6 +286,21 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "denied" }
                                 }
                             }
+                            button id="execution-intent-create-request-button" type="button" {
+                                "Preview intent create request"
+                            }
+                            p id="execution-intent-create-request-status" class="console-status" {
+                                "Create request preview composes admission, intent-store, and worker-lease gates without persistence."
+                            }
+                            div id="execution-intent-create-request-panel" class="intent-create-request-panel" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "Intent create request" }
+                                        p { "Preview the final rejected request shape before any durable hosted intent store exists." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "rejected" }
+                                }
+                            }
                             div id="execution-job-list" {
                                 article class="queue-meter queue-meter--empty" {
                                     div {
@@ -1461,6 +1476,72 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderExecutionIntentCreateRequest(preview) {
+    const panel = byId("execution-intent-create-request-panel");
+    if (!panel) return;
+    if (!preview) {
+      panel.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>Intent create request</strong>
+            <p>Preview the final rejected request shape before any durable hosted intent store exists.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">rejected</span>
+        </article>
+      `;
+      return;
+    }
+
+    const fields = (preview.request_fields || []).map((field) => `
+      <li title="${escapeHtml(field.requirement || "")}">
+        <strong>${escapeHtml(readable(field.id || "field"))}</strong>
+        <span>${escapeHtml(field.source || "future source")} / ${field.accepted_now ? "accepted now" : "future required"}</span>
+      </li>
+    `).join("");
+    const writes = (preview.write_plan || []).map((step) => `
+      <li title="${escapeHtml(step.requirement || "")}">
+        <strong>${escapeHtml(readable(step.id || "write step"))}</strong>
+        <span>${escapeHtml(readable(step.target || "future store"))} / ${step.allowed_now ? "allowed" : "blocked"}</span>
+      </li>
+    `).join("");
+    const blockers = (preview.blocking_reasons || [])
+      .slice(0, 8)
+      .map((reason) => `<li title="${escapeHtml(reason)}">${escapeHtml(readable(reason))}</li>`)
+      .join("");
+    const safeguards = (preview.safeguards || [])
+      .slice(0, 25)
+      .map((guard) => `<li title="${escapeHtml(guard)}">${escapeHtml(readable(guard))}</li>`)
+      .join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card intent-card">
+        <div class="work-order-header">
+          <strong>Intent create request</strong>
+          <span class="quota-state quota-state--deferred">${preview.create_request_allowed ? "create allowed" : "create request rejected"}</span>
+          <p>${escapeHtml(readable(preview.mode || "preview_only_rejected"))} / ${escapeHtml(readable(preview.status || "rejected_requires_admission_and_store"))}</p>
+          <small>Admission: ${preview.admission?.admitted ? "admitted" : "admission denied"} / intent store: ${preview.intent_store?.intent_store_connected ? "connected" : "not connected"} / persistence: ${preview.intent_persistence_allowed ? "on" : "off"}</small>
+          <small>Durable intent id: ${preview.durable_intent_id_issued ? "issued" : "none issued"} / idempotency preview: ${escapeHtml(preview.idempotency_key_preview || "not available")}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Request fields</p>
+          <ol class="work-order-list">${fields || "<li>No request fields returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Future write plan</p>
+          <ul class="work-order-list">${writes || "<li>No write plan returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Create blockers</p>
+          <ul class="work-order-list">${blockers || "<li>No blockers returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Create safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>No durable intent persistence.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   function renderExecutionPreflightBoundary(boundary) {
     const panel = byId("execution-preflight-panel");
     if (!panel) return;
@@ -2466,6 +2547,26 @@ fn client_script() -> &'static str {
     );
   }
 
+  async function previewExecutionIntentCreateRequest() {
+    const runId = currentRun?.id || "run_semiconductor_controls_001";
+    setText("execution-intent-create-request-status", "Previewing hosted intent create request...");
+    const preview = await fetchJson("/api/execution-intents/create-request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspace_id: currentRun?.workspace_id || "workspace_demo",
+        run_id: runId,
+        job_id: lastInspectedJobId,
+        action: "execute_provider_calls",
+      }),
+    });
+    renderExecutionIntentCreateRequest(preview);
+    setText(
+      "execution-intent-create-request-status",
+      `Create request remains ${preview.create_request_allowed ? "allowed" : "rejected"}; ${preview.blocking_reasons?.length || 0} blockers returned.`,
+    );
+  }
+
   async function runWorkerResultDryRun() {
     const runId = currentRun?.id;
     if (!runId) {
@@ -2583,6 +2684,10 @@ fn client_script() -> &'static str {
     checkExecutionAdmission()
       .catch((error) => setText("execution-admission-status", `Admission error: ${error.message}`));
   });
+  byId("execution-intent-create-request-button")?.addEventListener("click", () => {
+    previewExecutionIntentCreateRequest()
+      .catch((error) => setText("execution-intent-create-request-status", `Create request error: ${error.message}`));
+  });
   document.addEventListener("click", (event) => {
     const button = event.target.closest("[data-review-kind][data-review-id]");
     if (!button) return;
@@ -2608,6 +2713,7 @@ fn client_script() -> &'static str {
   renderProviderAdapterGateCheck(null);
   renderExecutionReadiness(null);
   renderExecutionAdmission(null);
+  renderExecutionIntentCreateRequest(null);
   renderExecutionPreflightBoundary(null);
   renderExecutionJobs([]);
   renderWorkOrder(null);
@@ -3299,6 +3405,7 @@ p {
 
 #execution-work-order-detail,
 #execution-admission-panel,
+#execution-intent-create-request-panel,
 #execution-handoff-panel,
 #execution-intent-panel,
 #execution-intent-store-panel,
@@ -3708,6 +3815,8 @@ mod tests {
         assert!(page.contains("execution-readiness-result"));
         assert!(page.contains("execution-admission-button"));
         assert!(page.contains("execution-admission-panel"));
+        assert!(page.contains("execution-intent-create-request-button"));
+        assert!(page.contains("execution-intent-create-request-panel"));
         assert!(page.contains("execution-preflight-panel"));
         assert!(page.contains("/api/provider-status"));
         assert!(page.contains("/api/provider-adapter-contract"));
@@ -3716,6 +3825,7 @@ mod tests {
         assert!(page.contains("/api/provider-adapter/gate-check"));
         assert!(page.contains("/api/execution-readiness"));
         assert!(page.contains("/api/execution-admission"));
+        assert!(page.contains("/api/execution-intents/create-request"));
         assert!(page.contains("/api/execution-preflight-boundary"));
         assert!(page.contains("execution-job-list"));
         assert!(page.contains("execution-work-order-detail"));
@@ -3773,11 +3883,13 @@ mod tests {
         assert!(page.contains("function renderProviderAdapterGateCheck"));
         assert!(page.contains("function renderExecutionReadiness"));
         assert!(page.contains("function renderExecutionAdmission"));
+        assert!(page.contains("function renderExecutionIntentCreateRequest"));
         assert!(page.contains("function renderExecutionPreflightBoundary"));
         assert!(page.contains("function runProviderAdapterDryRun"));
         assert!(page.contains("function runProviderAdapterGateCheck"));
         assert!(page.contains("function checkExecutionReadiness"));
         assert!(page.contains("function checkExecutionAdmission"));
+        assert!(page.contains("function previewExecutionIntentCreateRequest"));
         assert!(page.contains("queue-preview-button"));
         assert!(page.contains("fetch(`${apiBase}${path}`"));
         assert!(page.contains("POST"));

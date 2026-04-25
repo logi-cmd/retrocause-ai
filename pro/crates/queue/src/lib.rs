@@ -1,4 +1,7 @@
-use retrocause_pro_domain::{ExecutionPreflightBoundary, execution_preflight_boundary};
+use retrocause_pro_domain::{
+    ExecutionAdmissionDecision, ExecutionAdmissionRequest, ExecutionPreflightBoundary,
+    WorkspaceAction, execution_admission, execution_preflight_boundary,
+};
 use retrocause_pro_provider_routing::{
     RoutingPreviewError, RoutingPreviewPlan, RoutingPreviewRequest, RoutingStep,
     build_routing_preview,
@@ -87,6 +90,50 @@ pub struct ExecutionIntentPreview {
     pub required_capabilities: Vec<String>,
     pub safeguards: Vec<String>,
     pub next_required_step: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ExecutionIntentCreateRequestPreview {
+    pub workspace_id: String,
+    pub run_id: Option<String>,
+    pub job_id: Option<String>,
+    pub action: WorkspaceAction,
+    pub mode: ExecutionIntentCreateRequestMode,
+    pub status: ExecutionIntentCreateRequestStatus,
+    pub create_request_allowed: bool,
+    pub intent_persistence_allowed: bool,
+    pub execution_allowed: bool,
+    pub durable_intent_id_issued: bool,
+    pub intent_id_preview: Option<String>,
+    pub idempotency_key_preview: String,
+    pub admission_token_required: bool,
+    pub vault_handle_required: bool,
+    pub quota_reservation_required: bool,
+    pub request_fields: Vec<ExecutionIntentCreateRequestField>,
+    pub write_plan: Vec<ExecutionIntentCreateRequestWriteStep>,
+    pub admission: ExecutionAdmissionDecision,
+    pub intent_store: ExecutionIntentStoreBoundary,
+    pub worker_lease_boundary: WorkerLeaseBoundary,
+    pub blocking_reasons: Vec<String>,
+    pub required_capabilities: Vec<String>,
+    pub safeguards: Vec<String>,
+    pub next_required_step: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ExecutionIntentCreateRequestField {
+    pub id: &'static str,
+    pub source: &'static str,
+    pub accepted_now: bool,
+    pub requirement: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ExecutionIntentCreateRequestWriteStep {
+    pub id: &'static str,
+    pub target: &'static str,
+    pub allowed_now: bool,
+    pub requirement: &'static str,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -216,6 +263,18 @@ pub enum ExecutionHandoffMode {
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionIntentMode {
     PreviewOnlyRejected,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionIntentCreateRequestMode {
+    PreviewOnlyRejected,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionIntentCreateRequestStatus {
+    RejectedRequiresAdmissionAndStore,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
@@ -624,6 +683,214 @@ pub fn execution_intent_store_boundary() -> ExecutionIntentStoreBoundary {
     }
 }
 
+pub fn execution_intent_create_request_preview(
+    request: ExecutionAdmissionRequest,
+) -> ExecutionIntentCreateRequestPreview {
+    let admission = execution_admission(request);
+    let intent_store = execution_intent_store_boundary();
+    let worker_lease_boundary = worker_lease_boundary();
+
+    let mut blocking_reasons = admission.blocking_reasons.clone();
+    if !admission.admitted {
+        push_unique_string(&mut blocking_reasons, "execution_admission_denied");
+    }
+    if !admission.admission_token_issued {
+        push_unique_string(
+            &mut blocking_reasons,
+            "admission_token_required_before_intent_create",
+        );
+    }
+    if !admission.vault_handle_issued {
+        push_unique_string(
+            &mut blocking_reasons,
+            "vault_handle_required_before_intent_create",
+        );
+    }
+    if !admission.quota_reserved {
+        push_unique_string(
+            &mut blocking_reasons,
+            "quota_reservation_required_before_intent_create",
+        );
+    }
+    if !intent_store.intent_store_connected {
+        push_unique_string(&mut blocking_reasons, "intent_store_not_connected");
+    }
+    if !intent_store.persistence_allowed {
+        push_unique_string(&mut blocking_reasons, "intent_persistence_disabled");
+    }
+    if !worker_lease_boundary.lease_store_connected {
+        push_unique_string(&mut blocking_reasons, "worker_lease_store_not_connected");
+    }
+    if !worker_lease_boundary.execution_allowed {
+        push_unique_string(&mut blocking_reasons, "worker_execution_disabled");
+    }
+
+    let mut safeguards = admission.safeguards.clone();
+    push_unique_string(
+        &mut safeguards,
+        "create_request_preview_only_no_persistence",
+    );
+    push_unique_string(&mut safeguards, "no_durable_intent_id_issued");
+    push_unique_string(
+        &mut safeguards,
+        "no_admission_token_or_vault_handle_returned",
+    );
+    safeguards.extend(intent_store.safeguards.clone());
+    safeguards.extend(worker_lease_boundary.safeguards.clone());
+
+    let mut required_capabilities = Vec::new();
+    for gate in &admission.gates {
+        push_unique_string(
+            &mut required_capabilities,
+            format!("{}: {}", gate.id, gate.requirement),
+        );
+    }
+    for rule in &intent_store.idempotency_rules {
+        push_unique_string(
+            &mut required_capabilities,
+            format!("{}: {}", rule.id, rule.requirement),
+        );
+    }
+    for rule in &worker_lease_boundary.lease_rules {
+        push_unique_string(
+            &mut required_capabilities,
+            format!("{}: {}", rule.id, rule.requirement),
+        );
+    }
+
+    let idempotency_key_preview = intent_create_idempotency_key(&admission);
+
+    ExecutionIntentCreateRequestPreview {
+        workspace_id: admission.workspace_id.clone(),
+        run_id: admission.run_id.clone(),
+        job_id: admission.job_id.clone(),
+        action: admission.action,
+        mode: ExecutionIntentCreateRequestMode::PreviewOnlyRejected,
+        status: ExecutionIntentCreateRequestStatus::RejectedRequiresAdmissionAndStore,
+        create_request_allowed: false,
+        intent_persistence_allowed: false,
+        execution_allowed: false,
+        durable_intent_id_issued: false,
+        intent_id_preview: None,
+        idempotency_key_preview,
+        admission_token_required: true,
+        vault_handle_required: true,
+        quota_reservation_required: true,
+        request_fields: execution_intent_create_request_fields(),
+        write_plan: execution_intent_create_request_write_plan(),
+        admission,
+        intent_store,
+        worker_lease_boundary,
+        blocking_reasons,
+        required_capabilities,
+        safeguards,
+        next_required_step: "Only create a durable hosted execution intent after tenant auth admits the action, a worker-scoped vault handle exists, quota is reserved, the intent store is connected, worker leases exist, and result commits are idempotent."
+            .to_string(),
+    }
+}
+
+fn execution_intent_create_request_fields() -> Vec<ExecutionIntentCreateRequestField> {
+    vec![
+        ExecutionIntentCreateRequestField {
+            id: "workspace_id",
+            source: "admission_request",
+            accepted_now: true,
+            requirement: "Tenant-scoped workspace id carried into the future durable intent create request.",
+        },
+        ExecutionIntentCreateRequestField {
+            id: "run_or_job_id",
+            source: "admission_request",
+            accepted_now: true,
+            requirement: "A local run id or queued job id identifies the graph workspace input, but does not authorize execution.",
+        },
+        ExecutionIntentCreateRequestField {
+            id: "action",
+            source: "admission_request",
+            accepted_now: true,
+            requirement: "The requested action is evaluated server-side before any future create request can persist.",
+        },
+        ExecutionIntentCreateRequestField {
+            id: "admission_token",
+            source: "future_auth_service",
+            accepted_now: false,
+            requirement: "A real admission token must be issued by hosted auth before durable intent creation.",
+        },
+        ExecutionIntentCreateRequestField {
+            id: "vault_handle",
+            source: "future_credential_vault",
+            accepted_now: false,
+            requirement: "A worker-scoped vault handle is required; raw provider secrets must never be accepted here.",
+        },
+        ExecutionIntentCreateRequestField {
+            id: "quota_reservation",
+            source: "future_quota_ledger",
+            accepted_now: false,
+            requirement: "A tenant-scoped quota reservation is required before provider execution can be queued.",
+        },
+        ExecutionIntentCreateRequestField {
+            id: "route_plan_revision",
+            source: "future_durable_route_plan",
+            accepted_now: false,
+            requirement: "Durable intent creation must bind to an immutable route-plan revision.",
+        },
+        ExecutionIntentCreateRequestField {
+            id: "idempotency_key",
+            source: "server_generated_preview",
+            accepted_now: false,
+            requirement: "The preview key documents the future duplicate-create contract but is not a persistence key yet.",
+        },
+    ]
+}
+
+fn execution_intent_create_request_write_plan() -> Vec<ExecutionIntentCreateRequestWriteStep> {
+    vec![
+        ExecutionIntentCreateRequestWriteStep {
+            id: "validate_admission",
+            target: "hosted_auth_and_policy",
+            allowed_now: false,
+            requirement: "Admission must be allowed by tenant auth, vault handle, quota reservation, and preflight gates.",
+        },
+        ExecutionIntentCreateRequestWriteStep {
+            id: "insert_execution_intent",
+            target: "future_postgres_execution_intents",
+            allowed_now: false,
+            requirement: "Insert a durable intent row only after the hosted intent store exists and idempotency is enforced.",
+        },
+        ExecutionIntentCreateRequestWriteStep {
+            id: "mark_ready_for_lease",
+            target: "future_worker_lease_store",
+            allowed_now: false,
+            requirement: "Expose the intent to workers only after replay-before-claim and lease compare-and-swap rules exist.",
+        },
+        ExecutionIntentCreateRequestWriteStep {
+            id: "record_quota_reservation_link",
+            target: "future_quota_ledger",
+            allowed_now: false,
+            requirement: "Link a real reservation without mutating billing or usage from the API route.",
+        },
+    ]
+}
+
+fn intent_create_idempotency_key(admission: &ExecutionAdmissionDecision) -> String {
+    let resource_id = admission
+        .job_id
+        .as_deref()
+        .or(admission.run_id.as_deref())
+        .unwrap_or("future_provider_call");
+    let action = format!("{:?}", admission.action).to_ascii_lowercase();
+    format!(
+        "{}:{resource_id}:{action}:hosted_intent_create_preview:v1",
+        admission.workspace_id
+    )
+}
+
+fn push_unique_string(values: &mut Vec<String>, value: impl Into<String>) {
+    let value = value.into();
+    if !values.iter().any(|existing| existing == &value) {
+        values.push(value);
+    }
+}
+
 impl ExecutionQueue {
     pub fn new() -> Self {
         Self::default()
@@ -820,11 +1087,14 @@ impl std::error::Error for ExecutionQueueError {}
 #[cfg(test)]
 mod tests {
     use super::{
-        ExecutionHandoffMode, ExecutionIntentMode, ExecutionIntentStoreMode,
-        ExecutionIntentStoreRuleStatus, ExecutionJobStatus, ExecutionLifecycleMode, ExecutionQueue,
-        ExecutionQueueError, ExecutionWorkOrderMode, WorkerLeaseMode, WorkerLeaseRuleStatus,
-        execution_intent_store_boundary, execution_lifecycle_spec, worker_lease_boundary,
+        ExecutionHandoffMode, ExecutionIntentCreateRequestMode, ExecutionIntentCreateRequestStatus,
+        ExecutionIntentMode, ExecutionIntentStoreMode, ExecutionIntentStoreRuleStatus,
+        ExecutionJobStatus, ExecutionLifecycleMode, ExecutionQueue, ExecutionQueueError,
+        ExecutionWorkOrderMode, WorkerLeaseMode, WorkerLeaseRuleStatus,
+        execution_intent_create_request_preview, execution_intent_store_boundary,
+        execution_lifecycle_spec, worker_lease_boundary,
     };
+    use retrocause_pro_domain::{ExecutionAdmissionRequest, WorkspaceAction};
     use retrocause_pro_provider_routing::{RoutingPreviewRequest, RoutingScenario, SourcePolicy};
 
     #[test]
@@ -1058,6 +1328,94 @@ mod tests {
         assert!(!combined.contains("sk-"));
         assert!(!combined.contains("api_key"));
         assert!(!combined.contains("bearer "));
+    }
+
+    #[test]
+    fn hosted_intent_create_request_preview_rejects_before_admission_and_persistence() {
+        let preview = execution_intent_create_request_preview(ExecutionAdmissionRequest {
+            workspace_id: Some("workspace_demo".to_string()),
+            run_id: Some("run_semiconductor_controls_001".to_string()),
+            job_id: Some("job_local_000000".to_string()),
+            action: Some(WorkspaceAction::ExecuteProviderCalls),
+        });
+
+        assert_eq!(preview.workspace_id, "workspace_demo");
+        assert_eq!(
+            preview.mode,
+            ExecutionIntentCreateRequestMode::PreviewOnlyRejected
+        );
+        assert_eq!(
+            preview.status,
+            ExecutionIntentCreateRequestStatus::RejectedRequiresAdmissionAndStore
+        );
+        assert!(!preview.create_request_allowed);
+        assert!(!preview.intent_persistence_allowed);
+        assert!(!preview.execution_allowed);
+        assert!(!preview.durable_intent_id_issued);
+        assert!(preview.intent_id_preview.is_none());
+        assert!(!preview.admission.admitted);
+        assert!(!preview.admission.admission_token_issued);
+        assert!(!preview.admission.vault_handle_issued);
+        assert!(!preview.admission.quota_reserved);
+        assert!(!preview.intent_store.intent_store_connected);
+        assert!(!preview.intent_store.persistence_allowed);
+        assert!(!preview.worker_lease_boundary.lease_store_connected);
+        assert!(!preview.worker_lease_boundary.execution_allowed);
+        assert!(preview.idempotency_key_preview.contains("workspace_demo"));
+        assert!(preview.idempotency_key_preview.contains("job_local_000000"));
+        assert!(
+            preview
+                .request_fields
+                .iter()
+                .any(|field| field.id == "vault_handle" && !field.accepted_now)
+        );
+        assert!(preview.write_plan.iter().all(|step| !step.allowed_now));
+        assert!(
+            preview
+                .blocking_reasons
+                .contains(&"execution_admission_denied".to_string())
+        );
+        assert!(
+            preview
+                .blocking_reasons
+                .contains(&"intent_store_not_connected".to_string())
+        );
+        assert!(
+            preview
+                .blocking_reasons
+                .contains(&"intent_persistence_disabled".to_string())
+        );
+        assert!(
+            preview
+                .safeguards
+                .contains(&"create_request_preview_only_no_persistence".to_string())
+        );
+        assert!(
+            preview
+                .safeguards
+                .contains(&"no_durable_intent_id_issued".to_string())
+        );
+        assert!(
+            preview
+                .required_capabilities
+                .iter()
+                .any(|capability| capability.contains("tenant_auth"))
+        );
+
+        let combined = format!(
+            "{:?} {:?} {:?} {:?} {} {}",
+            preview.request_fields,
+            preview.write_plan,
+            preview.blocking_reasons,
+            preview.safeguards,
+            preview.idempotency_key_preview,
+            preview.next_required_step
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
+        assert!(!combined.contains("bearer "));
+        assert!(!combined.contains("token:"));
     }
 
     #[test]
