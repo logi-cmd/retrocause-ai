@@ -307,6 +307,15 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "rejected" }
                                 }
                             }
+                            div id="execution-intent-store-panel" class="intent-store-panel" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "Intent store boundary" }
+                                        p { "Durable intent persistence rules load from the Pro API; persistence remains off." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "persistence off" }
+                                }
+                            }
                             div id="execution-lifecycle-panel" class="lifecycle-panel" {
                                 article class="queue-meter queue-meter--empty" {
                                     div {
@@ -1615,6 +1624,71 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderExecutionIntentStoreBoundary(boundary) {
+    const panel = byId("execution-intent-store-panel");
+    if (!panel) return;
+    if (!boundary) {
+      panel.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>Intent store boundary</strong>
+            <p>Durable intent persistence rules load from the Pro API; persistence remains off.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">persistence off</span>
+        </article>
+      `;
+      return;
+    }
+
+    const transitions = (boundary.transition_rules || []).slice(0, 5).map((rule) => `
+      <li title="${escapeHtml(rule.requirement || "")}">
+        <strong>${escapeHtml(readable(rule.id || "transition"))}</strong>
+        <span>${escapeHtml(readable(rule.from_status || "from"))} -> ${escapeHtml(readable(rule.to_status || "to"))}</span>
+        <small>${rule.allowed_now ? "allowed now" : "planned only"}</small>
+      </li>
+    `).join("");
+    const idempotency = (boundary.idempotency_rules || []).slice(0, 4).map((rule) => `
+      <li title="${escapeHtml(rule.requirement || "")}">
+        <strong>${escapeHtml(readable(rule.id || "idempotency"))}</strong>
+        <span>${escapeHtml(rule.key_scope || "future key scope")}</span>
+      </li>
+    `).join("");
+    const retention = (boundary.retention_rules || []).slice(0, 3).map((rule) => `
+      <li title="${escapeHtml(rule.requirement || "")}">
+        <strong>${escapeHtml(readable(rule.id || "retention"))}</strong>
+        <span>${escapeHtml(readable(rule.store || "future store"))}</span>
+      </li>
+    `).join("");
+    const safeguards = (boundary.safeguards || []).map((guard) => `<li title="${escapeHtml(guard)}">${escapeHtml(readable(guard))}</li>`).join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card intent-store-card">
+        <div class="work-order-header">
+          <strong>Intent store boundary</strong>
+          <span class="quota-state quota-state--deferred">${boundary.persistence_allowed ? "persistence on" : "persistence off"}</span>
+          <p>${escapeHtml(readable(boundary.mode || "planned_no_persistence"))} / store ${boundary.intent_store_connected ? "connected" : "not connected"}</p>
+          <small>${escapeHtml(boundary.next_required_step || "Connect durable hosted storage only after execution gates exist.")}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Transition rules</p>
+          <ul class="work-order-list">${transitions || "<li>No transition rules returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Idempotency rules</p>
+          <ul class="work-order-list">${idempotency || "<li>No idempotency rules returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Retention rules</p>
+          <ul class="work-order-list">${retention || "<li>No retention rules returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Store safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>No safeguards returned.</li>"}</ul>
+        </section>
+      </article>
+    `;
+  }
+
   async function inspectWorkOrder(jobId) {
     if (!jobId) return;
     setText("execution-queue-status", `Inspecting ${jobId} work order...`);
@@ -2439,6 +2513,7 @@ fn client_script() -> &'static str {
   renderWorkOrder(null);
   renderExecutionHandoffPreview(null);
   renderExecutionIntentPreview(null);
+  renderExecutionIntentStoreBoundary(null);
   renderExecutionLifecycle(null);
   renderWorkerLeaseBoundary(null);
   renderResultCommitBoundary(null);
@@ -2497,6 +2572,11 @@ fn client_script() -> &'static str {
     .then(renderWorkerLeaseBoundary)
     .catch(() => {
       renderWorkerLeaseBoundary(null);
+    });
+  fetchJson("/api/execution-intent-store-boundary")
+    .then(renderExecutionIntentStoreBoundary)
+    .catch(() => {
+      renderExecutionIntentStoreBoundary(null);
     });
   fetchJson("/api/result-commit-boundary")
     .then(renderResultCommitBoundary)
@@ -3120,6 +3200,7 @@ p {
 #execution-work-order-detail,
 #execution-handoff-panel,
 #execution-intent-panel,
+#execution-intent-store-panel,
 #execution-lifecycle-panel,
 #worker-lease-panel,
 #result-commit-panel,
@@ -3532,6 +3613,7 @@ mod tests {
         assert!(page.contains("execution-work-order-detail"));
         assert!(page.contains("execution-handoff-panel"));
         assert!(page.contains("execution-intent-panel"));
+        assert!(page.contains("execution-intent-store-panel"));
         assert!(page.contains("execution-lifecycle-panel"));
         assert!(page.contains("worker-lease-panel"));
         assert!(page.contains("result-commit-panel"));
@@ -3548,6 +3630,7 @@ mod tests {
         assert!(page.contains("/work-order"));
         assert!(page.contains("/handoff-preview"));
         assert!(page.contains("/intent-preview"));
+        assert!(page.contains("/api/execution-intent-store-boundary"));
         assert!(page.contains("/api/execution-lifecycle"));
         assert!(page.contains("/api/worker-lease-boundary"));
         assert!(page.contains("/api/result-commit-boundary"));
@@ -3563,6 +3646,7 @@ mod tests {
         assert!(page.contains("function renderWorkOrder"));
         assert!(page.contains("function renderExecutionHandoffPreview"));
         assert!(page.contains("function renderExecutionIntentPreview"));
+        assert!(page.contains("function renderExecutionIntentStoreBoundary"));
         assert!(page.contains("function renderExecutionLifecycle"));
         assert!(page.contains("function renderWorkerLeaseBoundary"));
         assert!(page.contains("function renderResultCommitBoundary"));

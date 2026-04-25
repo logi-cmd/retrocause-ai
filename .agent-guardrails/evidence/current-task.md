@@ -3215,3 +3215,92 @@ This task adds the next keyless Pro execution boundary: a rejected execution int
 
 - This is not durable execution-intent persistence, not tenant authentication, not a credential vault, not quota reservation, not worker lease claiming, not retry scheduling, not provider execution, not billing enforcement, and not result commit.
 - Future Pro execution should replace this rejected preview with durable hosted intent creation only after real tenant auth, vault handles, quota reservations, lease-store connections, retry scheduling, and idempotent result-event commits exist.
+
+## Pro Product Core Slice 35 - Execution Intent Store Boundary
+
+### Scope
+
+This task adds the next keyless Pro execution boundary: a planned durable execution-intent store contract. It names future intent transitions, idempotency keys, retention rules, replay-before-claim requirements, and safeguards before any queue intent persistence exists. It remains preview-only and local: no credentials, sessions, JWTs, provider calls, quota reservations, worker leases, retry scheduling, billing mutation, Redis/Postgres connections, durable intent persistence, result writes, OSS runtime changes, npm packages, Python packages, external Rust crates, lockfile changes, or package publishing were added.
+
+### Files Updated
+
+- `pro/crates/queue/src/lib.rs`
+- `pro/apps/api/src/main.rs`
+- `pro/apps/web/src/main.rs`
+- `docs/PROJECT_STATE.md`
+- `docs/pro-rust-architecture.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Added `ExecutionIntentStoreBoundary` and related transition, idempotency, retention, mode, and rule-status types in `crates/queue`.
+- Added `execution_intent_store_boundary()` with `intent_store_connected=false`, `persistence_allowed=false`, replay-before-claim required, all transitions disabled, and explicit safeguards.
+- Added keyless `GET /api/execution-intent-store-boundary` in the Pro API.
+- Added queue/API tests proving the boundary keeps persistence disabled, lists transition/idempotency/retention rules, and does not return key-shaped values.
+- Added a graph-first web panel that loads the boundary on startup and renders planned-no-persistence mode, persistence-off state, transition rules, idempotency rules, retention rules, and safeguards.
+- Updated project state and Pro architecture docs so the new endpoint is documented as a planned store contract, not real durable queue persistence or execution.
+
+### Commands Run
+
+- Updated `.agent-guardrails/task-contract.json`
+  - Result: narrowed the previous slice's intent-preview contract to the approved Pro Rust queue/API/web/docs/evidence scope for the execution intent-store boundary.
+  - No new external dependencies, Cargo config changes, npm package changes, Python package changes, or lockfile changes were needed.
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+  - Initial result: failed because Rustfmt wanted to reflow two new test assertions.
+  - Fix: ran `cargo fmt --manifest-path pro/Cargo.toml --all`.
+  - Final result: passed.
+
+- `cargo test --manifest-path pro/Cargo.toml`
+  - Result: passed after adding the API/queue intent-store boundary tests.
+  - API tests: `38 passed`.
+  - Domain tests: `20 passed`.
+  - Event-store tests: `6 passed`.
+  - Provider-routing tests: `12 passed`.
+  - Queue tests: `10 passed`.
+  - Run-store tests: `4 passed`.
+  - Web tests: `2 passed`.
+
+- `cargo build --manifest-path pro/Cargo.toml`
+  - Result: passed.
+
+- Pro API execution-intent-store smoke
+  - Started `retrocause-pro-api.exe` on `127.0.0.1:60992` with temporary `RETROCAUSE_PRO_RUN_STORE_PATH` and `RETROCAUSE_PRO_EVENT_STORE_PATH`.
+  - Called `GET /healthz`, then `GET /api/execution-intent-store-boundary`.
+  - Result: passed; mode was `planned_no_persistence`, `intent_store_connected=false`, `persistence_allowed=false`, replay-before-claim was required, 5 transition rules, 4 idempotency rules, 3 retention rules, and 7 safeguards were returned; `no_intent_persistence` was present and no key-shaped values were found.
+
+- Pro browser execution-intent-store smoke
+  - Started the Pro API and web shell on dynamic localhost ports.
+  - Playwright loaded the web shell and verified the intent-store panel rendered `planned no persistence`, `persistence off`, `ready for lease to claimed`, `intent create key`, `lease rows`, `no intent persistence`, and `no provider execution or secret access`.
+  - Result: passed; no request failures, console errors, page errors, or key-shaped text were found.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Result: passed. A key-shaped scan for common provider-token prefixes and credential-assignment patterns found no key-shaped tokens or credential assignments in the current diff.
+
+- Local process cleanup check
+  - Result: passed; no `retrocause-pro-api` or `retrocause-pro-web` service processes were left running after smoke tests.
+
+- `agent-guardrails check --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with score `95/100 (safe-to-deploy)`.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because the current Pro focus, done-recently entry, and next step were synchronized to include the execution intent-store boundary.
+
+- `agent-guardrails check --review --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
+  - Result: passed with score `95/100 (safe-to-deploy)`.
+  - Non-blocking warning matched the standard check: intentional project-state documentation update.
+
+### Risk / Tradeoff Notes
+
+- Security: this slice does not accept, validate, read, store, log, or return sessions, passwords, JWTs, provider secrets, search keys, connector credentials, payment credentials, auth tokens, or user API keys. It does not enforce hosted permissions or protect hosted resources.
+- Dependencies: no new Rust crates, npm packages, Python packages, lockfile changes, Cargo config changes, or dependency upgrades were introduced.
+- Performance: the intent-store boundary is a static in-memory payload. It adds no provider calls, database calls, Redis calls, file writes, quota-ledger writes, billing writes, worker leases, retry scheduling, queue persistence, or result-event writes.
+- Understanding: this endpoint belongs in the queue boundary because durable execution intents are future queue/worker state. It records the planned hosted store contract separately from the per-job rejected intent preview so future Redis/Postgres-backed implementation has explicit transition, idempotency, retention, and replay rules before any persistence is enabled.
+- Continuity: reused existing queue boundary payload style, Axum route patterns, web `fetchJson`, and compact graph-first panel patterns. OSS runtime paths remain untouched.
+
+### Remaining Risks
+
+- This is not durable intent persistence, not tenant authentication, not a credential vault, not quota reservation, not worker lease claiming, not retry scheduling, not provider execution, not billing enforcement, and not result commit.
+- Future Pro execution should replace this planned store boundary with a real hosted intent store only after real tenant auth, vault handles, quota reservations, lease-store connections, retry scheduling, replay semantics, and idempotent result-event commits exist.

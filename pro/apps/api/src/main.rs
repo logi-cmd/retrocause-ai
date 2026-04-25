@@ -29,9 +29,10 @@ use retrocause_pro_provider_routing::{
     provider_adapter_gate_check,
 };
 use retrocause_pro_queue::{
-    ExecutionHandoffPreview, ExecutionIntentPreview, ExecutionJob, ExecutionJobSummary,
-    ExecutionLifecycleSpec, ExecutionQueue, ExecutionQueueError, ExecutionWorkOrder,
-    WorkerLeaseBoundary, execution_lifecycle_spec, worker_lease_boundary,
+    ExecutionHandoffPreview, ExecutionIntentPreview, ExecutionIntentStoreBoundary, ExecutionJob,
+    ExecutionJobSummary, ExecutionLifecycleSpec, ExecutionQueue, ExecutionQueueError,
+    ExecutionWorkOrder, WorkerLeaseBoundary, execution_intent_store_boundary,
+    execution_lifecycle_spec, worker_lease_boundary,
 };
 use retrocause_pro_run_store::{
     FileRunStore, HostedStorageMigrationPlan, RunStoreError, hosted_storage_migration_plan,
@@ -170,6 +171,10 @@ fn router() -> Router {
         .route(
             "/api/execution-jobs/{job_id}/intent-preview",
             get(get_execution_intent_preview),
+        )
+        .route(
+            "/api/execution-intent-store-boundary",
+            get(execution_intent_store),
         )
         .route("/api/execution-lifecycle", get(execution_lifecycle))
         .route("/api/worker-lease-boundary", get(worker_lease))
@@ -485,6 +490,10 @@ async fn get_execution_intent_preview(
         .get_intent_preview(&job_id)
         .map(Json)
         .ok_or_else(|| job_not_found(job_id))
+}
+
+async fn execution_intent_store() -> Json<ExecutionIntentStoreBoundary> {
+    Json(execution_intent_store_boundary())
 }
 
 async fn execution_lifecycle() -> Json<ExecutionLifecycleSpec> {
@@ -1591,6 +1600,50 @@ mod tests {
             preview.safeguards,
             preview.idempotency_key_preview,
             preview.next_required_step
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
+        assert!(!combined.contains("bearer "));
+    }
+
+    #[tokio::test]
+    async fn execution_intent_store_boundary_exposes_disabled_persistence_rules() {
+        let payload = execution_intent_store().await.0;
+
+        assert!(!payload.intent_store_connected);
+        assert!(!payload.persistence_allowed);
+        assert!(payload.replay_required_before_claim);
+        assert!(
+            payload
+                .transition_rules
+                .iter()
+                .any(|rule| { rule.id == "accepted_to_ready_for_lease" && !rule.allowed_now })
+        );
+        assert!(
+            payload
+                .idempotency_rules
+                .iter()
+                .any(|rule| rule.id == "intent_create_key")
+        );
+        assert!(
+            payload
+                .retention_rules
+                .iter()
+                .any(|rule| rule.id == "lease_rows")
+        );
+        assert!(
+            payload
+                .safeguards
+                .contains(&"no_intent_persistence".to_string())
+        );
+
+        let combined = format!(
+            "{:?} {:?} {:?} {}",
+            payload.transition_rules,
+            payload.idempotency_rules,
+            payload.safeguards,
+            payload.next_required_step
         )
         .to_lowercase();
         assert!(!combined.contains("sk-"));

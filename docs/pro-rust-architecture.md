@@ -12,8 +12,8 @@ The Rust rewrite lives under `pro/` inside this repository so the product and ar
 
 1. Establish a clean Rust workspace boundary.
  2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, usage ledger entries, provider quota ownership, and cooldown state.
-3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, run-scoped local event replay, preview-only worker result dry-runs, result snapshot readiness gates, worker result commit intents, workspace access-gate decisions, composed execution-readiness decisions, pre-execution auth/vault/quota boundaries, keyless provider/search quota status, routing previews, preview-only execution jobs, execution handoff previews, and execution intent previews.
-4. Render a graph-first web shell from the same shared Rust payload and wire it to the local API create/read flow, provider-status view, execution-readiness panel, pre-execution boundary panel, execution handoff preview panel, and execution intent preview panel.
+3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, run-scoped local event replay, preview-only worker result dry-runs, result snapshot readiness gates, worker result commit intents, workspace access-gate decisions, composed execution-readiness decisions, pre-execution auth/vault/quota boundaries, keyless provider/search quota status, routing previews, preview-only execution jobs, execution handoff previews, execution intent previews, and a planned execution intent-store boundary.
+4. Render a graph-first web shell from the same shared Rust payload and wire it to the local API create/read flow, provider-status view, execution-readiness panel, pre-execution boundary panel, execution handoff preview panel, execution intent preview panel, and execution intent-store boundary panel.
 5. Keep Pro separate from the OSS Python/FastAPI + Next.js runtime.
 
 ## Workspace layout
@@ -169,10 +169,11 @@ Current behavior:
 - worker lease/retry contract: a non-executing lease, retry, and idempotency boundary that names claim rules, retry policies, duplicate-call prevention, and partial-result preservation before workers exist
 - execution handoff preview: a denied handoff payload that composes each job's work order with the pre-execution auth/vault/quota/worker/result boundary
 - execution intent preview: a rejected intent envelope that composes the denied handoff with worker lease/retry rules and preview idempotency keys
+- execution intent-store boundary: a planned durable store contract that names transition rules, idempotency requirements, retention rules, and replay-before-claim semantics while persistence remains disabled
 - storage: process-local memory only
 - execution: always disabled in this slice
 
-This is intentionally not a worker system. It does not read provider keys, call models/search APIs, persist queue state, bill usage, enforce tenant quotas, claim leases, persist execution intents, or schedule background work. The value is the API, state, work-order, worker-lease, retry, handoff, and intent boundary: future Redis/Postgres-backed queue workers should replace the in-memory implementation without making API routes own job sequencing, route-plan coupling, retry loops, idempotency semantics, pre-execution gate composition, intent persistence, or safety gate behavior.
+This is intentionally not a worker system. It does not read provider keys, call models/search APIs, persist queue state, bill usage, enforce tenant quotas, claim leases, connect an intent store, persist execution intents, or schedule background work. The value is the API, state, work-order, worker-lease, retry, handoff, intent, and intent-store boundary: future Redis/Postgres-backed queue workers should replace the in-memory implementation without making API routes own job sequencing, route-plan coupling, retry loops, idempotency semantics, pre-execution gate composition, intent persistence, replay semantics, or safety gate behavior.
 
 ## Near-term service split
 
@@ -213,6 +214,7 @@ Initial responsibility:
 - `GET /api/execution-jobs/{job_id}/work-order`
 - `GET /api/execution-jobs/{job_id}/handoff-preview`
 - `GET /api/execution-jobs/{job_id}/intent-preview`
+- `GET /api/execution-intent-store-boundary`
 - `GET /api/execution-lifecycle`
 - `GET /api/worker-lease-boundary`
 - `GET /api/storage-plan`
@@ -229,9 +231,10 @@ Initial responsibility:
 - local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
 - local execution handoff previews through `crates/queue`, composing job work orders with the pre-execution boundary while execution remains denied
 - local execution intent previews through `crates/queue`, composing denied handoffs with worker lease rules, preview idempotency keys, and intent-persistence blockers while execution remains denied
+- planned execution intent-store boundaries through `crates/queue`, exposing future transition, idempotency, retention, and replay-before-claim rules while durable persistence remains disconnected
 - future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current run and event stores are intentionally local-file-backed. They are useful for proving the API behavior, graph payload contract, restart continuity, and local event replay, but they should not be treated as the hosted Pro data layer. The workspace access context, workspace access gate, credential-vault boundary, quota-ledger boundary, result-commit boundary, pre-execution boundary, derived run-events, local event-log/replay, worker result dry-run, result snapshot readiness, worker result commit intent, review-comparison, provider-status, provider-route preview, execution-readiness, execution-job, execution handoff preview, execution intent preview, lifecycle, worker-lease, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, result/event commit vocabulary, snapshot-persistence vocabulary, run status vocabulary, replay vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, readiness semantics, execution preconditions, queue shape, worker handoff blockers, worker states, retry/idempotency semantics, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, opening database/Redis connections, enforcing auth, claiming worker leases, persisting execution intents, scheduling retries, or calling real providers. Only the local event-log/replay endpoints write derived run-scoped events to the local JSON replay file; result-commit/provider/worker result dry-run/result snapshot readiness/worker result commit intent/workspace access-gate/execution-readiness/execution-preflight/execution-handoff/execution-intent routes still cannot write provider result events, persisted snapshots, credentials, sessions, quota rows, or durable execution intents. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current run and event stores are intentionally local-file-backed. They are useful for proving the API behavior, graph payload contract, restart continuity, and local event replay, but they should not be treated as the hosted Pro data layer. The workspace access context, workspace access gate, credential-vault boundary, quota-ledger boundary, result-commit boundary, pre-execution boundary, derived run-events, local event-log/replay, worker result dry-run, result snapshot readiness, worker result commit intent, review-comparison, provider-status, provider-route preview, execution-readiness, execution-job, execution handoff preview, execution intent preview, execution intent-store boundary, lifecycle, worker-lease, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, result/event commit vocabulary, snapshot-persistence vocabulary, run status vocabulary, replay vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, readiness semantics, execution preconditions, queue shape, worker handoff blockers, worker states, retry/idempotency semantics, intent-store semantics, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, opening database/Redis connections, enforcing auth, claiming worker leases, persisting execution intents, scheduling retries, or calling real providers. Only the local event-log/replay endpoints write derived run-scoped events to the local JSON replay file; result-commit/provider/worker result dry-run/result snapshot readiness/worker result commit intent/workspace access-gate/execution-readiness/execution-preflight/execution-handoff/execution-intent/execution-intent-store routes still cannot write provider result events, persisted snapshots, credentials, sessions, quota rows, or durable execution intents. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -263,6 +266,7 @@ Initial responsibility:
 - inspect queued job work orders through `GET /api/execution-jobs/{job_id}/work-order`, rendering route steps, routing warnings, selected lane, and execution safeguards while execution stays disabled
 - inspect denied execution handoff previews through `GET /api/execution-jobs/{job_id}/handoff-preview`, rendering preflight blockers, work-order blockers, and handoff safeguards without enabling worker execution
 - inspect rejected execution intent previews through `GET /api/execution-jobs/{job_id}/intent-preview`, rendering intent idempotency preview, worker-lease blockers, required capabilities, and safeguards without persisting intents
+- render the planned execution intent-store boundary from `GET /api/execution-intent-store-boundary`, showing transition, idempotency, retention, and replay-before-claim rules while durable persistence stays disconnected
 - render the hosted-worker lifecycle/failure taxonomy from `GET /api/execution-lifecycle` so future execution states are visible before live adapters exist
 - render the worker-lease/retry boundary from `GET /api/worker-lease-boundary`, showing lease rules, retry policies, idempotency keys, and safeguards while workers and retry scheduling stay disabled
 - render the hosted storage migration boundaries from `GET /api/storage-plan` so Postgres/Redis/tenant/worker ownership is visible before connections exist
@@ -582,3 +586,11 @@ The execution intent preview slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `POST /api/execution-jobs` followed by `GET /api/execution-jobs/{job_id}/intent-preview` proving the intent stays rejected while handoff, worker lease, idempotency, and persistence blockers are visible without secret-shaped fields
 - a browser smoke that starts the Pro API and web shell, clicks `Queue preview job`, and verifies that the intent preview panel renders rejected intent creation, worker lease store, execution intent persistence, and no-persistence safeguards
+
+The execution intent-store boundary slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `GET /api/execution-intent-store-boundary` proving the planned store stays disconnected while transition, idempotency, retention, replay-before-claim, and no-persistence safeguards are visible without secret-shaped fields
+- a browser smoke that starts the Pro API and web shell and verifies that the intent-store boundary panel renders planned-no-persistence mode, persistence off, transition rules, idempotency rules, retention rules, and no-intent-persistence safeguards

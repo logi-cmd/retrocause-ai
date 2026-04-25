@@ -89,6 +89,44 @@ pub struct ExecutionIntentPreview {
     pub next_required_step: String,
 }
 
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ExecutionIntentStoreBoundary {
+    pub mode: ExecutionIntentStoreMode,
+    pub intent_store_connected: bool,
+    pub persistence_allowed: bool,
+    pub replay_required_before_claim: bool,
+    pub transition_rules: Vec<ExecutionIntentTransitionRule>,
+    pub idempotency_rules: Vec<ExecutionIntentStoreIdempotencyRule>,
+    pub retention_rules: Vec<ExecutionIntentStoreRetentionRule>,
+    pub safeguards: Vec<String>,
+    pub next_required_step: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ExecutionIntentTransitionRule {
+    pub id: &'static str,
+    pub from_status: &'static str,
+    pub to_status: &'static str,
+    pub allowed_now: bool,
+    pub requirement: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ExecutionIntentStoreIdempotencyRule {
+    pub id: &'static str,
+    pub key_scope: &'static str,
+    pub requirement: &'static str,
+    pub status: ExecutionIntentStoreRuleStatus,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ExecutionIntentStoreRetentionRule {
+    pub id: &'static str,
+    pub store: &'static str,
+    pub requirement: &'static str,
+    pub status: ExecutionIntentStoreRuleStatus,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct ExecutionLifecycleSpec {
     pub mode: ExecutionLifecycleMode,
@@ -178,6 +216,19 @@ pub enum ExecutionHandoffMode {
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionIntentMode {
     PreviewOnlyRejected,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionIntentStoreMode {
+    PlannedNoPersistence,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionIntentStoreRuleStatus {
+    FutureRequired,
+    NotConnected,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
@@ -470,6 +521,109 @@ pub fn worker_lease_boundary() -> WorkerLeaseBoundary {
     }
 }
 
+pub fn execution_intent_store_boundary() -> ExecutionIntentStoreBoundary {
+    ExecutionIntentStoreBoundary {
+        mode: ExecutionIntentStoreMode::PlannedNoPersistence,
+        intent_store_connected: false,
+        persistence_allowed: false,
+        replay_required_before_claim: true,
+        transition_rules: vec![
+            ExecutionIntentTransitionRule {
+                id: "accepted_to_ready_for_lease",
+                from_status: "accepted",
+                to_status: "ready_for_lease",
+                allowed_now: false,
+                requirement: "Persist a tenant-scoped intent row only after auth, vault handle, quota reservation, and route plan checks pass.",
+            },
+            ExecutionIntentTransitionRule {
+                id: "ready_for_lease_to_claimed",
+                from_status: "ready_for_lease",
+                to_status: "claimed",
+                allowed_now: false,
+                requirement: "A worker may claim only through a durable lease-store compare-and-swap operation.",
+            },
+            ExecutionIntentTransitionRule {
+                id: "claimed_to_retry_wait",
+                from_status: "claimed",
+                to_status: "retry_wait",
+                allowed_now: false,
+                requirement: "Retries require scheduler-owned attempt keys that preserve partial evidence and degraded-source state.",
+            },
+            ExecutionIntentTransitionRule {
+                id: "claimed_to_committing",
+                from_status: "claimed",
+                to_status: "committing",
+                allowed_now: false,
+                requirement: "Provider output must be attached to the intent through worker-owned result metadata, never API-route mutation.",
+            },
+            ExecutionIntentTransitionRule {
+                id: "committing_to_completed",
+                from_status: "committing",
+                to_status: "completed",
+                allowed_now: false,
+                requirement: "Final completion requires idempotent result-event append, snapshot reconciliation, and quota ledger reconciliation.",
+            },
+        ],
+        idempotency_rules: vec![
+            ExecutionIntentStoreIdempotencyRule {
+                id: "intent_create_key",
+                key_scope: "workspace_id:job_id:route_plan_revision",
+                requirement: "Duplicate create requests must return the same intent envelope without starting provider execution.",
+                status: ExecutionIntentStoreRuleStatus::FutureRequired,
+            },
+            ExecutionIntentStoreIdempotencyRule {
+                id: "lease_claim_key",
+                key_scope: "workspace_id:intent_id:lease_generation",
+                requirement: "Duplicate worker claims must not run the same provider lane twice.",
+                status: ExecutionIntentStoreRuleStatus::NotConnected,
+            },
+            ExecutionIntentStoreIdempotencyRule {
+                id: "provider_attempt_key",
+                key_scope: "workspace_id:intent_id:provider_lane_id:attempt",
+                requirement: "Retries must reconcile partial evidence, degraded-source status, and usage ledger rows under one attempt key.",
+                status: ExecutionIntentStoreRuleStatus::FutureRequired,
+            },
+            ExecutionIntentStoreIdempotencyRule {
+                id: "result_commit_key",
+                key_scope: "workspace_id:intent_id:run_id:graph_revision",
+                requirement: "Result commits must be idempotent and compare-and-swap guarded before graph snapshots are published.",
+                status: ExecutionIntentStoreRuleStatus::FutureRequired,
+            },
+        ],
+        retention_rules: vec![
+            ExecutionIntentStoreRetentionRule {
+                id: "intent_rows",
+                store: "postgres_execution_intents_later",
+                requirement: "Retain status, blockers, route summary, actor, and timestamps without raw provider secrets.",
+                status: ExecutionIntentStoreRuleStatus::FutureRequired,
+            },
+            ExecutionIntentStoreRetentionRule {
+                id: "lease_rows",
+                store: "redis_or_postgres_leases_later",
+                requirement: "Retain lease generation, worker id, expiry, and retry visibility without credential values.",
+                status: ExecutionIntentStoreRuleStatus::NotConnected,
+            },
+            ExecutionIntentStoreRetentionRule {
+                id: "result_event_links",
+                store: "event_store_later",
+                requirement: "Retain event ids linking partial and final result commits for replay and review comparison.",
+                status: ExecutionIntentStoreRuleStatus::FutureRequired,
+            },
+        ],
+        safeguards: vec![
+            "no_intent_store_connection_in_this_slice".to_string(),
+            "no_intent_persistence".to_string(),
+            "no_worker_lease_claimed".to_string(),
+            "no_retry_scheduler_started".to_string(),
+            "no_provider_execution_or_secret_access".to_string(),
+            "no_quota_or_billing_mutation".to_string(),
+            "api_routes_do_not_write_execution_intents".to_string(),
+        ],
+        next_required_step: "Connect a tenant-scoped hosted intent store only after auth, vault handles, quota reservations, worker leases, retry scheduling, and idempotent result commits exist."
+            .to_string(),
+    }
+}
+
 impl ExecutionQueue {
     pub fn new() -> Self {
         Self::default()
@@ -666,9 +820,10 @@ impl std::error::Error for ExecutionQueueError {}
 #[cfg(test)]
 mod tests {
     use super::{
-        ExecutionHandoffMode, ExecutionIntentMode, ExecutionJobStatus, ExecutionLifecycleMode,
-        ExecutionQueue, ExecutionQueueError, ExecutionWorkOrderMode, WorkerLeaseMode,
-        WorkerLeaseRuleStatus, execution_lifecycle_spec, worker_lease_boundary,
+        ExecutionHandoffMode, ExecutionIntentMode, ExecutionIntentStoreMode,
+        ExecutionIntentStoreRuleStatus, ExecutionJobStatus, ExecutionLifecycleMode, ExecutionQueue,
+        ExecutionQueueError, ExecutionWorkOrderMode, WorkerLeaseMode, WorkerLeaseRuleStatus,
+        execution_intent_store_boundary, execution_lifecycle_spec, worker_lease_boundary,
     };
     use retrocause_pro_provider_routing::{RoutingPreviewRequest, RoutingScenario, SourcePolicy};
 
@@ -851,6 +1006,53 @@ mod tests {
             preview.safeguards,
             preview.idempotency_key_preview,
             preview.next_required_step
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
+        assert!(!combined.contains("bearer "));
+    }
+
+    #[test]
+    fn intent_store_boundary_keeps_persistence_disabled_and_names_rules() {
+        let boundary = execution_intent_store_boundary();
+
+        assert_eq!(
+            boundary.mode,
+            ExecutionIntentStoreMode::PlannedNoPersistence
+        );
+        assert!(!boundary.intent_store_connected);
+        assert!(!boundary.persistence_allowed);
+        assert!(boundary.replay_required_before_claim);
+        assert!(boundary.transition_rules.iter().any(|rule| {
+            rule.id == "ready_for_lease_to_claimed"
+                && !rule.allowed_now
+                && rule.to_status == "claimed"
+        }));
+        assert!(boundary.idempotency_rules.iter().any(|rule| {
+            rule.id == "intent_create_key"
+                && rule.status == ExecutionIntentStoreRuleStatus::FutureRequired
+        }));
+        assert!(boundary.retention_rules.iter().any(|rule| {
+            rule.id == "lease_rows" && rule.status == ExecutionIntentStoreRuleStatus::NotConnected
+        }));
+        assert!(
+            boundary
+                .safeguards
+                .contains(&"no_intent_persistence".to_string())
+        );
+        assert!(
+            boundary
+                .safeguards
+                .contains(&"no_provider_execution_or_secret_access".to_string())
+        );
+
+        let combined = format!(
+            "{:?} {:?} {:?} {}",
+            boundary.transition_rules,
+            boundary.idempotency_rules,
+            boundary.safeguards,
+            boundary.next_required_step
         )
         .to_lowercase();
         assert!(!combined.contains("sk-"));
