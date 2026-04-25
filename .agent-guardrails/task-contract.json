@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "task": "Enhance the Pro Rust web shell with the awesome-design-md xAI-inspired monochrome style, a stronger homepage dialogue box, a star-map knowledge graph, and smooth cinematic UI effects. Reuse existing Pro API/client patterns, update DESIGN.md, docs/PROJECT_STATE.md, docs/pro-rust-architecture.md, and .agent-guardrails evidence, and do not change OSS runtime or add credentials/provider execution.",
+  "task": "Restructure the Pro Rust web shell so the root page is an awesome-design-md xAI-inspired dialogue-only homepage, with graph/source/gate/review controls moved to a separate /graph page that renders the knowledge graph as a cinematic galaxy/star map. Reuse existing Pro API/client patterns, update DESIGN.md, docs/PROJECT_STATE.md, docs/pro-rust-architecture.md, and .agent-guardrails evidence, and do not change OSS runtime or add credentials/provider execution.",
   "preset": "generic",
   "createdAt": "2026-04-25T16:53:01.207Z",
   "allowedPaths": [
@@ -46,16 +46,17 @@
     "Reuse the existing Maud render helpers, browser fetchJson pattern, API endpoints, graph selection behavior, and preview-only execution panels."
   ],
   "acknowledgedSkips": [],
-  "patternSummary": "Pro web is a single server-rendered Rust/Maud page with CSS and a small inline script. Keep API and domain payloads unchanged; improve layout, visual hierarchy, graph-first composition, and panel organization.",
-  "smallestViableChange": "Enhance the existing Pro web shell with a more dialogue-first xAI-inspired monochrome surface, star-map graph depth, and low-cost cinematic motion while preserving all existing endpoints/actions.",
+  "patternSummary": "Pro web is a server-rendered Rust/Maud shell with CSS and a small inline script. Keep API and domain payloads unchanged; split the visual surface into a dialogue-only root and a separate graph workspace while preserving graph/actions on /graph.",
+  "smallestViableChange": "Add a dialogue-only / homepage and move the existing star-map graph workspace to /graph with xAI-inspired monochrome styling and low-cost cinematic motion while preserving all existing endpoints/actions.",
   "assumptions": [
     "The active task is Pro frontend redesign only.",
     "DESIGN.md plus the awesome-design-md xAI reference are the local design source: stark black, spectral white, mono/Universal Sans feel, uppercase telemetry, ghost controls, and cinematic full-field composition; the UI must not imply affiliation with any referenced brand.",
-    "The knowledge graph remains the primary surface."
+    "The knowledge graph remains the primary workspace, but no longer has to be the root homepage."
   ],
   "acceptanceCriteria": [
-    "The Pro web shell still renders every existing graph, run, provider, queue, admission, intent, storage, vault, quota, event, review, and commit panel/action expected by current tests.",
-    "The visual enhancement keeps the homepage centered on a causal dialogue box, makes the graph feel more like a cinematic star map, and uses the high-trust monochrome xAI-inspired style from DESIGN.md.",
+    "The Pro web shell root page renders only the causal dialogue entry and does not render provider, source, queue, inspector, evidence, review, or gate panels.",
+    "The /graph page still renders every existing graph, run, provider, queue, admission, intent, storage, vault, quota, event, review, and commit panel/action expected by current tests.",
+    "The /graph page makes the graph feel like a cinematic galaxy/star map and the root page uses the high-trust monochrome xAI-inspired style from DESIGN.md.",
     "No OSS runtime files, provider credential flows, dependency files, or API/domain behavior are changed.",
     "Docs and evidence describe the redesign and remaining capability boundaries."
   ],
@@ -71,10 +72,10 @@
     "No package publishing"
   ],
   "expectedBehaviorChanges": [
-    "The Pro browser shell has a more cinematic dialogue-first and star-map graph-led visual system."
+    "The Pro browser shell root page becomes a dialogue-only entry surface, while the /graph page becomes the cinematic galaxy/star-map workspace."
   ],
   "userVisibleEffects": [
-    "The current Pro homepage appears more premium, cinematic, dialogue-box-led, and star-map graph-led while preserving the existing preview-only controls."
+    "The current Pro homepage appears as a premium dialogue box rather than a dense workspace, and the graph/source/gate/review controls live on the /graph workspace."
   ],
   "intendedSymbols": [],
   "expectedPublicSurfaceChanges": [
@@ -84,7 +85,8 @@
   "expectedTestTargets": [
     "cargo test --manifest-path pro/Cargo.toml",
     "cargo build --manifest-path pro/Cargo.toml",
-    "browser smoke of http://127.0.0.1:3007/"
+    "browser smoke of http://127.0.0.1:3007/",
+    "browser smoke of http://127.0.0.1:3007/graph"
   ],
   "productionProfile": "",
   "nfrRequirements": [

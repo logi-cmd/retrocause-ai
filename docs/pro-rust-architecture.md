@@ -13,7 +13,7 @@ The Rust rewrite lives under `pro/` inside this repository so the product and ar
 1. Establish a clean Rust workspace boundary.
  2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, usage ledger entries, provider quota ownership, and cooldown state.
 3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, run-scoped local event replay, preview-only worker result dry-runs, result snapshot readiness gates, worker result commit intents, workspace access-gate decisions, composed execution-readiness decisions, reusable execution admission decisions, hosted intent create-request previews, pre-execution auth/vault/quota boundaries, keyless provider/search quota status, routing previews, preview-only execution jobs, execution handoff previews, execution intent previews, and a planned execution intent-store boundary.
-4. Render a graph-first web shell from the same shared Rust payload, follow the root `DESIGN.md` black/spectral-white mission-control direction, and wire it to the local API create/read flow, provider-status view, execution-readiness panel, execution-admission panel, hosted intent create-request panel, pre-execution boundary panel, execution handoff preview panel, execution intent preview panel, and execution intent-store boundary panel.
+4. Render a dialogue-only root page plus a separate `/graph` workspace from the same shared Rust payload, follow the root `DESIGN.md` black/spectral-white mission-control direction, and wire the `/graph` workspace to the local API create/read flow, provider-status view, execution-readiness panel, execution-admission panel, hosted intent create-request panel, pre-execution boundary panel, execution handoff preview panel, execution intent preview panel, and execution intent-store boundary panel.
 5. Keep Pro separate from the OSS Python/FastAPI + Next.js runtime.
 
 ## Workspace layout
@@ -57,7 +57,7 @@ This is a deliberate tradeoff:
 
 If the graph workspace proves out, the next phase can move the web shell toward Leptos or another Rust-heavy client strategy without changing the domain model or API boundary.
 
-The active visual direction is captured in the root `DESIGN.md`, with the awesome-design-md xAI entry used as the current reference point. It adapts a stark monochrome, futuristic system to the Pro product without copying or implying any external brand affiliation: black canvas, spectral-white text, uppercase DIN-like telemetry, transparent HUD controls, ghost buttons, no remote imagery, no new font dependency, no dashboard gradients, and no decorative card stack. Because Pro is an operator workspace rather than a marketing homepage, the dialogue box is the first action, the graph itself acts as the cinematic star-map scene, and the surrounding inputs and safety boundaries remain mission-control HUD surfaces so existing preview-only controls stay usable.
+The active visual direction is captured in the root `DESIGN.md`, with the awesome-design-md xAI entry used as the current reference point. It adapts a stark monochrome, futuristic system to the Pro product without copying or implying any external brand affiliation: black canvas, spectral-white text, uppercase DIN-like telemetry, transparent HUD controls, ghost buttons, no remote imagery, no new font dependency, no dashboard gradients, and no decorative card stack. Because Pro should no longer inherit the OSS evidence-board layout, `/` is now a dialogue-only question surface, while `/graph` is the operator workspace where the galaxy-style knowledge graph acts as the cinematic scene and the surrounding inputs and safety boundaries remain mission-control HUD surfaces so existing preview-only controls stay usable.
 
 ## Shared domain
 
@@ -251,8 +251,9 @@ The current run and event stores are intentionally local-file-backed. They are u
 
 Initial responsibility:
 
-- render the graph-first Pro workspace
-- apply the root `DESIGN.md` visual system: graph as the primary scene, transparent HUD rails, uppercase spectral-white controls, and ghost actions
+- render a dialogue-only Pro homepage at `/`
+- render the graph-first Pro workspace at `/graph`
+- apply the root `DESIGN.md` visual system: root dialogue as the first surface, graph as the `/graph` primary scene, transparent HUD rails, uppercase spectral-white controls, and ghost actions
 - visualize the canonical run, including evidence anchors, challenge checks, source health, and usage ledger state
 - create new in-memory runs through `POST /api/runs`
 - reload run summaries, run detail, and graph payloads from the Pro API
@@ -609,6 +610,13 @@ The awesome-design-md xAI-style effects slice adds:
 - `cargo test --manifest-path pro/Cargo.toml`
 - `cargo build --manifest-path pro/Cargo.toml`
 - a browser smoke that starts the Pro API and web shell, loads `http://127.0.0.1:3007/`, captures the enhanced shell, verifies the dialogue box and star-map layers render, checks graph nodes remain visible, and confirms no credential fields, provider execution, worker execution, quota/billing mutation, console errors, or new dependencies are introduced
+
+The dialogue-home plus galaxy-graph route split adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- browser smokes that start the Pro API and web shell, load `http://127.0.0.1:3007/` and `http://127.0.0.1:3007/graph`, verify the root page only renders the dialogue entry, verify the `/graph` page keeps the graph/source/gate/review workspace and galaxy/star-map effects, and confirm no credential fields, provider execution, worker execution, quota/billing mutation, console errors, or new dependencies are introduced
 
 The pre-execution boundary slice adds:
 

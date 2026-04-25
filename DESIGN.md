@@ -4,8 +4,8 @@ This document is a local RetroCause Pro design reference inspired by the `awesom
 
 ## Visual Direction
 
-- The product opens as a dialogue-first intelligence workspace: the first action is asking a precise causal question.
-- The knowledge graph should feel like a star map: black space, thin constellation lines, bright labeled nodes, and cinematic depth.
+- The product opens as a dialogue-only intelligence surface: the root page should focus on asking a precise causal question, not on exposing operational panels.
+- The knowledge graph lives on a separate workspace page and should feel like a star map: black space, thin constellation lines, bright labeled nodes, and cinematic depth.
 - The interface should feel quiet, severe, research-grade, and high-trust rather than decorative.
 - Use monochrome surfaces, restrained transparency, and scale contrast instead of colorful panels.
 - Motion should feel like a film-grade system wake-up: prompt, graph, wires, and nodes resolve into place with a smooth scan rather than popping in.
@@ -33,8 +33,8 @@ Avoid colorful gradients, purple-blue AI palettes, beige luxury palettes, and de
 
 ## Components
 
-- Dialogue box: large, sparse, centered or upper-left over the graph field; it is the homepage entry point and should feel like the primary product surface, not a side form.
-- Star-map graph: black scene, constellation lines, bright point labels, node focus through border/opacity and smooth transform feedback.
+- Dialogue box: large, sparse, centered in the root page; it is the homepage and should feel like the product's first-class intelligence surface, not a side form.
+- Star-map graph: black galaxy scene on `/graph`, constellation lines, bright point labels, node focus through border/opacity and smooth transform feedback.
 - HUD rails: transparent monochrome panels for sources, quota, execution gates, evidence, and review deltas.
 - Buttons: ghost surfaces with rounded pill corners, strong text contrast, and subtle hover transitions.
 - Inputs: dark ghost fields with visible borders and generous padding.
@@ -56,8 +56,8 @@ The current Pro shell is still preview-only for hosted execution. UI language mu
 
 - Treat this document as visual direction only, not brand affiliation.
 - Use the causal graph itself as the cinematic scene; do not introduce remote imagery, decorative blobs, or a marketing hero.
-- Keep operator controls as transparent HUD rails around the graph so the product remains usable rather than merely atmospheric.
-- Keep the first screen dialogue-led: users should immediately know where to ask the causal question.
+- Keep operator controls as transparent HUD rails around the `/graph` scene so the product remains usable rather than merely atmospheric.
+- Keep the first screen dialogue-only: users should immediately know where to ask the causal question, while source, quota, gate, evidence, and review details live away from the homepage.
 - Star-map effects should reinforce evidence inspection, not hide labels or turn the product into a decorative splash screen.
 - Keep preview-only gates visibly blocked until the Rust backend has real tenant auth, vault handles, quota reservation, worker leases, durable intents, and idempotent result commits.
 - Do not add font, icon, image, JavaScript framework, provider, or credential dependencies for this visual system.

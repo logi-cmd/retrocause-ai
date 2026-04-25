@@ -13,11 +13,81 @@ const CANVAS_WIDTH: u16 = 1220;
 const CANVAS_HEIGHT: u16 = 720;
 
 fn router() -> Router {
-    Router::new().route("/", get(index))
+    Router::new()
+        .route("/", get(index))
+        .route("/graph", get(graph_index))
 }
 
 async fn index() -> impl IntoResponse {
+    Html(render_home_page(&api_base()).into_string())
+}
+
+async fn graph_index() -> impl IntoResponse {
     Html(render_page(&sample_run(), &api_base()).into_string())
+}
+
+fn render_home_page(api_base: &str) -> Markup {
+    html! {
+        (DOCTYPE)
+        html lang="en" {
+            head {
+                meta charset="utf-8";
+                meta name="viewport" content="width=device-width, initial-scale=1";
+                title { "RetroCause Pro" }
+                style { (PreEscaped(styles())) }
+            }
+            body data-api-base=(api_base) {
+                main class="home-shell" {
+                    div class="home-starfield home-starfield--far" aria-hidden="true" {}
+                    div class="home-starfield home-starfield--near" aria-hidden="true" {}
+                    div class="home-orbit home-orbit--outer" aria-hidden="true" {}
+                    div class="home-orbit home-orbit--inner" aria-hidden="true" {}
+                    div class="home-scan" aria-hidden="true" {}
+
+                    header class="home-header" {
+                        a class="brand-lockup brand-lockup--home" href="/" {
+                            div class="brand-mark" aria-hidden="true" {
+                                (PreEscaped(r#"<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path fill="currentColor" d="m13.11 7.664l1.78 2.672m-.728 2.452l-3.324 1.424M20 4l-6.06 1.515M3 3v16a2 2 0 0 0 2 2h16"/><circle fill="currentColor" cx="12" cy="6" r="2"/><circle fill="currentColor" cx="16" cy="12" r="2"/><circle fill="currentColor" cx="9" cy="15" r="2"/></g></svg>"#))
+                            }
+                            div {
+                                p class="eyebrow" { "RetroCause Pro" }
+                                strong { "Causal intelligence" }
+                            }
+                        }
+                        nav class="hero-nav hero-nav--home" aria-label="Pro sections" {
+                            a href="/graph" { "Graph" }
+                            a href="/graph#source-list" { "Sources" }
+                            a href="/graph#execution-admission-panel" { "Gates" }
+                        }
+                    }
+
+                    section class="home-dialogue" aria-label="Causal question entry" {
+                        p class="eyebrow" { "Ask why. Audit the chain." }
+                        h1 { "Map the causes behind any complex event." }
+                        form class="home-question-form" action="/graph" method="get" {
+                            label for="home-question" { "Causal question" }
+                            textarea
+                                id="home-question"
+                                name="question"
+                                rows="5"
+                                required=""
+                                placeholder="Why did server storage demand suddenly tighten this week?"
+                            {}
+                            div class="home-actions" {
+                                button type="submit" { "Map causes" }
+                                a href="/graph" { "Open graph workspace" }
+                            }
+                        }
+                        p class="home-boundary" {
+                            "Pro alpha preview. No credentials, provider calls, workers, quota mutation, or result commits are enabled from this page."
+                        }
+                    }
+
+                    div class="home-footer-line" aria-hidden="true" {}
+                }
+            }
+        }
+    }
 }
 
 fn render_page(run: &ProRun, api_base: &str) -> Markup {
@@ -47,6 +117,13 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                 div {
                                     p class="eyebrow" { "RetroCause Pro" }
                                     h1 { "Causal star map" }
+                                }
+                                nav class="hero-nav" aria-label="Pro sections" {
+                                    a href="/" { "Ask" }
+                                    a href="/graph" { "Graph" }
+                                    a href="#source-list" { "Sources" }
+                                    a href="#execution-admission-panel" { "Gates" }
+                                    a href="#review-comparison-panel" { "Review" }
                                 }
                             }
                             div class="run-state" {
@@ -78,6 +155,7 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                 }
                                 p id="run-action-status" class="console-status" { "API: " (api_base) }
                             }
+
                             div id="workspace-access-panel" class="workspace-access-panel" {
                                 article class="access-card access-card--empty" {
                                     div {
@@ -137,6 +215,7 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                         }
 
                         div class="graph-viewport" {
+                            div class="hero-word" aria-hidden="true" { "Why" }
                             div class="starfield-layer starfield-layer--far" aria-hidden="true" {}
                             div class="starfield-layer starfield-layer--near" aria-hidden="true" {}
                             div class="cinematic-scan" aria-hidden="true" {}
@@ -682,6 +761,7 @@ fn client_script() -> &'static str {
   const seed = JSON.parse(document.getElementById("seed-run-json").textContent || "{}");
   const providerSeed = JSON.parse(document.getElementById("provider-status-json").textContent || "{}");
   const byId = (id) => document.getElementById(id);
+  const graphCanvas = { width: 1220, height: 720 };
   let currentRun = seed;
   let activeNodeId = seed?.graph?.nodes?.[0]?.id || null;
   let lastAdapterDryRun = null;
@@ -734,6 +814,21 @@ fn client_script() -> &'static str {
     renderInspector(currentRun);
   }
 
+  function resizeGalaxyField() {
+    const viewport = document.querySelector(".graph-viewport");
+    if (!viewport) return;
+    const scale = Math.min(
+      viewport.clientWidth / graphCanvas.width,
+      viewport.clientHeight / graphCanvas.height,
+      1,
+    );
+    const offsetX = Math.max(0, (viewport.clientWidth - graphCanvas.width * scale) / 2);
+    const offsetY = Math.max(0, (viewport.clientHeight - graphCanvas.height * scale) / 2);
+    viewport.style.setProperty("--graph-scale", scale.toFixed(3));
+    viewport.style.setProperty("--graph-offset-x", `${Math.round(offsetX)}px`);
+    viewport.style.setProperty("--graph-offset-y", `${Math.round(offsetY)}px`);
+  }
+
   function renderGraph(run) {
     const graph = run.graph || { nodes: [], edges: [] };
     const wires = byId("graph-wires");
@@ -777,6 +872,7 @@ fn client_script() -> &'static str {
         }
       });
     });
+    resizeGalaxyField();
   }
 
   function renderInspector(run) {
@@ -2754,6 +2850,14 @@ fn client_script() -> &'static str {
   });
 
   renderRun(seed);
+  const stagedQuestion = new URLSearchParams(window.location.search).get("question");
+  if (stagedQuestion?.trim()) {
+    const questionInput = byId("run-question-input");
+    if (questionInput) {
+      questionInput.value = stagedQuestion.trim();
+      setStatus("Question staged from the homepage. Map causes to create a Pro preview run.");
+    }
+  }
   renderWorkspaceAccess(null);
   renderWorkspaceAccessGate(null);
   renderRunEvents(null);
@@ -2782,7 +2886,9 @@ fn client_script() -> &'static str {
   renderStoragePlan(null);
   renderCredentialVaultBoundary(null);
   renderQuotaLedgerBoundary(null);
+  resizeGalaxyField();
   installCinematicPointer();
+  window.addEventListener("resize", resizeGalaxyField);
   fetchJson("/api/workspace/access-context")
     .then(renderWorkspaceAccess)
     .catch(() => {
@@ -3007,6 +3113,9 @@ fn styles() -> &'static str {
   --star-shift-y: 0px;
   --star-near-shift-x: 0px;
   --star-near-shift-y: 0px;
+  --graph-scale: 1;
+  --graph-offset-x: 0px;
+  --graph-offset-y: 0px;
 }
 
 * { box-sizing: border-box; }
@@ -3020,6 +3129,276 @@ body {
   font-size: 14px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.home-shell {
+  min-height: 100dvh;
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  padding: clamp(18px, 4vw, 48px);
+  background:
+    radial-gradient(circle at 50% 46%, rgba(240, 240, 250, 0.12), transparent 22rem),
+    radial-gradient(circle at 54% 52%, rgba(240, 240, 250, 0.06), transparent 36rem),
+    linear-gradient(180deg, rgba(31, 34, 40, 0.34), rgba(0, 0, 0, 0.98)),
+    var(--space-black);
+}
+
+.home-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(240, 240, 250, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240, 240, 250, 0.03) 1px, transparent 1px);
+  background-size: 86px 86px;
+  mask-image: radial-gradient(circle at 50% 45%, rgba(0, 0, 0, 0.78), transparent 72%);
+  pointer-events: none;
+}
+
+.home-header {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.brand-lockup--home {
+  color: var(--spectral);
+}
+
+.brand-lockup--home strong {
+  display: block;
+  color: var(--spectral);
+  font-size: 0.9rem;
+  letter-spacing: 0.08em;
+}
+
+.hero-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.hero-nav a {
+  border: 1px solid var(--ghost-border);
+  border-radius: 999px;
+  padding: 8px 11px;
+  background: rgba(240, 240, 250, 0.05);
+  color: var(--spectral-soft);
+  font-size: 0.68rem;
+  line-height: 1;
+  transition:
+    border-color 180ms var(--ease-cinema),
+    background 180ms var(--ease-cinema),
+    transform 180ms var(--ease-cinema);
+}
+
+.hero-nav a:hover,
+.hero-nav a:focus-visible {
+  border-color: var(--ghost-border-strong);
+  background: rgba(240, 240, 250, 0.1);
+  transform: translateY(-1px);
+}
+
+.home-dialogue {
+  position: relative;
+  z-index: 2;
+  align-self: center;
+  justify-self: center;
+  width: min(880px, 100%);
+  display: grid;
+  gap: 20px;
+  padding: clamp(28px, 5vw, 64px);
+  border: 1px solid var(--ghost-border-strong);
+  border-radius: 4px;
+  background:
+    linear-gradient(145deg, rgba(240, 240, 250, 0.095), rgba(0, 0, 0, 0.1) 46%),
+    rgba(0, 0, 0, 0.68);
+  box-shadow:
+    inset 0 1px 0 rgba(240, 240, 250, 0.2),
+    0 44px 140px rgba(0, 0, 0, 0.6);
+  animation: cinematic-enter 760ms var(--ease-cinema) both;
+}
+
+.home-dialogue::before,
+.home-dialogue::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.home-dialogue::before {
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(240, 240, 250, 0.82), transparent);
+}
+
+.home-dialogue::after {
+  inset: 0;
+  background: linear-gradient(112deg, transparent 0 36%, rgba(240, 240, 250, 0.12) 46%, transparent 58%);
+  transform: translateX(-130%);
+  animation: cinematic-sheen 2.2s var(--ease-cinema) 260ms both;
+}
+
+.home-dialogue h1 {
+  max-width: 780px;
+  margin: 0;
+  color: var(--spectral);
+  font-size: 4.2rem;
+  font-weight: 700;
+  line-height: 0.98;
+  text-transform: none;
+  text-wrap: balance;
+}
+
+.home-question-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.home-question-form label {
+  color: var(--spectral-faint);
+  font-size: 0.7rem;
+}
+
+.home-question-form textarea {
+  min-height: 170px;
+  resize: vertical;
+  border: 1px solid var(--ghost-border);
+  border-radius: 4px;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.74);
+  color: var(--spectral);
+  font: 1.05rem/1.6 Arial, Verdana, system-ui, sans-serif;
+  text-transform: none;
+  letter-spacing: 0;
+  outline: none;
+}
+
+.home-question-form textarea:focus {
+  border-color: var(--ghost-border-strong);
+  box-shadow: inset 0 0 0 1px rgba(240, 240, 250, 0.16);
+}
+
+.home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.home-actions button,
+.home-actions a {
+  min-height: 44px;
+  border-radius: 999px;
+  padding: 0 18px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 180ms var(--ease-cinema),
+    border-color 180ms var(--ease-cinema),
+    background 180ms var(--ease-cinema);
+}
+
+.home-actions button {
+  border: 1px solid var(--spectral);
+  background: var(--spectral);
+  color: var(--space-black);
+}
+
+.home-actions a {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--ghost-border);
+  background: var(--ghost);
+  color: var(--spectral-soft);
+}
+
+.home-actions button:hover,
+.home-actions button:focus-visible,
+.home-actions a:hover,
+.home-actions a:focus-visible {
+  transform: translateY(-1px);
+}
+
+.home-boundary {
+  max-width: 700px;
+  color: var(--spectral-faint);
+  font: 0.78rem/1.7 Arial, Verdana, system-ui, sans-serif;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.home-starfield,
+.home-orbit,
+.home-scan,
+.home-footer-line {
+  position: absolute;
+  pointer-events: none;
+}
+
+.home-starfield {
+  inset: -8%;
+  opacity: 0.8;
+  background-image:
+    radial-gradient(circle, rgba(240, 240, 250, 0.82) 0 1px, transparent 1.5px),
+    radial-gradient(circle, rgba(240, 240, 250, 0.42) 0 1px, transparent 1.5px);
+  background-position: 0 0, 42px 58px;
+}
+
+.home-starfield--far {
+  background-size: 142px 142px, 220px 220px;
+  transform: translate3d(var(--star-shift-x), var(--star-shift-y), 0);
+}
+
+.home-starfield--near {
+  background-size: 92px 92px, 164px 164px;
+  opacity: 0.34;
+  transform: translate3d(var(--star-near-shift-x), var(--star-near-shift-y), 0);
+}
+
+.home-orbit {
+  left: 50%;
+  top: 50%;
+  width: min(76vw, 980px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(240, 240, 250, 0.12);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) rotate(-12deg);
+}
+
+.home-orbit--inner {
+  width: min(54vw, 700px);
+  opacity: 0.72;
+  transform: translate(-50%, -50%) rotate(18deg);
+}
+
+.home-scan {
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(240, 240, 250, 0.08), transparent);
+  animation: star-scan 2.8s var(--ease-cinema) 320ms both;
+}
+
+.home-footer-line {
+  left: clamp(18px, 4vw, 48px);
+  right: clamp(18px, 4vw, 48px);
+  bottom: clamp(18px, 4vw, 48px);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(240, 240, 250, 0.32), transparent);
 }
 
 .field-shell {
@@ -3036,7 +3415,7 @@ body {
   height: calc(100dvh - 24px);
   min-height: 780px;
   display: grid;
-  grid-template-columns: minmax(17rem, 21rem) minmax(42rem, 1fr) minmax(17rem, 21rem);
+  grid-template-columns: minmax(14rem, 17rem) minmax(44rem, 1fr) minmax(14rem, 17rem);
   grid-template-rows: auto minmax(0, 1fr) minmax(0, 0.92fr) minmax(9rem, 12rem);
   grid-template-areas:
     "hud hud hud"
@@ -3376,6 +3755,8 @@ summary:focus-visible,
   width: 1220px;
   height: 720px;
   z-index: 3;
+  transform: translate(var(--graph-offset-x), var(--graph-offset-y)) scale(var(--graph-scale));
+  transform-origin: 0 0;
 }
 
 #graph-nodes {
@@ -3384,6 +3765,8 @@ summary:focus-visible,
   width: 1220px;
   height: 720px;
   z-index: 4;
+  transform: translate(var(--graph-offset-x), var(--graph-offset-y)) scale(var(--graph-scale));
+  transform-origin: 0 0;
 }
 
 .wire-shadow {
@@ -3986,6 +4369,19 @@ p {
 }
 
 @media (max-width: 1080px) {
+  .home-shell {
+    overflow: auto;
+  }
+
+  .home-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .home-dialogue h1 {
+    font-size: 3.1rem;
+  }
+
   .graph-field {
     display: grid;
     grid-template-columns: 1fr;
@@ -4033,6 +4429,23 @@ p {
   .evidence-dock {
     max-height: none;
     overflow: visible;
+  }
+}
+
+@media (max-width: 640px) {
+  .home-dialogue h1 {
+    font-size: 2.25rem;
+  }
+
+  .home-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .home-actions button,
+  .home-actions a {
+    justify-content: center;
+    width: 100%;
   }
 }
 
@@ -4127,9 +4540,32 @@ mod tests {
     }
 
     #[test]
+    fn rendered_home_page_is_dialogue_only() {
+        let page = render_home_page("http://127.0.0.1:8787").into_string();
+
+        assert!(page.contains("home-dialogue"));
+        assert!(page.contains("Causal question entry"));
+        assert!(page.contains("Ask why. Audit the chain."));
+        assert!(page.contains("Map the causes behind any complex event."));
+        assert!(page.contains("action=\"/graph\""));
+        assert!(page.contains("method=\"get\""));
+        assert!(page.contains("Map causes"));
+        assert!(page.contains("Open graph workspace"));
+        assert!(page.contains("home-starfield"));
+        assert!(page.contains("home-orbit"));
+        assert!(page.contains("home-scan"));
+        assert!(!page.contains("id=\"provider-status-list\""));
+        assert!(!page.contains("id=\"execution-job-list\""));
+        assert!(!page.contains("id=\"source-list\""));
+        assert!(!page.contains("id=\"node-inspector\""));
+    }
+
+    #[test]
     fn rendered_page_contains_graph_first_sections() {
         let page = render_page(&sample_run(), "http://127.0.0.1:8787").into_string();
         assert!(page.contains("Knowledge graph operating field"));
+        assert!(page.contains("href=\"/\""));
+        assert!(page.contains("href=\"/graph\""));
         assert!(page.contains("#000000"));
         assert!(page.contains("#f0f0fa"));
         assert!(page.contains("Arial Narrow"));
@@ -4157,6 +4593,10 @@ mod tests {
         assert!(page.contains("data-review-kind"));
         assert!(page.contains("function selectNode"));
         assert!(page.contains("function focusReviewItem"));
+        assert!(page.contains("URLSearchParams(window.location.search)"));
+        assert!(page.contains("Question staged from the homepage"));
+        assert!(page.contains("function resizeGalaxyField"));
+        assert!(page.contains("--graph-scale"));
         assert!(page.contains("run-create-form"));
         assert!(page.contains("workspace-access-panel"));
         assert!(page.contains("workspace-access-gate-panel"));
