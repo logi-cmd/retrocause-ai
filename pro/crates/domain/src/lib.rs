@@ -152,6 +152,49 @@ pub struct WorkspaceAccessGateDecision {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExecutionAdmissionRequest {
+    pub workspace_id: Option<String>,
+    pub run_id: Option<String>,
+    pub job_id: Option<String>,
+    pub action: Option<WorkspaceAction>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExecutionAdmissionDecision {
+    pub workspace_id: String,
+    pub actor_id: String,
+    pub run_id: Option<String>,
+    pub job_id: Option<String>,
+    pub action: WorkspaceAction,
+    pub mode: ExecutionAdmissionMode,
+    pub status: ExecutionAdmissionStatus,
+    pub admitted: bool,
+    pub execution_allowed: bool,
+    pub admission_token_issued: bool,
+    pub vault_handle_issued: bool,
+    pub quota_reserved: bool,
+    pub secret_values_returned: bool,
+    pub ledger_mutation_enabled: bool,
+    pub gates: Vec<ExecutionAdmissionGate>,
+    pub preflight: ExecutionPreflightBoundary,
+    pub blocking_reasons: Vec<String>,
+    pub safeguards: Vec<String>,
+    pub sensitive_data_rules: Vec<String>,
+    pub next_required_step: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExecutionAdmissionGate {
+    pub id: String,
+    pub label: String,
+    pub status: ExecutionAdmissionGateStatus,
+    pub allowed: bool,
+    pub required_before_execution: bool,
+    pub requirement: String,
+    pub evidence: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExecutionPreflightBoundary {
     pub mode: ExecutionPreflightMode,
     pub status: ExecutionPreflightStatus,
@@ -582,6 +625,29 @@ pub enum WorkspaceAccessGateStatus {
     AllowedPreview,
     DeniedRequiresHostedAuth,
     DeniedRequiresHostedWorker,
+    DeniedUnknownWorkspace,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionAdmissionMode {
+    PreviewOnlyServerComputed,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionAdmissionStatus {
+    DeniedRequiresHostedGates,
+    DeniedUnknownWorkspace,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionAdmissionGateStatus {
+    MissingHostedAuth,
+    MissingVaultHandle,
+    MissingQuotaReservation,
+    MissingPreflightPrerequisite,
     DeniedUnknownWorkspace,
 }
 
@@ -1865,6 +1931,179 @@ pub fn execution_preflight_boundary() -> ExecutionPreflightBoundary {
     }
 }
 
+pub fn execution_admission(request: ExecutionAdmissionRequest) -> ExecutionAdmissionDecision {
+    let context = workspace_access_context();
+    let workspace_id =
+        non_empty_or_default(request.workspace_id.clone(), context.workspace_id.as_str());
+    let action = request
+        .action
+        .unwrap_or(WorkspaceAction::ExecuteProviderCalls);
+    let resource = request
+        .job_id
+        .clone()
+        .or_else(|| request.run_id.clone())
+        .unwrap_or_else(|| s("future_provider_call"));
+    let access_gate = workspace_access_gate(WorkspaceAccessGateRequest {
+        workspace_id: Some(workspace_id.clone()),
+        action,
+        resource: Some(resource),
+    });
+    let vault = credential_vault_boundary();
+    let quota = quota_ledger_boundary();
+    let preflight = execution_preflight_boundary();
+    let unknown_workspace = access_gate.status == WorkspaceAccessGateStatus::DeniedUnknownWorkspace;
+
+    let tenant_gate_status = if unknown_workspace {
+        ExecutionAdmissionGateStatus::DeniedUnknownWorkspace
+    } else {
+        ExecutionAdmissionGateStatus::MissingHostedAuth
+    };
+    let status = if unknown_workspace {
+        ExecutionAdmissionStatus::DeniedUnknownWorkspace
+    } else {
+        ExecutionAdmissionStatus::DeniedRequiresHostedGates
+    };
+
+    let gates = vec![
+        ExecutionAdmissionGate {
+            id: s("tenant_auth"),
+            label: s("Tenant and workspace auth"),
+            status: tenant_gate_status,
+            allowed: false,
+            required_before_execution: true,
+            requirement: s(
+                "Resolve tenant, actor, role, workspace membership, and action policy on the server before admission.",
+            ),
+            evidence: vec![
+                s("workspace_access_gate_computed_server_side"),
+                format!("workspace_gate_status:{:?}", access_gate.status),
+                format!("auth_enforced:{}", preflight.auth_enforced),
+            ],
+        },
+        ExecutionAdmissionGate {
+            id: s("vault_handle"),
+            label: s("Credential vault handle"),
+            status: ExecutionAdmissionGateStatus::MissingVaultHandle,
+            allowed: false,
+            required_before_execution: true,
+            requirement: s(
+                "Issue a scoped worker-only credential handle after hosted auth and before provider execution.",
+            ),
+            evidence: vec![
+                format!("vault_connected:{}", vault.connections_enabled),
+                format!("secret_values_returned:{}", vault.secret_values_returned),
+                s("api_routes_never_receive_raw_provider_credentials"),
+            ],
+        },
+        ExecutionAdmissionGate {
+            id: s("quota_reservation"),
+            label: s("Quota reservation"),
+            status: ExecutionAdmissionGateStatus::MissingQuotaReservation,
+            allowed: false,
+            required_before_execution: true,
+            requirement: s(
+                "Reserve tenant-scoped quota and rate-limit capacity before any provider call can be admitted.",
+            ),
+            evidence: vec![
+                format!("ledger_mutation_enabled:{}", quota.ledger_mutation_enabled),
+                format!(
+                    "payment_provider_connected:{}",
+                    quota.payment_provider_connected
+                ),
+                s("no_quota_reservation_created"),
+            ],
+        },
+        ExecutionAdmissionGate {
+            id: s("pre_execution_boundary"),
+            label: s("Pre-execution boundary"),
+            status: ExecutionAdmissionGateStatus::MissingPreflightPrerequisite,
+            allowed: false,
+            required_before_execution: true,
+            requirement: s(
+                "Hosted auth, vault handle, quota reservation, worker lease, and idempotent result commit must all pass before execution.",
+            ),
+            evidence: vec![
+                format!("preflight_status:{:?}", preflight.status),
+                format!(
+                    "worker_handoff_allowed:{}",
+                    preflight.worker_handoff_allowed
+                ),
+                format!("result_commit_allowed:{}", preflight.result_commit_allowed),
+            ],
+        },
+    ];
+
+    let mut blocking_reasons = Vec::new();
+    for reason in access_gate
+        .blocking_reasons
+        .iter()
+        .chain(preflight.blocking_reasons.iter())
+    {
+        push_unique_string(&mut blocking_reasons, reason.clone());
+    }
+    for reason in [
+        "admission_token_not_issued",
+        "vault_handle_not_issued",
+        "quota_reservation_not_created",
+        "execution_admission_preview_only",
+    ] {
+        push_unique_string(&mut blocking_reasons, s(reason));
+    }
+
+    let mut safeguards = Vec::new();
+    for guard in access_gate
+        .safeguards
+        .iter()
+        .chain(vault.safeguards.iter())
+        .chain(quota.safeguards.iter())
+        .chain(preflight.safeguards.iter())
+    {
+        push_unique_string(&mut safeguards, guard.clone());
+    }
+    for guard in [
+        "server_computed_admission_payload_only",
+        "no_admission_token_or_capability_issued",
+        "no_durable_intent_persistence",
+        "no_provider_execution_or_secret_access",
+    ] {
+        push_unique_string(&mut safeguards, s(guard));
+    }
+
+    let mut sensitive_data_rules = access_gate.sensitive_data_rules.clone();
+    for rule in [
+        "admission_requests_must_not_carry_credentials",
+        "vault_handles_are_future_worker_scoped_metadata_not_secret_values",
+        "quota_reservation_ids_are_not_issued_in_preview",
+    ] {
+        push_unique_string(&mut sensitive_data_rules, s(rule));
+    }
+
+    ExecutionAdmissionDecision {
+        workspace_id: access_gate.workspace_id,
+        actor_id: access_gate.actor_id,
+        run_id: request.run_id,
+        job_id: request.job_id,
+        action,
+        mode: ExecutionAdmissionMode::PreviewOnlyServerComputed,
+        status,
+        admitted: false,
+        execution_allowed: false,
+        admission_token_issued: false,
+        vault_handle_issued: false,
+        quota_reserved: false,
+        secret_values_returned: vault.secret_values_returned,
+        ledger_mutation_enabled: quota.ledger_mutation_enabled,
+        gates,
+        preflight,
+        blocking_reasons,
+        safeguards,
+        sensitive_data_rules,
+        next_required_step: s(
+            "Connect hosted tenant auth, issue vault handles, reserve quota, claim worker leases, and add idempotent intent/result storage before admission can allow execution.",
+        ),
+    }
+}
+
 pub fn run_event_timeline(run: &ProRun) -> RunEventTimeline {
     let mut events = Vec::new();
     push_run_event(
@@ -2147,6 +2386,12 @@ fn assert_known_references(
 
 fn s(value: &str) -> String {
     value.to_string()
+}
+
+fn push_unique_string(values: &mut Vec<String>, value: String) {
+    if !values.contains(&value) {
+        values.push(value);
+    }
 }
 
 fn non_empty_or_default(value: Option<String>, default: &str) -> String {
@@ -2443,16 +2688,17 @@ fn status_vocabulary_entry(
 mod tests {
     use super::{
         CooldownKind, CreateRunRequest, CredentialStorageStatus, CredentialVaultMode,
+        ExecutionAdmissionGateStatus, ExecutionAdmissionRequest, ExecutionAdmissionStatus,
         ExecutionPreflightMode, ExecutionPreflightRequirementStatus, ExecutionPreflightStatus,
         ProviderReadiness, QuotaAccountingStatus, QuotaLedgerMode, QuotaOwner, ResultCommitMode,
         ResultCommitStageStatus, ReviewComparisonMode, ReviewDeltaKind, RunEventKind,
         RunEventSource, RunStatus, WorkspaceAccessGateRequest, WorkspaceAccessGateStatus,
         WorkspaceAction, WorkspaceEnforcementMode, WorkspacePermissionStatus,
-        create_run_from_request, credential_vault_boundary, execution_preflight_boundary,
-        provider_status_snapshot, quota_ledger_boundary, result_commit_boundary,
-        run_event_timeline, run_review_comparison, run_status_vocabulary, sample_run,
-        sample_run_by_id, sample_run_summaries, validate_run_references, workspace_access_context,
-        workspace_access_gate,
+        create_run_from_request, credential_vault_boundary, execution_admission,
+        execution_preflight_boundary, provider_status_snapshot, quota_ledger_boundary,
+        result_commit_boundary, run_event_timeline, run_review_comparison, run_status_vocabulary,
+        sample_run, sample_run_by_id, sample_run_summaries, validate_run_references,
+        workspace_access_context, workspace_access_gate,
     };
     use std::collections::HashSet;
 
@@ -2842,6 +3088,110 @@ mod tests {
         assert!(!combined.contains("sk-"));
         assert!(!combined.contains("api_key"));
         assert!(!combined.contains("bearer "));
+    }
+
+    #[test]
+    fn execution_admission_composes_auth_vault_quota_and_preflight_gates() {
+        let decision = execution_admission(ExecutionAdmissionRequest {
+            workspace_id: Some("workspace_demo".to_string()),
+            run_id: Some("run_semiconductor_controls_001".to_string()),
+            job_id: None,
+            action: Some(WorkspaceAction::ExecuteProviderCalls),
+        });
+
+        assert_eq!(
+            decision.status,
+            ExecutionAdmissionStatus::DeniedRequiresHostedGates
+        );
+        assert!(!decision.admitted);
+        assert!(!decision.execution_allowed);
+        assert!(!decision.admission_token_issued);
+        assert!(!decision.vault_handle_issued);
+        assert!(!decision.quota_reserved);
+        assert!(!decision.secret_values_returned);
+        assert!(!decision.ledger_mutation_enabled);
+
+        let gate_ids: HashSet<&str> = decision.gates.iter().map(|gate| gate.id.as_str()).collect();
+        for id in [
+            "tenant_auth",
+            "vault_handle",
+            "quota_reservation",
+            "pre_execution_boundary",
+        ] {
+            assert!(gate_ids.contains(id), "missing admission gate {id}");
+        }
+        assert!(decision.gates.iter().all(|gate| !gate.allowed));
+        assert!(decision.gates.iter().any(|gate| {
+            gate.id == "tenant_auth"
+                && gate.status == ExecutionAdmissionGateStatus::MissingHostedAuth
+        }));
+        assert!(decision.gates.iter().any(|gate| {
+            gate.id == "vault_handle"
+                && gate.status == ExecutionAdmissionGateStatus::MissingVaultHandle
+        }));
+        assert!(decision.gates.iter().any(|gate| {
+            gate.id == "quota_reservation"
+                && gate.status == ExecutionAdmissionGateStatus::MissingQuotaReservation
+        }));
+        assert!(!decision.preflight.execution_allowed);
+        assert!(
+            decision
+                .blocking_reasons
+                .contains(&"hosted_tenant_auth_required".to_string())
+        );
+        assert!(
+            decision
+                .blocking_reasons
+                .contains(&"vault_handle_not_issued".to_string())
+        );
+        assert!(
+            decision
+                .blocking_reasons
+                .contains(&"quota_reservation_not_created".to_string())
+        );
+        assert!(
+            decision
+                .safeguards
+                .contains(&"server_computed_admission_payload_only".to_string())
+        );
+
+        let combined = format!(
+            "{:?} {:?} {:?} {}",
+            decision.gates,
+            decision.blocking_reasons,
+            decision.safeguards,
+            decision.next_required_step
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
+        assert!(!combined.contains("bearer "));
+    }
+
+    #[test]
+    fn execution_admission_denies_unknown_workspace_without_capabilities() {
+        let decision = execution_admission(ExecutionAdmissionRequest {
+            workspace_id: Some("workspace_other".to_string()),
+            run_id: Some("run_semiconductor_controls_001".to_string()),
+            job_id: None,
+            action: Some(WorkspaceAction::ExecuteProviderCalls),
+        });
+
+        assert_eq!(
+            decision.status,
+            ExecutionAdmissionStatus::DeniedUnknownWorkspace
+        );
+        assert!(!decision.admitted);
+        assert!(!decision.admission_token_issued);
+        assert!(decision.gates.iter().any(|gate| {
+            gate.id == "tenant_auth"
+                && gate.status == ExecutionAdmissionGateStatus::DeniedUnknownWorkspace
+        }));
+        assert!(
+            decision
+                .blocking_reasons
+                .contains(&"workspace_not_in_local_preview_context".to_string())
+        );
     }
 
     #[test]

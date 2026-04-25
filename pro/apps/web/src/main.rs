@@ -271,6 +271,21 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                             p id="execution-queue-status" class="console-status" {
                                 "Queue uses the current run question; execution stays disabled."
                             }
+                            button id="execution-admission-button" type="button" {
+                                "Check admission gate"
+                            }
+                            p id="execution-admission-status" class="console-status" {
+                                "Admission composes tenant auth, vault handle, and quota reservation before intent storage."
+                            }
+                            div id="execution-admission-panel" class="admission-panel" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "Execution admission gate" }
+                                        p { "Server-side admission payload waits for hosted auth, vault handles, and quota reservations." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "denied" }
+                                }
+                            }
                             div id="execution-job-list" {
                                 article class="queue-meter queue-meter--empty" {
                                     div {
@@ -646,6 +661,7 @@ fn client_script() -> &'static str {
   let runEventsLoaded = false;
   let workOrderLoaded = false;
   let commitIntentLoaded = false;
+  let lastInspectedJobId = null;
   let selectedAdapterCandidateId = "ofoxai_model_candidate";
 
   function escapeHtml(value) {
@@ -1388,6 +1404,63 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderExecutionAdmission(decision) {
+    const panel = byId("execution-admission-panel");
+    if (!panel) return;
+    if (!decision) {
+      panel.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>Execution admission gate</strong>
+            <p>Server-side admission payload waits for hosted auth, vault handles, and quota reservations.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">denied</span>
+        </article>
+      `;
+      return;
+    }
+
+    const gates = (decision.gates || []).slice(0, 5).map((gate) => `
+      <li>
+        <strong>${escapeHtml(readable(gate.id || gate.label))}</strong>
+        <span>${escapeHtml(readable(gate.status || "missing"))} / ${gate.allowed ? "allowed" : "blocked"}</span>
+        <small>${escapeHtml(gate.requirement || "Gate has no requirement.")}</small>
+      </li>
+    `).join("");
+    const blockers = (decision.blocking_reasons || [])
+      .slice(0, 8)
+      .map((reason) => `<li>${escapeHtml(readable(reason))}</li>`)
+      .join("");
+    const safeguards = (decision.safeguards || [])
+      .slice(0, 6)
+      .map((guard) => `<li>${escapeHtml(readable(guard))}</li>`)
+      .join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card admission-card">
+        <div class="work-order-header">
+          <strong>Execution admission gate</strong>
+          <span class="quota-state quota-state--deferred">${decision.admitted ? "admitted" : "admission denied"}</span>
+          <p>${escapeHtml(readable(decision.mode || "preview_only_server_computed"))} / ${escapeHtml(readable(decision.status || "denied_requires_hosted_gates"))}</p>
+          <small>tenant auth: blocked / vault handle: ${decision.vault_handle_issued ? "issued" : "missing"} / quota reservation: ${decision.quota_reserved ? "reserved" : "missing"}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Admission gates</p>
+          <ol class="work-order-list">${gates || "<li>No gates returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Blocking reasons</p>
+          <ul class="work-order-list">${blockers || "<li>No blockers returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Admission safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>no provider execution or secret access</li>"}</ul>
+        </section>
+        <small>${escapeHtml(decision.next_required_step || "Connect hosted gates before execution admission can pass.")}</small>
+      </article>
+    `;
+  }
+
   function renderExecutionPreflightBoundary(boundary) {
     const panel = byId("execution-preflight-panel");
     if (!panel) return;
@@ -1483,6 +1556,7 @@ fn client_script() -> &'static str {
     if (!detail) return;
     workOrderLoaded = Boolean(order);
     if (!order) {
+      lastInspectedJobId = null;
       detail.innerHTML = `
         <article class="queue-meter queue-meter--empty">
           <div>
@@ -1494,6 +1568,7 @@ fn client_script() -> &'static str {
       `;
       return;
     }
+    lastInspectedJobId = order.job_id || lastInspectedJobId;
 
     const routeSteps = (order.route_steps || []).map((step) => `
       <li>
@@ -2371,6 +2446,26 @@ fn client_script() -> &'static str {
     );
   }
 
+  async function checkExecutionAdmission() {
+    const runId = currentRun?.id || "run_semiconductor_controls_001";
+    setText("execution-admission-status", "Checking server-side execution admission...");
+    const decision = await fetchJson("/api/execution-admission", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspace_id: currentRun?.workspace_id || "workspace_demo",
+        run_id: runId,
+        job_id: lastInspectedJobId,
+        action: "execute_provider_calls",
+      }),
+    });
+    renderExecutionAdmission(decision);
+    setText(
+      "execution-admission-status",
+      `Admission remains ${decision.admitted ? "allowed" : "denied"}; ${decision.gates?.length || 0} gates returned.`,
+    );
+  }
+
   async function runWorkerResultDryRun() {
     const runId = currentRun?.id;
     if (!runId) {
@@ -2484,6 +2579,10 @@ fn client_script() -> &'static str {
     checkExecutionReadiness()
       .catch((error) => setText("execution-readiness-status", `Readiness error: ${error.message}`));
   });
+  byId("execution-admission-button")?.addEventListener("click", () => {
+    checkExecutionAdmission()
+      .catch((error) => setText("execution-admission-status", `Admission error: ${error.message}`));
+  });
   document.addEventListener("click", (event) => {
     const button = event.target.closest("[data-review-kind][data-review-id]");
     if (!button) return;
@@ -2508,6 +2607,7 @@ fn client_script() -> &'static str {
   renderProviderAdapterCandidates(null);
   renderProviderAdapterGateCheck(null);
   renderExecutionReadiness(null);
+  renderExecutionAdmission(null);
   renderExecutionPreflightBoundary(null);
   renderExecutionJobs([]);
   renderWorkOrder(null);
@@ -3198,6 +3298,7 @@ p {
 }
 
 #execution-work-order-detail,
+#execution-admission-panel,
 #execution-handoff-panel,
 #execution-intent-panel,
 #execution-intent-store-panel,
@@ -3277,6 +3378,10 @@ p {
 
 .intent-card {
   background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.56 0.08 210));
+}
+
+.admission-card {
+  background: color-mix(in oklch, var(--panel-hard) 72%, oklch(0.48 0.07 185));
 }
 
 .adapter-card {
@@ -3601,6 +3706,8 @@ mod tests {
         assert!(page.contains("live-adapter-gate-check-result"));
         assert!(page.contains("execution-readiness-button"));
         assert!(page.contains("execution-readiness-result"));
+        assert!(page.contains("execution-admission-button"));
+        assert!(page.contains("execution-admission-panel"));
         assert!(page.contains("execution-preflight-panel"));
         assert!(page.contains("/api/provider-status"));
         assert!(page.contains("/api/provider-adapter-contract"));
@@ -3608,6 +3715,7 @@ mod tests {
         assert!(page.contains("/api/provider-adapter/candidates"));
         assert!(page.contains("/api/provider-adapter/gate-check"));
         assert!(page.contains("/api/execution-readiness"));
+        assert!(page.contains("/api/execution-admission"));
         assert!(page.contains("/api/execution-preflight-boundary"));
         assert!(page.contains("execution-job-list"));
         assert!(page.contains("execution-work-order-detail"));
@@ -3664,10 +3772,12 @@ mod tests {
         assert!(page.contains("function renderProviderAdapterCandidates"));
         assert!(page.contains("function renderProviderAdapterGateCheck"));
         assert!(page.contains("function renderExecutionReadiness"));
+        assert!(page.contains("function renderExecutionAdmission"));
         assert!(page.contains("function renderExecutionPreflightBoundary"));
         assert!(page.contains("function runProviderAdapterDryRun"));
         assert!(page.contains("function runProviderAdapterGateCheck"));
         assert!(page.contains("function checkExecutionReadiness"));
+        assert!(page.contains("function checkExecutionAdmission"));
         assert!(page.contains("queue-preview-button"));
         assert!(page.contains("fetch(`${apiBase}${path}`"));
         assert!(page.contains("POST"));

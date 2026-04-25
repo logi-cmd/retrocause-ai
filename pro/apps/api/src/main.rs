@@ -8,13 +8,14 @@ use axum::{
     routing::{get, post},
 };
 use retrocause_pro_domain::{
-    CreateRunRequest, CredentialVaultBoundary, ExecutionPreflightBoundary, KnowledgeGraph, ProRun,
+    CreateRunRequest, CredentialVaultBoundary, ExecutionAdmissionDecision,
+    ExecutionAdmissionRequest, ExecutionPreflightBoundary, KnowledgeGraph, ProRun,
     ProviderStatusSnapshot, QuotaLedgerBoundary, ResultCommitBoundary, RunEventTimeline,
     RunReviewComparison, RunStatus, RunSummary, WorkspaceAccessContext,
     WorkspaceAccessGateDecision, WorkspaceAccessGateRequest, credential_vault_boundary,
-    execution_preflight_boundary, provider_status_snapshot, quota_ledger_boundary,
-    result_commit_boundary, run_event_timeline, run_review_comparison, sample_run,
-    workspace_access_context, workspace_access_gate,
+    execution_admission, execution_preflight_boundary, provider_status_snapshot,
+    quota_ledger_boundary, result_commit_boundary, run_event_timeline, run_review_comparison,
+    sample_run, workspace_access_context, workspace_access_gate,
 };
 use retrocause_pro_event_store::{
     EventStoreEntry, EventStoreError, EventStoreReplay, FileEventStore, ResultSnapshotReadiness,
@@ -100,6 +101,10 @@ fn router() -> Router {
         .route(
             "/api/execution-readiness",
             post(execution_readiness).options(cors_preflight),
+        )
+        .route(
+            "/api/execution-admission",
+            post(execution_admission_check).options(cors_preflight),
         )
         .route(
             "/api/execution-preflight-boundary",
@@ -223,6 +228,12 @@ async fn execution_readiness(
     Json(request): Json<ExecutionReadinessRequest>,
 ) -> Json<ExecutionReadinessDecision> {
     Json(execution_readiness_gate(request))
+}
+
+async fn execution_admission_check(
+    Json(request): Json<ExecutionAdmissionRequest>,
+) -> Json<ExecutionAdmissionDecision> {
+    Json(execution_admission(request))
 }
 
 async fn execution_preflight() -> Json<ExecutionPreflightBoundary> {
@@ -789,6 +800,57 @@ mod tests {
         .to_lowercase();
         assert!(!combined.contains("sk-"));
         assert!(!combined.contains("api_key"));
+    }
+
+    #[tokio::test]
+    async fn execution_admission_returns_server_computed_denial_payload() {
+        let payload = execution_admission_check(Json(ExecutionAdmissionRequest {
+            workspace_id: Some("workspace_demo".to_string()),
+            run_id: Some("run_semiconductor_controls_001".to_string()),
+            job_id: Some("job_local_000000".to_string()),
+            action: Some(WorkspaceAction::ExecuteProviderCalls),
+        }))
+        .await
+        .0;
+
+        assert!(matches!(
+            payload.status,
+            retrocause_pro_domain::ExecutionAdmissionStatus::DeniedRequiresHostedGates
+        ));
+        assert!(!payload.admitted);
+        assert!(!payload.execution_allowed);
+        assert!(!payload.admission_token_issued);
+        assert!(!payload.vault_handle_issued);
+        assert!(!payload.quota_reserved);
+        assert!(!payload.secret_values_returned);
+        assert!(!payload.ledger_mutation_enabled);
+        assert!(payload.gates.iter().any(|gate| gate.id == "tenant_auth"));
+        assert!(payload.gates.iter().any(|gate| gate.id == "vault_handle"));
+        assert!(
+            payload
+                .gates
+                .iter()
+                .any(|gate| gate.id == "quota_reservation")
+        );
+        assert!(
+            payload
+                .blocking_reasons
+                .contains(&"quota_reservation_not_created".to_string())
+        );
+        assert!(
+            payload
+                .safeguards
+                .contains(&"no_admission_token_or_capability_issued".to_string())
+        );
+
+        let combined = format!(
+            "{:?} {:?} {:?} {}",
+            payload.gates, payload.blocking_reasons, payload.safeguards, payload.next_required_step
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
+        assert!(!combined.contains("bearer "));
     }
 
     #[tokio::test]

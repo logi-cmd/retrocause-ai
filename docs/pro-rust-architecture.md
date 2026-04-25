@@ -12,8 +12,8 @@ The Rust rewrite lives under `pro/` inside this repository so the product and ar
 
 1. Establish a clean Rust workspace boundary.
  2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, usage ledger entries, provider quota ownership, and cooldown state.
-3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, run-scoped local event replay, preview-only worker result dry-runs, result snapshot readiness gates, worker result commit intents, workspace access-gate decisions, composed execution-readiness decisions, pre-execution auth/vault/quota boundaries, keyless provider/search quota status, routing previews, preview-only execution jobs, execution handoff previews, execution intent previews, and a planned execution intent-store boundary.
-4. Render a graph-first web shell from the same shared Rust payload and wire it to the local API create/read flow, provider-status view, execution-readiness panel, pre-execution boundary panel, execution handoff preview panel, execution intent preview panel, and execution intent-store boundary panel.
+3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, run-scoped local event replay, preview-only worker result dry-runs, result snapshot readiness gates, worker result commit intents, workspace access-gate decisions, composed execution-readiness decisions, reusable execution admission decisions, pre-execution auth/vault/quota boundaries, keyless provider/search quota status, routing previews, preview-only execution jobs, execution handoff previews, execution intent previews, and a planned execution intent-store boundary.
+4. Render a graph-first web shell from the same shared Rust payload and wire it to the local API create/read flow, provider-status view, execution-readiness panel, execution-admission panel, pre-execution boundary panel, execution handoff preview panel, execution intent preview panel, and execution intent-store boundary panel.
 5. Keep Pro separate from the OSS Python/FastAPI + Next.js runtime.
 
 ## Workspace layout
@@ -156,6 +156,8 @@ This is intentionally not a provider executor. It does not read provider keys, c
 
 `crates/domain` also carries a pre-execution boundary that sits one step closer to the future hosted executor. It names the hosted tenant auth context, server workspace gate, credential-vault handle, quota reservation, durable worker lease, and idempotent result commit as blocking prerequisites. This is deliberately metadata-only: it does not accept sessions, passwords, JWTs, provider keys, or connector credentials; it does not issue vault handles, reserve quota, claim worker leases, call providers, mutate billing, or write results. The value is the shared handoff vocabulary future executors must consume before real calls can exist.
 
+`crates/domain` also carries a reusable server-side execution admission payload. It composes the workspace/tenant auth gate, credential-vault boundary, quota-ledger boundary, and pre-execution boundary into a single denied decision with explicit gates, blockers, safeguards, and sensitive-data rules. This is not an authorization token and not a live executor: it does not issue admission tokens, read or return credentials, issue vault handles, reserve quota, mutate billing, persist queue intents, claim workers, call providers, or write result events. The value is the final server-computed prerequisite checklist before future hosted intent creation.
+
 ## Queue boundary
 
 `crates/queue` is the first Pro execution-queue boundary. It currently provides an in-memory `ExecutionQueue` that turns a routing-preview request into a preview-only execution job.
@@ -206,6 +208,7 @@ Initial responsibility:
 - `POST /api/provider-adapter/gate-check`
 - `POST /api/provider-adapter/dry-run`
 - `POST /api/execution-readiness`
+- `POST /api/execution-admission`
 - `GET /api/provider-route/preview`
 - `POST /api/provider-route/preview`
 - `GET /api/execution-jobs`
@@ -226,6 +229,7 @@ Initial responsibility:
 - preview-only worker result commit intents through `crates/event-store`, derived from snapshot readiness and blocked from result-event writes plus snapshot persistence
 - local preview workspace access-gate decisions through `crates/domain`, blocking live/provider/worker/write actions until hosted auth, vault, quota, worker, and idempotent storage gates exist
 - keyless pre-execution boundary decisions through `crates/domain`, blocking live execution until hosted auth, vault-handle issuance, quota reservation, worker lease, and idempotent result commit prerequisites exist
+- keyless execution admission decisions through `crates/domain`, composing tenant/auth, vault-handle, quota-reservation, and preflight blockers into one reusable denied server-side payload before intent creation
 - composed execution-readiness decisions through `crates/provider-routing`, combining workspace, provider, worker, snapshot, and observed-preview blockers before any live execution path can be enabled
 - no-connection hosted storage migration plan through `crates/run-store`
 - local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
@@ -234,7 +238,7 @@ Initial responsibility:
 - planned execution intent-store boundaries through `crates/queue`, exposing future transition, idempotency, retention, and replay-before-claim rules while durable persistence remains disconnected
 - future home for durable run status, queue control, provider routing, cooldown buckets, and saved-run access
 
-The current run and event stores are intentionally local-file-backed. They are useful for proving the API behavior, graph payload contract, restart continuity, and local event replay, but they should not be treated as the hosted Pro data layer. The workspace access context, workspace access gate, credential-vault boundary, quota-ledger boundary, result-commit boundary, pre-execution boundary, derived run-events, local event-log/replay, worker result dry-run, result snapshot readiness, worker result commit intent, review-comparison, provider-status, provider-route preview, execution-readiness, execution-job, execution handoff preview, execution intent preview, execution intent-store boundary, lifecycle, worker-lease, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, result/event commit vocabulary, snapshot-persistence vocabulary, run status vocabulary, replay vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, readiness semantics, execution preconditions, queue shape, worker handoff blockers, worker states, retry/idempotency semantics, intent-store semantics, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, opening database/Redis connections, enforcing auth, claiming worker leases, persisting execution intents, scheduling retries, or calling real providers. Only the local event-log/replay endpoints write derived run-scoped events to the local JSON replay file; result-commit/provider/worker result dry-run/result snapshot readiness/worker result commit intent/workspace access-gate/execution-readiness/execution-preflight/execution-handoff/execution-intent/execution-intent-store routes still cannot write provider result events, persisted snapshots, credentials, sessions, quota rows, or durable execution intents. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
+The current run and event stores are intentionally local-file-backed. They are useful for proving the API behavior, graph payload contract, restart continuity, and local event replay, but they should not be treated as the hosted Pro data layer. The workspace access context, workspace access gate, credential-vault boundary, quota-ledger boundary, result-commit boundary, pre-execution boundary, execution-admission decision, derived run-events, local event-log/replay, worker result dry-run, result snapshot readiness, worker result commit intent, review-comparison, provider-status, provider-route preview, execution-readiness, execution-job, execution handoff preview, execution intent preview, execution intent-store boundary, lifecycle, worker-lease, and storage-plan endpoints are static/keyless in this slice: they model tenant/auth vocabulary, credential handling vocabulary, quota/billing vocabulary, result/event commit vocabulary, snapshot-persistence vocabulary, run status vocabulary, replay vocabulary, review delta vocabulary, ownership, cooldown, routing semantics, readiness semantics, execution preconditions, admission semantics, queue shape, worker handoff blockers, worker states, retry/idempotency semantics, intent-store semantics, and storage boundaries without exposing credential fields, mutating quota/billing state, connecting a payment provider, opening database/Redis connections, enforcing auth, issuing admission tokens, claiming worker leases, persisting execution intents, scheduling retries, or calling real providers. Only the local event-log/replay endpoints write derived run-scoped events to the local JSON replay file; result-commit/provider/worker result dry-run/result snapshot readiness/worker result commit intent/workspace access-gate/execution-readiness/execution-admission/execution-preflight/execution-handoff/execution-intent/execution-intent-store routes still cannot write provider result events, persisted snapshots, credentials, sessions, quota rows, admission tokens, or durable execution intents. The CORS behavior is local-alpha plumbing for `127.0.0.1` API/web development, not a production auth or permission boundary.
 
 ### `apps/web`
 
@@ -262,6 +266,7 @@ Initial responsibility:
 - render the gated live-adapter candidate catalog from `GET /api/provider-adapter/candidates`
 - run a denied live-adapter gate check through `POST /api/provider-adapter/gate-check`, showing which auth, quota, dry-run, event, vault, and worker gates block execution
 - run a composed execution-readiness check through `POST /api/execution-readiness`, showing observed preview prerequisites plus workspace, provider, worker, and snapshot blockers before future live execution exists
+- run a reusable execution-admission check through `POST /api/execution-admission`, showing tenant/auth, vault-handle, quota-reservation, and preflight blockers before hosted intent creation exists
 - create and list preview-only execution jobs through the local execution-job API
 - inspect queued job work orders through `GET /api/execution-jobs/{job_id}/work-order`, rendering route steps, routing warnings, selected lane, and execution safeguards while execution stays disabled
 - inspect denied execution handoff previews through `GET /api/execution-jobs/{job_id}/handoff-preview`, rendering preflight blockers, work-order blockers, and handoff safeguards without enabling worker execution
@@ -328,6 +333,8 @@ The current `GET /api/runs/{run_id}/review-comparison` path derives a previous-c
 The current `GET /api/provider-adapter/candidates` and `POST /api/provider-adapter/gate-check` paths register and inspect a future OfoxAI model adapter candidate. They do not execute the candidate. Even if preview gates are marked observed, the gate check returns `execution_allowed=false` until real auth enforcement, credential vault access, quota ledger enforcement, and worker execution are implemented.
 
 The current `POST /api/execution-readiness` path is the first composed readiness checkpoint for future live execution. It accepts only observation booleans and local ids, then combines the workspace access gate, provider-adapter gate check, worker-result commit gate, and snapshot-persistence gate into one denial payload. It does not execute providers, read credentials, reserve quota, mutate billing, start workers, write result events, or persist snapshots. Future hosted Pro should make provider execution and worker result commits pass this composed checkpoint after real tenant auth, vault handles, quota reservations, worker leases, and idempotent event writes exist.
+
+The current `POST /api/execution-admission` path is the reusable server-side admission payload that sits immediately before future hosted intent creation. It accepts local ids plus a requested action, then combines the workspace/tenant auth gate, credential-vault handle requirement, quota-reservation requirement, and pre-execution boundary into one denied decision. It does not issue admission tokens or capabilities, read credentials, issue vault handles, reserve quota, mutate billing, persist execution intents, claim workers, call providers, or write result events.
 
 The current `GET /api/execution-preflight-boundary` path exposes the hosted prerequisites that must exist before any live execution handoff. It reports tenant auth, server workspace gate, vault-handle, quota-reservation, worker-lease, and idempotent-commit requirements as blocking. It does not accept or validate sessions, passwords, JWTs, provider keys, connector credentials, or auth claims; it does not issue handles, reserve quota, claim worker leases, call providers, mutate billing, or write results. Future hosted Pro should make the execution worker handoff consume this boundary before live calls can be queued.
 
@@ -562,6 +569,14 @@ The execution-readiness gate slice adds:
 - `cargo build --manifest-path pro/Cargo.toml`
 - an API smoke for `POST /api/execution-readiness` proving the composed payload keeps execution denied while exposing workspace, provider, worker, snapshot, and observed-preview blockers without secret-shaped fields
 - a browser smoke that starts the Pro API and web shell, runs the local preview prerequisites, clicks `Check execution readiness`, and verifies that the readiness panel renders denied execution, observed prerequisites, blockers, and safeguards
+
+The execution-admission gate slice adds:
+
+- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
+- `cargo test --manifest-path pro/Cargo.toml`
+- `cargo build --manifest-path pro/Cargo.toml`
+- an API smoke for `POST /api/execution-admission` proving the server-computed payload keeps admission denied while exposing tenant/auth, vault-handle, quota-reservation, and preflight blockers without secret-shaped fields
+- a browser smoke that starts the Pro API and web shell, clicks `Check admission gate`, and verifies that the admission panel renders denied admission, tenant auth, vault handle, quota reservation, and no provider execution or secret access safeguards
 
 The pre-execution boundary slice adds:
 

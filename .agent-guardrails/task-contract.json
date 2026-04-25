@@ -1,10 +1,10 @@
 {
   "schemaVersion": 3,
-  "task": "Add the next Pro Rust product-core slice: a keyless execution intent-store boundary that names the planned durable hosted intent store, transition rules, idempotency requirements, retention rules, and safeguards before any queue intent persistence exists. Expose one local API endpoint, render one graph-first web panel, and synchronize Pro docs/evidence. This remains preview-only and must not add sessions, passwords, JWT validation, external auth, credential storage, provider calls, quota or billing mutation, worker execution, Redis/Postgres connections, durable intent persistence, package publishing, npm dependencies, or OSS runtime changes.",
+  "task": "Add the next Pro Rust product-core slice: a keyless server-side execution admission gate that composes workspace/tenant auth, credential-vault handle, quota reservation, and pre-execution blockers into one denied admission payload. Expose one local API endpoint, render one graph-first web panel/action, and synchronize Pro docs/evidence. This remains preview-only and must not add sessions, passwords, JWT validation, external auth, admission tokens, credential storage, provider calls, quota or billing mutation, worker execution, Redis/Postgres connections, durable intent persistence, package publishing, npm dependencies, or OSS runtime changes.",
   "preset": "generic",
-  "createdAt": "2026-04-25T07:20:00.000Z",
+  "createdAt": "2026-04-25T08:05:00.000Z",
   "allowedPaths": [
-    "pro/crates/queue/",
+    "pro/crates/domain/",
     "pro/apps/api/",
     "pro/apps/web/",
     "docs/PROJECT_STATE.md",
@@ -32,8 +32,8 @@
   "validationProfile": "standard",
   "securityRequirements": [
     "Mention auth, secrets, permissions, and sensitive-data handling explicitly.",
-    "Do not accept or store passwords, tokens, provider secrets, or API keys.",
-    "Intent-store boundary must keep persistence, live/provider/worker/result-write paths denied until hosted auth, vault-handle, quota-reservation, lease-store, retry scheduling, and idempotent commit storage exist."
+    "Do not accept or store passwords, tokens, provider secrets, API keys, or admission tokens.",
+    "Execution admission must stay denied until hosted tenant auth, vault-handle issuance, quota reservation, worker lease, durable intent store, and idempotent commit storage exist."
   ],
   "dependencyRequirements": [
     "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
@@ -42,30 +42,31 @@
     "Mention performance, latency, or load impact in evidence."
   ],
   "understandingRequirements": [
-    "Explain why this boundary is a planned durable store contract and not real queue intent persistence."
+    "Explain why this admission gate is a server-computed prerequisite checklist and not a real execution authorization token."
   ],
   "continuityRequirements": [
-    "Reuse the existing execution queue, intent preview, worker lease boundary, Axum endpoint style, and compact web panel patterns."
+    "Reuse the existing workspace access gate, credential-vault boundary, quota-ledger boundary, pre-execution boundary, Axum endpoint style, and compact web panel patterns."
   ],
   "acknowledgedSkips": [],
-  "patternSummary": "Reuse existing Pro queue boundary payloads, API route handlers, web fetchJson helper, and preview-only boundary panels.",
-  "smallestViableChange": "Add a deterministic execution intent-store boundary payload that names future durable transition, idempotency, and retention rules while reporting persistence disabled.",
+  "patternSummary": "Reuse existing Pro domain boundary payloads, API route handlers, web fetchJson helper, and preview-only gate panels.",
+  "smallestViableChange": "Add a deterministic execution admission payload that composes existing auth/vault/quota/preflight blockers while reporting admission and execution disabled.",
   "assumptions": [
     "The Pro runtime remains local preview-only.",
     "Real provider/search execution is still intentionally blocked.",
-    "Credential values are never accepted, displayed, stored, or returned by this intent-store boundary."
+    "Credential values and admission tokens are never accepted, displayed, stored, or returned by this admission gate."
   ],
   "acceptanceCriteria": [
-    "Queue tests prove the intent-store boundary keeps persistence disabled and lists transition, idempotency, retention, and safeguard rules.",
-    "API tests prove the endpoint returns a server-computed execution intent-store boundary payload and no secret-shaped fields.",
-    "Web tests prove the graph-first shell contains the intent-store boundary panel, endpoint path, and renderer.",
-    "Docs and evidence explain that this is not real durable queue persistence, provider execution, credential access, quota mutation, or auth enforcement."
+    "Domain tests prove execution admission denies execution and composes auth, vault, quota, and preflight blockers.",
+    "API tests prove the endpoint returns a server-computed admission payload and no secret-shaped fields.",
+    "Web tests prove the graph-first shell contains the admission panel/action, endpoint path, and renderer.",
+    "Docs and evidence explain that this is not real auth enforcement, credential access, quota reservation, provider execution, durable queue persistence, or billing mutation."
   ],
   "nonGoals": [
     "No sessions",
     "No passwords",
     "No external auth provider",
     "No JWT validation",
+    "No admission token issuance",
     "No credential storage",
     "No provider calls",
     "No quota or billing mutation",
@@ -76,14 +77,14 @@
     "No OSS runtime changes"
   ],
   "expectedBehaviorChanges": [
-    "Pro API exposes a keyless execution intent-store boundary endpoint.",
-    "Pro web shell renders whether durable hosted intent persistence is connected and which transition/idempotency/retention rules are still planned."
+    "Pro API exposes a keyless execution admission endpoint.",
+    "Pro web shell can request and render a denied server-side admission decision for the current graph run."
   ],
   "expectedPublicSurfaceChanges": [
-    "GET /api/execution-intent-store-boundary"
+    "POST /api/execution-admission"
   ],
   "expectedTestTargets": [
     "cargo test --manifest-path pro/Cargo.toml"
   ],
-  "riskJustification": "This is a keyless local intent-store boundary contract. It prepares durable transition and idempotency vocabulary without enabling provider calls, credential reads, quota reservations, queue persistence, worker execution, Redis/Postgres connections, or result writes."
+  "riskJustification": "This is a keyless local admission-check payload. It composes existing auth, vault, quota, and preflight blockers without issuing tokens, accepting credentials, reserving quota, mutating billing, starting workers, connecting Redis/Postgres, persisting intents, calling providers, or writing results."
 }
