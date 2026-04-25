@@ -1,18 +1,17 @@
 {
   "schemaVersion": 3,
-  "task": "Add the next Pro Rust product-core slice: a server-side workspace access gate that evaluates a requested Pro action against the local preview workspace/actor context, exposes a keyless API endpoint for gate decisions, renders the decision in the graph-first web shell, and synchronizes Pro docs/evidence. Keep this local-only and keyless: do not add sessions, passwords, external auth providers, JWT validation, credential storage, provider execution, quota/billing mutation, worker execution, OSS runtime changes, npm dependencies, package publishing, or live provider calls.",
+  "task": "Fix OSS hosted-search undated result filtering so Chinese current-day market fallback graph tests accept Tavily/Brave-style transient search results without provider keys or live calls.",
   "preset": "generic",
-  "createdAt": "2026-04-25T01:35:00.000Z",
+  "createdAt": "2026-04-25T05:30:16.708Z",
   "allowedPaths": [
-    "pro/crates/domain/",
-    "pro/apps/api/",
-    "pro/apps/web/",
+    "retrocause/evidence_access.py",
+    "tests/test_auto_collect.py",
+    "tests/test_evidence_access.py",
     "docs/PROJECT_STATE.md",
-    "docs/pro-rust-architecture.md",
     ".agent-guardrails/"
   ],
   "requiredCommands": [
-    "cargo test --manifest-path pro/Cargo.toml"
+    "npm test"
   ],
   "evidencePaths": [
     ".agent-guardrails/evidence/current-task.md"
@@ -20,113 +19,85 @@
   "intendedFiles": [],
   "protectedPaths": [],
   "allowedChangeTypes": [
-    "interface",
     "implementation",
     "tests",
     "docs",
     "guardrails-internal",
     "other"
   ],
-  "riskLevel": "standard",
+  "riskLevel": "high",
   "requiresReviewNotes": false,
   "validationProfile": "standard",
   "securityRequirements": [
-    "Mention auth, secrets, permissions, and sensitive-data handling explicitly.",
-    "Do not accept or store passwords, tokens, provider secrets, or API keys."
+    "Do not add or expose provider keys, API keys, user credentials, or live provider calls.",
+    "Keep the OSS browser/API path keyless."
   ],
   "dependencyRequirements": [
-    "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
+    "Do not add packages or lockfile changes."
   ],
   "performanceRequirements": [
-    "Mention performance, latency, or load impact in evidence."
+    "Keep filtering deterministic and local with no extra network calls."
   ],
   "understandingRequirements": [
-    "Explain the main tradeoffs so future maintainers can follow the change."
+    "Explain why hosted search results can be accepted without explicit published dates."
   ],
   "continuityRequirements": [
-    "Mention reuse targets and any deliberate continuity break in evidence."
+    "Reuse the existing evidence access hosted-search cache policy and result time filtering patterns."
   ],
   "acknowledgedSkips": [],
-  "patternSummary": "Reuse the existing domain payload builders, Axum state/endpoint style, web fetchJson helper, and compact graph-first panels.",
-  "smallestViableChange": "Add a deterministic local workspace access gate payload and surface it through one API endpoint plus one web panel.",
+  "patternSummary": "Reuse evidence_access result time filtering and hosted-search/transient cache policy semantics.",
+  "smallestViableChange": "Recognize Tavily/Brave-style hosted search metadata as transient hosted search results during relative date filtering, with regression coverage.",
   "assumptions": [
-    "The active Pro slice remains local preview-only.",
-    "The OSS runtime remains keyless and untouched."
+    "Hosted search adapters often return fresh ranked results without a published date.",
+    "Accepting undated hosted-search results is safer than dropping all evidence for current-day Chinese market questions, as long as no live calls or keys are added."
   ],
   "acceptanceCriteria": [
-    "Domain tests prove preview/read actions can pass while live/provider/worker/write actions remain denied.",
-    "API tests prove the endpoint returns server-computed decisions and no secret-shaped fields.",
-    "Web tests prove the graph-first shell contains the new gate panel, endpoint path, and renderer.",
-    "Docs and evidence explain that this is not real hosted auth."
+    "The focused Chinese market fallback graph test passes.",
+    "Hosted-search result filtering has a direct regression for provider metadata.",
+    "OSS remains keyless and no provider execution path or credential field is added."
   ],
   "nonGoals": [
-    "No sessions",
-    "No passwords",
-    "No external auth provider",
-    "No JWT validation",
-    "No credential storage",
-    "No provider calls",
-    "No quota or billing mutation",
-    "No worker execution",
-    "No OSS runtime changes"
+    "No new providers",
+    "No provider keys",
+    "No live calls",
+    "No hosted credential storage",
+    "No Pro runtime changes"
   ],
   "expectedBehaviorChanges": [
-    "Pro API exposes a keyless workspace access gate decision endpoint.",
-    "Pro web shell renders whether a requested action is allowed, preview-only, or denied by hosted blockers."
+    "Relative-date filtering accepts undated hosted-search results when metadata clearly identifies Tavily/Brave-style transient search output."
   ],
-  "userVisibleEffects": [
-    "The Pro graph-first shell can show the first server-side access decision boundary before live execution exists."
+  "userVisibleEffects": [],
+  "intendedSymbols": [],
+  "expectedPublicSurfaceChanges": [],
+  "expectedBoundaryExceptions": [],
+  "expectedTestTargets": [],
+  "productionProfile": "",
+  "nfrRequirements": [],
+  "expectedLoadSensitivePaths": [],
+  "expectedConcurrencyImpact": "",
+  "observabilityRequirements": [],
+  "rollbackNotes": "",
+  "riskJustification": "",
+  "guardRules": [
+    "保留原有行为",
+    "添加回归测试",
+    "记录修复原因"
   ],
-  "expectedPublicSurfaceChanges": [
-    "POST /api/workspace/access-gate"
-  ],
-  "expectedTestTargets": [
-    "cargo test --manifest-path pro/Cargo.toml"
-  ],
-  "riskJustification": "This is a keyless local gate evaluator that denies live/provider/worker/write actions. It prepares a real server-side decision boundary without enabling auth sessions, credentials, provider execution, or billing.",
-  "session": {
-    "version": 1,
-    "sessionId": "pro-workspace-access-gate-2026-04-25",
-    "createdAt": "2026-04-25T01:35:00.000Z",
-    "repoRoot": "D:\\opencode\\retrocause-ai",
-    "taskRequest": "Continue Pro by adding a server-side workspace access gate before real provider/search execution.",
-    "contractSource": "manual-scope-after-plan-mismatch",
-    "selectedFiles": [],
-    "changedFiles": [],
-    "requiredCommandsSuggested": [
-      "cargo test --manifest-path pro/Cargo.toml"
-    ],
-    "evidencePathSuggested": ".agent-guardrails/evidence/current-task.md",
-    "riskDimensions": {
-      "securityRequirements": [
-        "Mention auth, secrets, permissions, and sensitive-data handling explicitly.",
-        "Do not accept or store passwords, tokens, provider secrets, or API keys."
-      ],
-      "dependencyRequirements": [
-        "Mention new or upgraded packages, lockfile changes, and dependency impact explicitly."
-      ],
-      "performanceRequirements": [
-        "Mention performance, latency, or load impact in evidence."
-      ],
-      "understandingRequirements": [
-        "Explain the main tradeoffs so future maintainers can follow the change."
-      ],
-      "continuityRequirements": [
-        "Mention reuse targets and any deliberate continuity break in evidence."
-      ]
-    },
-    "finishCheckHints": [
-      "Report the commands you actually ran: cargo test --manifest-path pro/Cargo.toml",
-      "Keep the evidence note current: .agent-guardrails/evidence/current-task.md",
-      "Finish with agent-guardrails check --review before handing off or merging."
-    ],
-    "archaeologyNotes": [
-      "The automated guardrails plan inferred build artifacts and OSS paths; the contract was manually narrowed to the Rust Pro workspace paths actually used by this slice."
-    ],
-    "nextActions": [
-      "Inspect the existing domain workspace access payload and API/web patterns.",
-      "Implement the smallest server-side gate evaluator.",
-      "Run required commands and update evidence."
-    ]
-  }
+  "roughIntent": {
+    "detected": true,
+    "taskType": "bugfix",
+    "confidence": 0.65,
+    "sources": {
+      "taskType": "关键词匹配 (65% 置信度)",
+      "paths": "关键词+文件树",
+      "testCommand": "package.json",
+      "riskLevel": "基于任务类型: bugfix"
+    }
+  },
+  "autoFilledFields": [
+    "allowedPaths",
+    "requiredCommands",
+    "riskLevel",
+    "guardRules"
+  ]
 }

@@ -279,9 +279,15 @@ def _target_date_for_range(time_range: str | None, today: date | None = None) ->
 def _is_hosted_search_result(result: SearchResult) -> bool:
     metadata = result.metadata or {}
     cache_policy = str(metadata.get("cache_policy", "")).lower()
+    provider = str(metadata.get("provider", "")).strip().lower()
+    source_name = str(metadata.get("source", "")).strip().lower()
     return cache_policy in {
         "derived_cache_allowed",
         "transient_results_only",
+    } or provider in {"tavily", "brave", "brave_search"} or source_name in {
+        "tavily",
+        "brave",
+        "brave_search",
     }
 
 

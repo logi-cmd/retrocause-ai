@@ -448,6 +448,18 @@ def test_result_time_matching_allows_hosted_search_for_today_when_undated():
     assert result_matches_time_range(hosted, "today", today=date(2026, 4, 21))
 
 
+def test_result_time_matching_allows_hosted_search_provider_metadata_when_undated():
+    hosted = SearchResult(
+        title="芯原股份盘中下跌原因",
+        content="Hosted Tavily-style search result without explicit published date.",
+        url="https://example.com/stock",
+        source_type=EvidenceType.NEWS,
+        metadata={"content_quality": "fulltext", "provider": "tavily"},
+    )
+
+    assert result_matches_time_range(hosted, "today", today=date(2026, 4, 21))
+
+
 def test_source_broker_routes_market_and_policy_queries_to_scenario_fit_sources():
     market_plan = plan_query("比特币今日价格为何跳水")
     policy_plan = plan_query("美国为什么会推出新的半导体出口管制？")

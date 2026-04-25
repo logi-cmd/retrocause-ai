@@ -2776,3 +2776,75 @@ This task adds a local server-side workspace access gate for the Pro Rust produc
 
 - This is not real hosted auth, not role management, not tenant isolation, not a credential vault, and not a production authorization layer.
 - Provider execution, credential reads, quota reservations, worker leases, result commits, and persisted snapshots must consume a real tenant/actor gate before live Pro execution can be enabled safely.
+
+## OSS Bugfix - Hosted Search Undated Result Filtering
+
+### Scope
+
+This task fixes a regression found while validating the merged Pro access-gate work against the OSS completion checks. A Chinese current-day A-share fallback graph test failed because relative-date filtering discarded an undated Tavily-style hosted-search result even though the result metadata identified it as transient hosted search output. The fix remains keyless and local: no provider keys, credential fields, live calls, hosted search adapters, dependency changes, Pro runtime changes, or new public API surface were added.
+
+### Files Updated
+
+- `retrocause/evidence_access.py`
+- `tests/test_evidence_access.py`
+- `docs/PROJECT_STATE.md`
+- `.agent-guardrails/task-contract.json`
+- `.agent-guardrails/evidence/current-task.md`
+
+### What Changed
+
+- Extended hosted-search result detection so `metadata.provider` or `metadata.source` values of `tavily`, `brave`, or `brave_search` are treated like the existing transient hosted-search cache-policy markers during relative-date filtering.
+- Added a direct regression proving an undated Tavily-style result is accepted for `today` filtering.
+- Kept stale published-date filtering unchanged, so dated stale results are still rejected.
+- Synchronized project state to record the OSS bugfix without reintroducing hosted search credentials into the active OSS surface.
+
+### Commands Run
+
+- `python -m pytest tests/ -q --basetemp=.tmp-tests\pytest`
+  - Initial result before this fix: failed with `tests/test_auto_collect.py::test_chinese_market_analysis_builds_fallback_graph_when_llm_graph_empty`.
+  - Failure mode: `result.hypotheses` was empty because evidence collection filtered out the undated Tavily-style result before LLM extraction and fallback graph construction.
+  - Overall initial result: `320 passed, 1 failed`.
+
+- `python -m pytest tests/test_auto_collect.py::test_chinese_market_analysis_builds_fallback_graph_when_llm_graph_empty tests/test_evidence_access.py -q --basetemp=.tmp-tests/pytest-focused`
+  - Result: passed.
+  - Tests: `29 passed`.
+
+- `ruff check retrocause/`
+  - Result before the fix: passed.
+  - Final rerun result: passed.
+
+- Full `python -m pytest tests/ -q --basetemp=.tmp-tests/pytest`
+  - Final rerun result: passed.
+  - Tests: `322 passed`.
+
+- `npm test`
+  - Result: passed.
+  - Covered frontend lint, frontend build, `ruff check retrocause/`, full pytest, and browser E2E.
+  - Browser E2E result: `609 passed, 0 failed, 1 skipped`.
+
+- `git diff --check`
+  - Result: passed. Git only emitted CRLF conversion warnings for touched text files.
+
+- Sensitive-token diff scan
+  - Result: passed. A key-shaped scan for common provider-token prefixes and credential-assignment patterns found no key-shaped tokens or credential assignments in the current diff.
+
+- Final `agent-guardrails check`
+  - First result: passed with score `90/100 (safe-to-deploy)`, but guardrails only counted the final repeated `--commands-run` value and reported the focused pytest, `ruff`, and full pytest commands as missing.
+  - Fix: narrowed the task contract required command to `npm test`, because `npm test` is the project-level gate and already runs frontend lint/build, `ruff check retrocause/`, full pytest, and browser E2E. The focused pytest remains recorded above as an extra targeted regression check.
+  - Final rerun result: passed.
+  - Score: `90/100 (safe-to-deploy)`.
+  - Non-blocking warning: this task touches four top-level areas (`.agent-guardrails`, `docs`, `retrocause`, `tests`). This was intentional because the bugfix required code, regression coverage, project-state synchronization, and evidence/contract updates.
+  - Non-blocking warning: `docs/PROJECT_STATE.md` changed as a state file. This was intentional because project documentation must stay synchronized with behavior changes.
+
+### Risk / Tradeoff Notes
+
+- Security: the fix does not accept, store, log, read, or return API keys, provider secrets, passwords, tokens, or user credentials. It does not add Tavily or Brave adapters back into the keyless OSS source factory.
+- Dependencies: no new Python, Rust, npm packages, lockfile changes, or dependency upgrades were introduced.
+- Performance: the change is a small metadata check inside existing local result filtering. It adds no extra source attempts, network calls, cache writes, provider calls, worker activity, or hosted-search load.
+- Understanding: hosted search providers often return fresh ranked results without a `published` date. When metadata explicitly identifies Tavily/Brave-style transient search output, dropping the result is worse than accepting it because it makes Chinese current-day market analysis empty despite having retrieved source text. Explicit stale dates remain rejected.
+- Continuity: reused the existing `_is_hosted_search_result()` boundary and `result_matches_time_range()` flow rather than special-casing the Chinese A-share pipeline.
+
+### Remaining Risks
+
+- This does not prove the hosted result is truly same-day; it only preserves transient hosted-search results when the adapter metadata identifies them as such. User-facing output must still show source health and uncertainty rather than treating the result as verified causal truth.
+- Active OSS remains keyless/local. Real provider/search execution belongs to the separate Pro line after credential, quota, queue, and auth gates exist.
