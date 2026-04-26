@@ -1,13 +1,14 @@
 {
   "schemaVersion": 3,
-  "task": "Restructure the Pro Rust web shell so the root page is an awesome-design-md xAI-inspired dialogue-only homepage, with graph/source/gate/review controls moved to a separate /graph page that renders the knowledge graph as a cinematic galaxy/star map. Reuse existing Pro API/client patterns, update DESIGN.md, docs/PROJECT_STATE.md, docs/pro-rust-architecture.md, and .agent-guardrails evidence, and do not change OSS runtime or add credentials/provider execution.",
+  "task": "Add the next Pro backend durability gate before real hosted intent storage: keep execution preview-only, add a reusable server-side intent durability gate payload that composes execution admission, vault-handle, quota reservation, idempotency, intent-store, worker-lease, retry, and result-commit prerequisites; expose it through the Rust API and /graph web shell; update docs and guardrails evidence without adding credentials or provider execution.",
   "preset": "generic",
-  "createdAt": "2026-04-25T16:53:01.207Z",
+  "createdAt": "2026-04-26T00:00:00.000Z",
   "allowedPaths": [
-    "DESIGN.md",
+    "pro/crates/queue/",
+    "pro/apps/api/",
     "pro/apps/web/",
-    "docs/pro-rust-architecture.md",
     "docs/PROJECT_STATE.md",
+    "docs/pro-rust-architecture.md",
     ".agent-guardrails/"
   ],
   "requiredCommands": [
@@ -16,8 +17,22 @@
   "evidencePaths": [
     ".agent-guardrails/evidence/current-task.md"
   ],
-  "intendedFiles": [],
-  "protectedPaths": [],
+  "intendedFiles": [
+    "pro/crates/queue/src/lib.rs",
+    "pro/apps/api/src/main.rs",
+    "pro/apps/web/src/main.rs",
+    "docs/PROJECT_STATE.md",
+    "docs/pro-rust-architecture.md",
+    ".agent-guardrails/evidence/current-task.md",
+    ".agent-guardrails/task-contract.json"
+  ],
+  "protectedPaths": [
+    "retrocause/",
+    "frontend/",
+    ".retrocause/",
+    ".env",
+    ".env.local"
+  ],
   "allowedChangeTypes": [
     "implementation",
     "interface",
@@ -30,94 +45,71 @@
   "requiresReviewNotes": false,
   "validationProfile": "standard",
   "securityRequirements": [
-    "Do not add credential fields, provider key entry, auth token handling, provider execution, worker execution, or quota/billing mutation.",
-    "Keep all existing Pro execution/admission/intent panels preview-only and rejected where the backend says they are rejected."
+    "Do not add credential fields, provider key entry, auth token handling, provider execution, worker execution, billing mutation, or quota mutation.",
+    "The new durability gate must remain preview-only and must keep durable intent creation rejected until real hosted auth, vault, quota, lease, retry, replay, and commit stores exist.",
+    "No secrets, API keys, JWTs, bearer tokens, provider keys, vault handles, quota reservation ids, admission tokens, or durable intent ids may be emitted."
   ],
   "dependencyRequirements": [
-    "Do not add Rust, npm, Python, image, icon, font, or external asset dependencies for this UI redesign."
+    "Do not add Rust, npm, Python, image, icon, font, or external asset dependencies."
   ],
   "performanceRequirements": [
-    "Avoid heavy animation loops, large blur surfaces, remote assets, and client frameworks; keep the server-rendered Maud web shell lightweight."
+    "Keep the payload pure/in-memory and reuse existing Maud/fetchJson patterns."
   ],
   "understandingRequirements": [
-    "Explain that this is a visual/interaction redesign of the Pro shell only, not a change to hosted execution capability."
+    "Explain that this is a backend/interface gate for future hosted intent storage, not real durable hosted execution."
   ],
   "continuityRequirements": [
-    "Reuse the existing Maud render helpers, browser fetchJson pattern, API endpoints, graph selection behavior, and preview-only execution panels."
+    "Reuse the existing ExecutionAdmissionRequest, execution_intent_create_request_preview, execution_intent_store_boundary, worker_lease_boundary, and result/preflight boundary vocabulary.",
+    "Keep the OSS runtime untouched."
   ],
-  "acknowledgedSkips": [],
-  "patternSummary": "Pro web is a server-rendered Rust/Maud shell with CSS and a small inline script. Keep API and domain payloads unchanged; split the visual surface into a dialogue-only root and a separate graph workspace while preserving graph/actions on /graph.",
-  "smallestViableChange": "Add a dialogue-only / homepage and move the existing star-map graph workspace to /graph with xAI-inspired monochrome styling and low-cost cinematic motion while preserving all existing endpoints/actions.",
+  "acknowledgedSkips": [
+    "agent-guardrails plan inferred an unrelated generic auth scope, so this contract is manually narrowed to the Pro Rust paths."
+  ],
+  "patternSummary": "Pro backend slices expose keyless preview-only Rust payloads through Axum endpoints and render them in the server-rendered Maud /graph shell. Existing payloads are denied by default and document blockers, safeguards, and next required steps.",
+  "smallestViableChange": "Add a rejected ExecutionIntentDurabilityGate payload in pro/crates/queue, expose POST /api/execution-intents/durability-gate, render it on /graph, and cover it with Rust tests/docs/evidence.",
   "assumptions": [
-    "The active task is Pro frontend redesign only.",
-    "DESIGN.md plus the awesome-design-md xAI reference are the local design source: stark black, spectral white, mono/Universal Sans feel, uppercase telemetry, ghost controls, and cinematic full-field composition; the UI must not imply affiliation with any referenced brand.",
-    "The knowledge graph remains the primary workspace, but no longer has to be the root homepage."
+    "The next Pro feature should advance hosted intent-store readiness without enabling live persistence or execution.",
+    "Existing local stores remain local alpha boundaries and are not hosted tenant stores.",
+    "The UI remains a preview/debug surface for Pro alpha operators."
   ],
   "acceptanceCriteria": [
-    "The Pro web shell root page renders only the causal dialogue entry and does not render provider, source, queue, inspector, evidence, review, or gate panels.",
-    "The /graph page still renders every existing graph, run, provider, queue, admission, intent, storage, vault, quota, event, review, and commit panel/action expected by current tests.",
-    "The /graph page makes the graph feel like a cinematic galaxy/star map and the root page uses the high-trust monochrome xAI-inspired style from DESIGN.md.",
-    "No OSS runtime files, provider credential flows, dependency files, or API/domain behavior are changed.",
-    "Docs and evidence describe the redesign and remaining capability boundaries."
+    "A reusable server-side durability gate payload exists and composes admission/create-request, intent-store, worker-lease, retry/idempotency, and result-commit prerequisites.",
+    "The Pro API exposes the new payload through a keyless POST endpoint.",
+    "The /graph page can request and render the gate without adding credentials or changing the dialogue-only homepage.",
+    "Tests prove the gate is rejected, preview-only, secret-free, and names the missing hosted prerequisites.",
+    "Docs/evidence describe the new boundary and remaining blockers."
   ],
   "nonGoals": [
     "No OSS runtime changes",
-    "No new API endpoints",
+    "No real hosted auth",
+    "No credential collection or vault access",
+    "No quota reservation or billing mutation",
+    "No Redis/Postgres connection",
+    "No durable execution intent persistence",
+    "No worker lease claims or retries",
     "No provider calls",
-    "No credential/key fields",
-    "No auth/session/JWT implementation",
-    "No worker execution",
-    "No quota or billing mutation",
-    "No new dependencies",
+    "No result commits",
     "No package publishing"
   ],
   "expectedBehaviorChanges": [
-    "The Pro browser shell root page becomes a dialogue-only entry surface, while the /graph page becomes the cinematic galaxy/star-map workspace."
+    "Pro API gains a preview-only intent durability gate endpoint.",
+    "Pro /graph gains a panel/button to inspect the gate before hosted intent storage exists."
   ],
-  "userVisibleEffects": [
-    "The current Pro homepage appears as a premium dialogue box rather than a dense workspace, and the graph/source/gate/review controls live on the /graph workspace."
-  ],
-  "intendedSymbols": [],
   "expectedPublicSurfaceChanges": [
-    "Pro web root page visual structure and styling"
+    "POST /api/execution-intents/durability-gate"
   ],
-  "expectedBoundaryExceptions": [],
   "expectedTestTargets": [
+    "cargo fmt --manifest-path pro/Cargo.toml --all -- --check",
     "cargo test --manifest-path pro/Cargo.toml",
     "cargo build --manifest-path pro/Cargo.toml",
-    "browser smoke of http://127.0.0.1:3007/",
-    "browser smoke of http://127.0.0.1:3007/graph"
+    "agent-guardrails check --base-ref HEAD~1 --commands-run \"cargo test --manifest-path pro/Cargo.toml\""
   ],
-  "productionProfile": "",
   "nfrRequirements": [
-    "Maintain readable contrast, keyboard-accessible controls, compact CSS, no remote assets, no secret-shaped strings, and responsive fallback below 1080px."
+    "Keep readable UI copy, no remote assets, no secret-shaped values, and no broad refactors."
   ],
-  "expectedLoadSensitivePaths": [],
-  "expectedConcurrencyImpact": "None. This is a server-rendered UI/CSS/script refactor with no backend concurrency changes.",
-  "observabilityRequirements": [],
-  "rollbackNotes": "Revert the Pro web-shell commit; no migration or dependency rollback is required.",
-  "riskJustification": "The redesign is confined to the Pro Rust web shell plus docs/evidence. Backend API behavior, storage, credentials, queues, and OSS runtime remain unchanged.",
-  "guardRules": [
-    "添加相应的测试",
-    "遵循现有代码风格",
-    "保持向后兼容",
-    "更新 API 文档"
+  "expectedConcurrencyImpact": "None. The new gate is a pure preview payload and does not mutate stores.",
+  "observabilityRequirements": [
+    "The payload must make blocking prerequisites inspectable through explicit lists."
   ],
-  "roughIntent": {
-    "detected": true,
-    "taskType": "feature",
-    "confidence": 0.65,
-    "sources": {
-      "taskType": "关键词匹配 (65% 置信度)",
-      "paths": "关键词+文件树",
-      "testCommand": "package.json",
-      "riskLevel": "基于任务类型: feature"
-    }
-  },
-  "autoFilledFields": [
-    "allowedPaths",
-    "requiredCommands",
-    "riskLevel",
-    "guardRules"
-  ]
+  "rollbackNotes": "Revert this branch commit; it adds no migrations, dependencies, hosted stores, or runtime secrets."
 }

@@ -386,6 +386,21 @@ fn render_page(run: &ProRun, api_base: &str) -> Markup {
                                     span class="quota-state quota-state--deferred" { "rejected" }
                                 }
                             }
+                            button id="execution-intent-durability-gate-button" type="button" {
+                                "Check durability gate"
+                            }
+                            p id="execution-intent-durability-gate-status" class="console-status" {
+                                "Durability gate checks hosted auth, vault, quota, idempotency, intent-store, lease, retry, and commit prerequisites."
+                            }
+                            div id="execution-intent-durability-gate-panel" class="intent-durability-gate-panel" {
+                                article class="queue-meter queue-meter--empty" {
+                                    div {
+                                        strong { "Intent durability gate" }
+                                        p { "Inspect the rejected final gate before any hosted durable intent store is connected." }
+                                    }
+                                    span class="quota-state quota-state--deferred" { "blocked" }
+                                }
+                            }
                             div id="execution-job-list" {
                                 article class="queue-meter queue-meter--empty" {
                                     div {
@@ -1655,6 +1670,63 @@ fn client_script() -> &'static str {
     `;
   }
 
+  function renderExecutionIntentDurabilityGate(gate) {
+    const panel = byId("execution-intent-durability-gate-panel");
+    if (!panel) return;
+    if (!gate) {
+      panel.innerHTML = `
+        <article class="queue-meter queue-meter--empty">
+          <div>
+            <strong>Intent durability gate</strong>
+            <p>Inspect the rejected final gate before any hosted durable intent store is connected.</p>
+          </div>
+          <span class="quota-state quota-state--deferred">blocked</span>
+        </article>
+      `;
+      return;
+    }
+
+    const prerequisites = (gate.prerequisites || []).map((item) => `
+      <li title="${escapeHtml(item.requirement || "")}">
+        <strong>${escapeHtml(item.label || readable(item.id || "prerequisite"))}</strong>
+        <span>${escapeHtml(readable(item.status || "future_required"))} / ${item.satisfied ? "satisfied" : "missing"}${item.blocks_durability ? " / blocks durability" : ""}</span>
+      </li>
+    `).join("");
+    const blockers = (gate.blocking_reasons || [])
+      .slice(0, 12)
+      .map((reason) => `<li title="${escapeHtml(reason)}">${escapeHtml(readable(reason))}</li>`)
+      .join("");
+    const safeguards = (gate.safeguards || [])
+      .slice(0, 24)
+      .map((guard) => `<li title="${escapeHtml(guard)}">${escapeHtml(readable(guard))}</li>`)
+      .join("");
+
+    panel.innerHTML = `
+      <article class="work-order-card intent-card">
+        <div class="work-order-header">
+          <strong>Intent durability gate</strong>
+          <span class="quota-state quota-state--deferred">${gate.durability_allowed ? "durable allowed" : "durability blocked"}</span>
+          <p>${escapeHtml(readable(gate.mode || "preview_only_rejected"))} / ${escapeHtml(readable(gate.status || "rejected_missing_hosted_durability"))}</p>
+          <small>hosted store: ${gate.hosted_store_connection_allowed ? "connection allowed" : "connection blocked"} / execution: ${gate.execution_allowed ? "allowed" : "disabled"}</small>
+          <small>create request: ${gate.create_request?.create_request_allowed ? "allowed" : "rejected"} / result commit: ${gate.result_commit_boundary?.commit_writes_enabled ? "writes enabled" : "writes disabled"}</small>
+        </div>
+        <section>
+          <p class="work-order-label">Durability prerequisites</p>
+          <ol class="work-order-list">${prerequisites || "<li>No prerequisites returned.</li>"}</ol>
+        </section>
+        <section>
+          <p class="work-order-label">Durability blockers</p>
+          <ul class="work-order-list">${blockers || "<li>No blockers returned.</li>"}</ul>
+        </section>
+        <section>
+          <p class="work-order-label">Durability safeguards</p>
+          <ul class="work-order-list">${safeguards || "<li>No hosted store connection attempted.</li>"}</ul>
+        </section>
+        <small>${escapeHtml(gate.next_required_step || "Connect hosted stores before durable intent creation.")}</small>
+      </article>
+    `;
+  }
+
   function renderExecutionPreflightBoundary(boundary) {
     const panel = byId("execution-preflight-panel");
     if (!panel) return;
@@ -2680,6 +2752,29 @@ fn client_script() -> &'static str {
     );
   }
 
+  async function checkExecutionIntentDurabilityGate() {
+    const runId = currentRun?.id || "run_semiconductor_controls_001";
+    setText("execution-intent-durability-gate-status", "Checking hosted intent durability gate...");
+    const gate = await fetchJson("/api/execution-intents/durability-gate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspace_id: currentRun?.workspace_id || "workspace_demo",
+        run_id: runId,
+        job_id: lastInspectedJobId,
+        action: "execute_provider_calls",
+      }),
+    });
+    renderExecutionIntentDurabilityGate(gate);
+    const missing = (gate.prerequisites || [])
+      .filter((item) => item.blocks_durability && !item.satisfied)
+      .length;
+    setText(
+      "execution-intent-durability-gate-status",
+      `Durability remains ${gate.durability_allowed ? "allowed" : "blocked"}; ${missing} hosted prerequisite(s) missing.`,
+    );
+  }
+
   async function runWorkerResultDryRun() {
     const runId = currentRun?.id;
     if (!runId) {
@@ -2837,6 +2932,10 @@ fn client_script() -> &'static str {
     previewExecutionIntentCreateRequest()
       .catch((error) => setText("execution-intent-create-request-status", `Create request error: ${error.message}`));
   });
+  byId("execution-intent-durability-gate-button")?.addEventListener("click", () => {
+    checkExecutionIntentDurabilityGate()
+      .catch((error) => setText("execution-intent-durability-gate-status", `Durability gate error: ${error.message}`));
+  });
   document.addEventListener("click", (event) => {
     const button = event.target.closest("[data-review-kind][data-review-id]");
     if (!button) return;
@@ -2871,6 +2970,7 @@ fn client_script() -> &'static str {
   renderExecutionReadiness(null);
   renderExecutionAdmission(null);
   renderExecutionIntentCreateRequest(null);
+  renderExecutionIntentDurabilityGate(null);
   renderExecutionPreflightBoundary(null);
   renderExecutionJobs([]);
   renderWorkOrder(null);
@@ -4083,6 +4183,7 @@ p {
 #execution-work-order-detail,
 #execution-admission-panel,
 #execution-intent-create-request-panel,
+#execution-intent-durability-gate-panel,
 #execution-handoff-panel,
 #execution-intent-panel,
 #execution-intent-store-panel,
@@ -4631,6 +4732,8 @@ mod tests {
         assert!(page.contains("execution-admission-panel"));
         assert!(page.contains("execution-intent-create-request-button"));
         assert!(page.contains("execution-intent-create-request-panel"));
+        assert!(page.contains("execution-intent-durability-gate-button"));
+        assert!(page.contains("execution-intent-durability-gate-panel"));
         assert!(page.contains("execution-preflight-panel"));
         assert!(page.contains("/api/provider-status"));
         assert!(page.contains("/api/provider-adapter-contract"));
@@ -4640,6 +4743,7 @@ mod tests {
         assert!(page.contains("/api/execution-readiness"));
         assert!(page.contains("/api/execution-admission"));
         assert!(page.contains("/api/execution-intents/create-request"));
+        assert!(page.contains("/api/execution-intents/durability-gate"));
         assert!(page.contains("/api/execution-preflight-boundary"));
         assert!(page.contains("execution-job-list"));
         assert!(page.contains("execution-work-order-detail"));
@@ -4698,12 +4802,14 @@ mod tests {
         assert!(page.contains("function renderExecutionReadiness"));
         assert!(page.contains("function renderExecutionAdmission"));
         assert!(page.contains("function renderExecutionIntentCreateRequest"));
+        assert!(page.contains("function renderExecutionIntentDurabilityGate"));
         assert!(page.contains("function renderExecutionPreflightBoundary"));
         assert!(page.contains("function runProviderAdapterDryRun"));
         assert!(page.contains("function runProviderAdapterGateCheck"));
         assert!(page.contains("function checkExecutionReadiness"));
         assert!(page.contains("function checkExecutionAdmission"));
         assert!(page.contains("function previewExecutionIntentCreateRequest"));
+        assert!(page.contains("function checkExecutionIntentDurabilityGate"));
         assert!(page.contains("queue-preview-button"));
         assert!(page.contains("fetch(`${apiBase}${path}`"));
         assert!(page.contains("POST"));

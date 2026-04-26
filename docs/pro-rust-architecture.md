@@ -12,8 +12,8 @@ The Rust rewrite lives under `pro/` inside this repository so the product and ar
 
 1. Establish a clean Rust workspace boundary.
  2. Define shared Pro domain types around graph-first runs, evidence anchors, challenge checks, source health, usage ledger entries, provider quota ownership, and cooldown state.
-3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, run-scoped local event replay, preview-only worker result dry-runs, result snapshot readiness gates, worker result commit intents, workspace access-gate decisions, composed execution-readiness decisions, reusable execution admission decisions, hosted intent create-request previews, pre-execution auth/vault/quota boundaries, keyless provider/search quota status, routing previews, preview-only execution jobs, execution handoff previews, execution intent previews, and a planned execution intent-store boundary.
-4. Render a dialogue-only root page plus a separate `/graph` workspace from the same shared Rust payload, follow the root `DESIGN.md` black/spectral-white mission-control direction, and wire the `/graph` workspace to the local API create/read flow, provider-status view, execution-readiness panel, execution-admission panel, hosted intent create-request panel, pre-execution boundary panel, execution handoff preview panel, execution intent preview panel, and execution intent-store boundary panel.
+3. Stand up API endpoints that expose run summaries, run detail, graph payloads, file-backed local run creation, run-scoped local event replay, preview-only worker result dry-runs, result snapshot readiness gates, worker result commit intents, workspace access-gate decisions, composed execution-readiness decisions, reusable execution admission decisions, hosted intent create-request previews, intent durability gates, pre-execution auth/vault/quota boundaries, keyless provider/search quota status, routing previews, preview-only execution jobs, execution handoff previews, execution intent previews, and a planned execution intent-store boundary.
+4. Render a dialogue-only root page plus a separate `/graph` workspace from the same shared Rust payload, follow the root `DESIGN.md` black/spectral-white mission-control direction, and wire the `/graph` workspace to the local API create/read flow, provider-status view, execution-readiness panel, execution-admission panel, hosted intent create-request panel, intent durability gate panel, pre-execution boundary panel, execution handoff preview panel, execution intent preview panel, and execution intent-store boundary panel.
 5. Keep Pro separate from the OSS Python/FastAPI + Next.js runtime.
 
 ## Workspace layout
@@ -162,6 +162,8 @@ This is intentionally not a provider executor. It does not read provider keys, c
 
 `crates/queue` now carries the hosted intent create-request preview that consumes that denied admission decision plus the planned intent-store and worker-lease boundaries. It returns the future durable-intent input contract, preview idempotency key, blocked write plan, combined blockers, and safeguards while keeping `create_request_allowed=false`, `intent_persistence_allowed=false`, `execution_allowed=false`, and `durable_intent_id_issued=false`. This is not durable persistence or execution authorization: it does not accept or return passwords, sessions, JWTs, provider keys, admission tokens, vault handles, quota reservation ids, or durable intent ids, and it does not connect Redis/Postgres, mutate billing/quota, claim workers, call providers, or write result events.
 
+`crates/queue` also carries the intent durability gate, which is the final rejected checklist before a real hosted intent store can replace the preview. It composes the hosted create-request preview with result-commit, idempotency, replay-before-claim, worker-lease, and retry prerequisites into one server-side payload while keeping `durability_allowed=false`, `hosted_store_connection_allowed=false`, and `execution_allowed=false`. This is not an intent-store connection and not a migration: it does not issue admission tokens, vault handles, quota reservations, idempotency rows, durable intent ids, worker leases, retry jobs, provider calls, result events, or billing mutations.
+
 ## Queue boundary
 
 `crates/queue` is the first Pro execution-queue boundary. It currently provides an in-memory `ExecutionQueue` that turns a routing-preview request into a preview-only execution job.
@@ -177,6 +179,7 @@ Current behavior:
 - execution intent preview: a rejected intent envelope that composes the denied handoff with worker lease/retry rules and preview idempotency keys
 - execution intent-store boundary: a planned durable store contract that names transition rules, idempotency requirements, retention rules, and replay-before-claim semantics while persistence remains disabled
 - hosted intent create-request preview: a rejected server-side create request shape that composes denied admission, planned intent-store rules, worker-lease rules, future request fields, blocked write steps, and a preview idempotency key before any durable intent store exists
+- intent durability gate: a rejected server-side gate that composes hosted auth/admission, vault, quota, idempotency, intent-store, replay-before-claim, worker-lease, retry, and result-commit prerequisites before any hosted store connection is allowed
 - storage: process-local memory only
 - execution: always disabled in this slice
 
@@ -237,6 +240,7 @@ Initial responsibility:
 - keyless pre-execution boundary decisions through `crates/domain`, blocking live execution until hosted auth, vault-handle issuance, quota reservation, worker lease, and idempotent result commit prerequisites exist
 - keyless execution admission decisions through `crates/domain`, composing tenant/auth, vault-handle, quota-reservation, and preflight blockers into one reusable denied server-side payload before intent creation
 - keyless hosted intent create-request previews through `crates/queue`, composing denied admission, planned intent-store, worker-lease, future request-field, write-plan, and idempotency blockers before durable intent creation exists
+- keyless intent durability gates through `crates/queue`, composing create-request, hosted store, idempotency, replay, worker lease, retry, and result-commit blockers before any durable hosted intent store is connected
 - composed execution-readiness decisions through `crates/provider-routing`, combining workspace, provider, worker, snapshot, and observed-preview blockers before any live execution path can be enabled
 - no-connection hosted storage migration plan through `crates/run-store`
 - local preview-only queue jobs through `crates/queue`, shared by list/detail reads while the API process is running
@@ -263,6 +267,7 @@ Initial responsibility:
 - render the planned quota-ledger/billing boundary from `GET /api/quota-ledger-boundary`, showing quota lanes, metering rules, and billing safeguards without writing usage or connecting payment infrastructure
 - render the planned result-commit/event-store boundary from `GET /api/result-commit-boundary`, showing commit stages, event write rules, partial-result reconciliation, and safeguards without writing durable events
 - render the pre-execution boundary from `GET /api/execution-preflight-boundary`, showing hosted auth, vault-handle, quota-reservation, worker-lease, and idempotent-commit blockers without collecting credentials or enabling execution
+- render the intent durability gate from `POST /api/execution-intents/durability-gate`, showing missing hosted auth, vault, quota, idempotency, intent-store, lease/retry, replay, and result-commit prerequisites without connecting stores or enabling execution
 - render a non-durable run event timeline from `GET /api/runs/{run_id}/events`
 - render durable local event replay from `GET /api/runs/{run_id}/event-replay`, showing replay mode, event count, persisted entries, and replay safeguards
 - run a preview-only worker result dry-run through `POST /api/runs/{run_id}/worker-result-dry-run`, showing proposed result steps, commit checks, blocked writes, and dry-run safeguards

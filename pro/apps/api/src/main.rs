@@ -30,11 +30,11 @@ use retrocause_pro_provider_routing::{
     provider_adapter_gate_check,
 };
 use retrocause_pro_queue::{
-    ExecutionHandoffPreview, ExecutionIntentCreateRequestPreview, ExecutionIntentPreview,
-    ExecutionIntentStoreBoundary, ExecutionJob, ExecutionJobSummary, ExecutionLifecycleSpec,
-    ExecutionQueue, ExecutionQueueError, ExecutionWorkOrder, WorkerLeaseBoundary,
-    execution_intent_create_request_preview, execution_intent_store_boundary,
-    execution_lifecycle_spec, worker_lease_boundary,
+    ExecutionHandoffPreview, ExecutionIntentCreateRequestPreview, ExecutionIntentDurabilityGate,
+    ExecutionIntentPreview, ExecutionIntentStoreBoundary, ExecutionJob, ExecutionJobSummary,
+    ExecutionLifecycleSpec, ExecutionQueue, ExecutionQueueError, ExecutionWorkOrder,
+    WorkerLeaseBoundary, execution_intent_create_request_preview, execution_intent_durability_gate,
+    execution_intent_store_boundary, execution_lifecycle_spec, worker_lease_boundary,
 };
 use retrocause_pro_run_store::{
     FileRunStore, HostedStorageMigrationPlan, RunStoreError, hosted_storage_migration_plan,
@@ -110,6 +110,10 @@ fn router() -> Router {
         .route(
             "/api/execution-intents/create-request",
             post(execution_intent_create_request).options(cors_preflight),
+        )
+        .route(
+            "/api/execution-intents/durability-gate",
+            post(execution_intent_durability_check).options(cors_preflight),
         )
         .route(
             "/api/execution-preflight-boundary",
@@ -245,6 +249,12 @@ async fn execution_intent_create_request(
     Json(request): Json<ExecutionAdmissionRequest>,
 ) -> Json<ExecutionIntentCreateRequestPreview> {
     Json(execution_intent_create_request_preview(request))
+}
+
+async fn execution_intent_durability_check(
+    Json(request): Json<ExecutionAdmissionRequest>,
+) -> Json<ExecutionIntentDurabilityGate> {
+    Json(execution_intent_durability_gate(request))
 }
 
 async fn execution_preflight() -> Json<ExecutionPreflightBoundary> {
@@ -923,6 +933,70 @@ mod tests {
             payload.blocking_reasons,
             payload.safeguards,
             payload.idempotency_key_preview,
+            payload.next_required_step
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
+        assert!(!combined.contains("bearer "));
+        assert!(!combined.contains("token:"));
+    }
+
+    #[tokio::test]
+    async fn execution_intent_durability_gate_returns_rejected_preview_payload() {
+        let payload = execution_intent_durability_check(Json(ExecutionAdmissionRequest {
+            workspace_id: Some("workspace_demo".to_string()),
+            run_id: Some("run_semiconductor_controls_001".to_string()),
+            job_id: Some("job_local_000000".to_string()),
+            action: Some(WorkspaceAction::ExecuteProviderCalls),
+        }))
+        .await
+        .0;
+
+        assert_eq!(payload.workspace_id, "workspace_demo");
+        assert!(matches!(
+            payload.status,
+            retrocause_pro_queue::ExecutionIntentDurabilityGateStatus::RejectedMissingHostedDurability
+        ));
+        assert!(!payload.durability_allowed);
+        assert!(!payload.hosted_store_connection_allowed);
+        assert!(!payload.execution_allowed);
+        assert!(!payload.create_request.create_request_allowed);
+        assert!(!payload.create_request.intent_persistence_allowed);
+        assert!(!payload.result_commit_boundary.event_store_connected);
+        assert!(payload.prerequisites.iter().any(|prerequisite| {
+            prerequisite.id == "idempotency_preview_scoped" && prerequisite.satisfied
+        }));
+        assert!(payload.prerequisites.iter().any(|prerequisite| {
+            prerequisite.id == "tenant_auth_admitted" && !prerequisite.satisfied
+        }));
+        assert!(payload.prerequisites.iter().any(|prerequisite| {
+            prerequisite.id == "quota_reserved" && !prerequisite.satisfied
+        }));
+        assert!(payload.prerequisites.iter().any(|prerequisite| {
+            prerequisite.id == "result_event_store_connected" && !prerequisite.satisfied
+        }));
+        assert!(
+            payload
+                .blocking_reasons
+                .contains(&"durability_gate_missing_intent_store_connected".to_string())
+        );
+        assert!(
+            payload
+                .blocking_reasons
+                .contains(&"result_commit_writes_disabled".to_string())
+        );
+        assert!(
+            payload
+                .safeguards
+                .contains(&"durability_gate_preview_only_no_store_connection".to_string())
+        );
+
+        let combined = format!(
+            "{:?} {:?} {:?} {}",
+            payload.prerequisites,
+            payload.blocking_reasons,
+            payload.safeguards,
             payload.next_required_step
         )
         .to_lowercase();

@@ -1,6 +1,7 @@
 use retrocause_pro_domain::{
     ExecutionAdmissionDecision, ExecutionAdmissionRequest, ExecutionPreflightBoundary,
-    WorkspaceAction, execution_admission, execution_preflight_boundary,
+    ResultCommitBoundary, WorkspaceAction, execution_admission, execution_preflight_boundary,
+    result_commit_boundary,
 };
 use retrocause_pro_provider_routing::{
     RoutingPreviewError, RoutingPreviewPlan, RoutingPreviewRequest, RoutingStep,
@@ -118,6 +119,35 @@ pub struct ExecutionIntentCreateRequestPreview {
     pub required_capabilities: Vec<String>,
     pub safeguards: Vec<String>,
     pub next_required_step: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ExecutionIntentDurabilityGate {
+    pub workspace_id: String,
+    pub run_id: Option<String>,
+    pub job_id: Option<String>,
+    pub action: WorkspaceAction,
+    pub mode: ExecutionIntentDurabilityGateMode,
+    pub status: ExecutionIntentDurabilityGateStatus,
+    pub durability_allowed: bool,
+    pub hosted_store_connection_allowed: bool,
+    pub execution_allowed: bool,
+    pub create_request: ExecutionIntentCreateRequestPreview,
+    pub result_commit_boundary: ResultCommitBoundary,
+    pub prerequisites: Vec<ExecutionIntentDurabilityPrerequisite>,
+    pub blocking_reasons: Vec<String>,
+    pub safeguards: Vec<String>,
+    pub next_required_step: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct ExecutionIntentDurabilityPrerequisite {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub status: ExecutionIntentDurabilityPrerequisiteStatus,
+    pub satisfied: bool,
+    pub blocks_durability: bool,
+    pub requirement: &'static str,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -275,6 +305,28 @@ pub enum ExecutionIntentCreateRequestMode {
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionIntentCreateRequestStatus {
     RejectedRequiresAdmissionAndStore,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionIntentDurabilityGateMode {
+    PreviewOnlyRejected,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionIntentDurabilityGateStatus {
+    RejectedMissingHostedDurability,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionIntentDurabilityPrerequisiteStatus {
+    SatisfiedPreviewOnly,
+    MissingHostedGate,
+    NotConnected,
+    Disabled,
+    FutureRequired,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
@@ -789,6 +841,214 @@ pub fn execution_intent_create_request_preview(
     }
 }
 
+pub fn execution_intent_durability_gate(
+    request: ExecutionAdmissionRequest,
+) -> ExecutionIntentDurabilityGate {
+    let create_request = execution_intent_create_request_preview(request);
+    let result_commit_boundary = result_commit_boundary();
+    let prerequisites =
+        execution_intent_durability_prerequisites(&create_request, &result_commit_boundary);
+
+    let mut blocking_reasons = create_request.blocking_reasons.clone();
+    for prerequisite in &prerequisites {
+        if prerequisite.blocks_durability && !prerequisite.satisfied {
+            push_unique_string(
+                &mut blocking_reasons,
+                format!("durability_gate_missing_{}", prerequisite.id),
+            );
+        }
+    }
+    if !result_commit_boundary.event_store_connected {
+        push_unique_string(
+            &mut blocking_reasons,
+            "result_commit_event_store_not_connected",
+        );
+    }
+    if !result_commit_boundary.commit_writes_enabled {
+        push_unique_string(&mut blocking_reasons, "result_commit_writes_disabled");
+    }
+
+    let mut safeguards = create_request.safeguards.clone();
+    safeguards.extend(result_commit_boundary.safeguards.clone());
+    push_unique_string(
+        &mut safeguards,
+        "durability_gate_preview_only_no_store_connection",
+    );
+    push_unique_string(&mut safeguards, "no_intent_store_connection_attempted");
+    push_unique_string(&mut safeguards, "no_result_commit_attempted");
+
+    ExecutionIntentDurabilityGate {
+        workspace_id: create_request.workspace_id.clone(),
+        run_id: create_request.run_id.clone(),
+        job_id: create_request.job_id.clone(),
+        action: create_request.action,
+        mode: ExecutionIntentDurabilityGateMode::PreviewOnlyRejected,
+        status: ExecutionIntentDurabilityGateStatus::RejectedMissingHostedDurability,
+        durability_allowed: false,
+        hosted_store_connection_allowed: false,
+        execution_allowed: false,
+        create_request,
+        result_commit_boundary,
+        prerequisites,
+        blocking_reasons,
+        safeguards,
+        next_required_step: "Connect real hosted tenant auth, admission tokens, vault handles, quota reservations, durable intent/idempotency stores, worker leases, retry scheduling, replay checks, and worker-owned result commits before replacing this rejected gate with durable intent creation."
+            .to_string(),
+    }
+}
+
+fn execution_intent_durability_prerequisites(
+    create_request: &ExecutionIntentCreateRequestPreview,
+    result_commit_boundary: &ResultCommitBoundary,
+) -> Vec<ExecutionIntentDurabilityPrerequisite> {
+    vec![
+        ExecutionIntentDurabilityPrerequisite {
+            id: "tenant_auth_admitted",
+            label: "Tenant auth admitted",
+            status: if create_request.admission.admitted {
+                ExecutionIntentDurabilityPrerequisiteStatus::SatisfiedPreviewOnly
+            } else {
+                ExecutionIntentDurabilityPrerequisiteStatus::MissingHostedGate
+            },
+            satisfied: create_request.admission.admitted,
+            blocks_durability: true,
+            requirement: "A hosted workspace/actor context must admit the requested action before any durable intent row is accepted.",
+        },
+        ExecutionIntentDurabilityPrerequisite {
+            id: "admission_token_issued",
+            label: "Admission token issued",
+            status: if create_request.admission.admission_token_issued {
+                ExecutionIntentDurabilityPrerequisiteStatus::SatisfiedPreviewOnly
+            } else {
+                ExecutionIntentDurabilityPrerequisiteStatus::MissingHostedGate
+            },
+            satisfied: create_request.admission.admission_token_issued,
+            blocks_durability: true,
+            requirement: "The server must issue a scoped admission capability; routes must not synthesize one locally.",
+        },
+        ExecutionIntentDurabilityPrerequisite {
+            id: "vault_handle_issued",
+            label: "Vault handle issued",
+            status: if create_request.admission.vault_handle_issued {
+                ExecutionIntentDurabilityPrerequisiteStatus::SatisfiedPreviewOnly
+            } else {
+                ExecutionIntentDurabilityPrerequisiteStatus::MissingHostedGate
+            },
+            satisfied: create_request.admission.vault_handle_issued,
+            blocks_durability: true,
+            requirement: "Workers may receive vault handles only; raw credentials must never enter the intent payload.",
+        },
+        ExecutionIntentDurabilityPrerequisite {
+            id: "quota_reserved",
+            label: "Quota reserved",
+            status: if create_request.admission.quota_reserved {
+                ExecutionIntentDurabilityPrerequisiteStatus::SatisfiedPreviewOnly
+            } else {
+                ExecutionIntentDurabilityPrerequisiteStatus::MissingHostedGate
+            },
+            satisfied: create_request.admission.quota_reserved,
+            blocks_durability: true,
+            requirement: "A billable quota reservation must exist before provider work can be queued.",
+        },
+        ExecutionIntentDurabilityPrerequisite {
+            id: "idempotency_preview_scoped",
+            label: "Idempotency preview scoped",
+            status: ExecutionIntentDurabilityPrerequisiteStatus::SatisfiedPreviewOnly,
+            satisfied: !create_request.idempotency_key_preview.trim().is_empty(),
+            blocks_durability: false,
+            requirement: "The preview payload must expose the future workspace/resource/action idempotency scope without creating a durable key row.",
+        },
+        ExecutionIntentDurabilityPrerequisite {
+            id: "idempotency_index_connected",
+            label: "Idempotency index connected",
+            status: ExecutionIntentDurabilityPrerequisiteStatus::NotConnected,
+            satisfied: false,
+            blocks_durability: true,
+            requirement: "A hosted uniqueness index must reject duplicate create requests before durable intent creation is enabled.",
+        },
+        ExecutionIntentDurabilityPrerequisite {
+            id: "intent_store_connected",
+            label: "Intent store connected",
+            status: if create_request.intent_store.intent_store_connected {
+                ExecutionIntentDurabilityPrerequisiteStatus::SatisfiedPreviewOnly
+            } else {
+                ExecutionIntentDurabilityPrerequisiteStatus::NotConnected
+            },
+            satisfied: create_request.intent_store.intent_store_connected,
+            blocks_durability: true,
+            requirement: "A hosted durable intent store must be connected before routes can persist execution intents.",
+        },
+        ExecutionIntentDurabilityPrerequisite {
+            id: "intent_persistence_enabled",
+            label: "Intent persistence enabled",
+            status: if create_request.intent_persistence_allowed {
+                ExecutionIntentDurabilityPrerequisiteStatus::SatisfiedPreviewOnly
+            } else {
+                ExecutionIntentDurabilityPrerequisiteStatus::Disabled
+            },
+            satisfied: create_request.intent_persistence_allowed,
+            blocks_durability: true,
+            requirement: "Intent writes remain disabled until hosted store, auth, vault, quota, and idempotency gates pass together.",
+        },
+        ExecutionIntentDurabilityPrerequisite {
+            id: "replay_before_claim_defined",
+            label: "Replay before claim defined",
+            status: ExecutionIntentDurabilityPrerequisiteStatus::SatisfiedPreviewOnly,
+            satisfied: create_request.intent_store.replay_required_before_claim,
+            blocks_durability: false,
+            requirement: "Replay-before-claim semantics must stay explicit so workers rebuild intent state before claiming work.",
+        },
+        ExecutionIntentDurabilityPrerequisite {
+            id: "lease_store_connected",
+            label: "Lease store connected",
+            status: if create_request.worker_lease_boundary.lease_store_connected {
+                ExecutionIntentDurabilityPrerequisiteStatus::SatisfiedPreviewOnly
+            } else {
+                ExecutionIntentDurabilityPrerequisiteStatus::NotConnected
+            },
+            satisfied: create_request.worker_lease_boundary.lease_store_connected,
+            blocks_durability: true,
+            requirement: "Workers must claim through a durable lease store, not API-route memory.",
+        },
+        ExecutionIntentDurabilityPrerequisite {
+            id: "retry_scheduler_enabled",
+            label: "Retry scheduler enabled",
+            status: if create_request.worker_lease_boundary.retry_scheduler_enabled {
+                ExecutionIntentDurabilityPrerequisiteStatus::SatisfiedPreviewOnly
+            } else {
+                ExecutionIntentDurabilityPrerequisiteStatus::FutureRequired
+            },
+            satisfied: create_request.worker_lease_boundary.retry_scheduler_enabled,
+            blocks_durability: true,
+            requirement: "Retry scheduling must preserve partial results and degraded source states before live work is queued.",
+        },
+        ExecutionIntentDurabilityPrerequisite {
+            id: "result_event_store_connected",
+            label: "Result event store connected",
+            status: if result_commit_boundary.event_store_connected {
+                ExecutionIntentDurabilityPrerequisiteStatus::SatisfiedPreviewOnly
+            } else {
+                ExecutionIntentDurabilityPrerequisiteStatus::NotConnected
+            },
+            satisfied: result_commit_boundary.event_store_connected,
+            blocks_durability: true,
+            requirement: "Worker result events must have a durable commit store before provider output can leave preview mode.",
+        },
+        ExecutionIntentDurabilityPrerequisite {
+            id: "result_commit_writes_enabled",
+            label: "Result commit writes enabled",
+            status: if result_commit_boundary.commit_writes_enabled {
+                ExecutionIntentDurabilityPrerequisiteStatus::SatisfiedPreviewOnly
+            } else {
+                ExecutionIntentDurabilityPrerequisiteStatus::Disabled
+            },
+            satisfied: result_commit_boundary.commit_writes_enabled,
+            blocks_durability: true,
+            requirement: "Result writes must be worker-owned and idempotent before durable intent execution is allowed.",
+        },
+    ]
+}
+
 fn execution_intent_create_request_fields() -> Vec<ExecutionIntentCreateRequestField> {
     vec![
         ExecutionIntentCreateRequestField {
@@ -1088,11 +1348,12 @@ impl std::error::Error for ExecutionQueueError {}
 mod tests {
     use super::{
         ExecutionHandoffMode, ExecutionIntentCreateRequestMode, ExecutionIntentCreateRequestStatus,
+        ExecutionIntentDurabilityGateMode, ExecutionIntentDurabilityGateStatus,
         ExecutionIntentMode, ExecutionIntentStoreMode, ExecutionIntentStoreRuleStatus,
         ExecutionJobStatus, ExecutionLifecycleMode, ExecutionQueue, ExecutionQueueError,
         ExecutionWorkOrderMode, WorkerLeaseMode, WorkerLeaseRuleStatus,
-        execution_intent_create_request_preview, execution_intent_store_boundary,
-        execution_lifecycle_spec, worker_lease_boundary,
+        execution_intent_create_request_preview, execution_intent_durability_gate,
+        execution_intent_store_boundary, execution_lifecycle_spec, worker_lease_boundary,
     };
     use retrocause_pro_domain::{ExecutionAdmissionRequest, WorkspaceAction};
     use retrocause_pro_provider_routing::{RoutingPreviewRequest, RoutingScenario, SourcePolicy};
@@ -1410,6 +1671,96 @@ mod tests {
             preview.safeguards,
             preview.idempotency_key_preview,
             preview.next_required_step
+        )
+        .to_lowercase();
+        assert!(!combined.contains("sk-"));
+        assert!(!combined.contains("api_key"));
+        assert!(!combined.contains("bearer "));
+        assert!(!combined.contains("token:"));
+    }
+
+    #[test]
+    fn intent_durability_gate_composes_all_hosted_prerequisites_without_writes() {
+        let gate = execution_intent_durability_gate(ExecutionAdmissionRequest {
+            workspace_id: Some("workspace_demo".to_string()),
+            run_id: Some("run_semiconductor_controls_001".to_string()),
+            job_id: Some("job_local_000000".to_string()),
+            action: Some(WorkspaceAction::ExecuteProviderCalls),
+        });
+
+        assert_eq!(gate.workspace_id, "workspace_demo");
+        assert_eq!(
+            gate.mode,
+            ExecutionIntentDurabilityGateMode::PreviewOnlyRejected
+        );
+        assert_eq!(
+            gate.status,
+            ExecutionIntentDurabilityGateStatus::RejectedMissingHostedDurability
+        );
+        assert!(!gate.durability_allowed);
+        assert!(!gate.hosted_store_connection_allowed);
+        assert!(!gate.execution_allowed);
+        assert!(!gate.create_request.create_request_allowed);
+        assert!(!gate.create_request.intent_persistence_allowed);
+        assert!(!gate.result_commit_boundary.event_store_connected);
+        assert!(!gate.result_commit_boundary.commit_writes_enabled);
+        assert!(gate.prerequisites.iter().any(|prerequisite| {
+            prerequisite.id == "idempotency_preview_scoped" && prerequisite.satisfied
+        }));
+        assert!(gate.prerequisites.iter().any(|prerequisite| {
+            prerequisite.id == "tenant_auth_admitted"
+                && !prerequisite.satisfied
+                && prerequisite.blocks_durability
+        }));
+        assert!(gate.prerequisites.iter().any(|prerequisite| {
+            prerequisite.id == "vault_handle_issued"
+                && !prerequisite.satisfied
+                && prerequisite.blocks_durability
+        }));
+        assert!(gate.prerequisites.iter().any(|prerequisite| {
+            prerequisite.id == "quota_reserved"
+                && !prerequisite.satisfied
+                && prerequisite.blocks_durability
+        }));
+        assert!(gate.prerequisites.iter().any(|prerequisite| {
+            prerequisite.id == "intent_store_connected"
+                && !prerequisite.satisfied
+                && prerequisite.blocks_durability
+        }));
+        assert!(gate.prerequisites.iter().any(|prerequisite| {
+            prerequisite.id == "lease_store_connected"
+                && !prerequisite.satisfied
+                && prerequisite.blocks_durability
+        }));
+        assert!(gate.prerequisites.iter().any(|prerequisite| {
+            prerequisite.id == "result_event_store_connected"
+                && !prerequisite.satisfied
+                && prerequisite.blocks_durability
+        }));
+        assert!(
+            gate.blocking_reasons
+                .contains(&"durability_gate_missing_tenant_auth_admitted".to_string())
+        );
+        assert!(
+            gate.blocking_reasons
+                .contains(&"result_commit_event_store_not_connected".to_string())
+        );
+        assert!(
+            gate.safeguards
+                .contains(&"durability_gate_preview_only_no_store_connection".to_string())
+        );
+        assert!(
+            gate.safeguards
+                .contains(&"no_result_commit_attempted".to_string())
+        );
+
+        let combined = format!(
+            "{:?} {:?} {:?} {} {}",
+            gate.prerequisites,
+            gate.blocking_reasons,
+            gate.safeguards,
+            gate.create_request.idempotency_key_preview,
+            gate.next_required_step
         )
         .to_lowercase();
         assert!(!combined.contains("sk-"));
