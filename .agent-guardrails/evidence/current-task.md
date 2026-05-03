@@ -2,119 +2,89 @@
 
 ## Task
 
-Add the next Pro backend durability gate before real hosted intent storage. The new gate must remain preview-only and rejected, compose existing admission/create-request, vault, quota, idempotency, intent-store, worker lease/retry, replay, and result-commit prerequisites, expose the payload through the Rust API and `/graph` web shell, and keep OSS/runtime credentials untouched.
+Fix the OSS homepage flashing reported by the user. Keep the OSS local alpha behavior unchanged and remove only the continuous visual flash from the homepage header status indicator.
 
 ## Scope
 
-- `pro/crates/queue/src/lib.rs`
-- `pro/apps/api/src/main.rs`
-- `pro/apps/web/src/main.rs`
-- `docs/PROJECT_STATE.md`
-- `docs/pro-rust-architecture.md`
+- `frontend/src/app/page.tsx`
 - `.agent-guardrails/task-contract.json`
 - `.agent-guardrails/evidence/current-task.md`
 
 ## What Changed
 
-- Added `ExecutionIntentDurabilityGate` and `execution_intent_durability_gate(...)` to `crates/queue`.
-- The gate composes the existing rejected hosted intent create-request preview with result-commit, idempotency, replay-before-claim, worker-lease, retry, and hosted store prerequisites.
-- The payload keeps `durability_allowed=false`, `hosted_store_connection_allowed=false`, and `execution_allowed=false`.
-- Added `POST /api/execution-intents/durability-gate` to the Pro API.
-- Added a `/graph` button/panel for the intent durability gate, reusing the existing `fetchJson` and Maud-rendered panel patterns.
-- Updated Pro architecture and project-state docs so this slice is documented as a rejected pre-store gate, not durable persistence.
-- Replaced the previous guardrails contract with a narrowed contract for this Pro Rust durability-gate slice.
+- Confirmed the OSS checkout was on clean `main` before this fix, not on the Pro PR branch.
+- Diagnosed the running OSS homepage with Playwright before editing. The only continuous animation was `pulse` on a 6x6 header status `span` with inline `animation: "2s infinite pulse"`.
+- Removed `animation: "pulse 2s infinite"` from the header status dot in `frontend/src/app/page.tsx`.
+- Removed the now-unused page-local `@keyframes pulse` definition from `frontend/src/app/page.tsx`.
+- Replaced the stale Pro durability-gate guardrails contract with a narrowed OSS flicker-fix contract.
+- Did not change backend/API/provider/worker/quota/billing behavior and did not touch Pro files.
 
 ## Commands Run
 
 - Read-before-edit context:
-  - `Get-Content AGENTS.md`
-  - `Get-Content docs\PROJECT_STATE.md`
+  - `Get-Content AGENTS.md -TotalCount 220`
+  - `Get-Content docs\PROJECT_STATE.md -TotalCount 220`
   - `Get-Content README.md -TotalCount 180`
-  - `Get-Content pyproject.toml`
-  - `Get-Content .agent-guardrails\task-contract.json`
-  - `Get-Content pro\Cargo.toml`
-  - `Get-Content pro\crates\queue\src\lib.rs`
-  - `Get-Content pro\apps\api\src\main.rs`
-  - `Get-Content pro\apps\web\src\main.rs`
-  - targeted reads of `docs/pro-rust-architecture.md`, `docs/PROJECT_STATE.md`, and `DESIGN.md`
+  - `Get-Content pyproject.toml -TotalCount 180`
+  - `Get-Content .agent-guardrails\task-contract.json -TotalCount 240`
+  - targeted reads of `frontend\src\app\page.tsx`
+
+- Baseline state and diagnosis:
+  - `git status --short --branch`
+    - Result: `## main...origin/main`
+  - `Get-NetTCPConnection -LocalPort 3005 -State Listen`
+    - Result: Next frontend process was already listening on port `3005`.
+  - Playwright pre-fix smoke on `http://127.0.0.1:3005`
+    - Result: page title was `RetroCause — Evidence-Backed Causal Explorer`.
+    - Result: exactly one running continuous animation was observed: `pulse` on a header `SPAN`, duration `2000`, infinite iterations, inline animation `"2s infinite pulse"`.
+    - Result: console errors `0`.
 
 - Guardrails planning:
-  - `agent-guardrails plan --task "..."`
-  - Result: the automatic detector inferred an unrelated generic auth scope (`src/auth`, `npm test`). I did not accept it. The task contract was manually narrowed to the actual Pro Rust paths and required Pro Rust commands.
+  - `agent-guardrails plan --task "Fix the OSS homepage flashing status indicator by removing the continuous pulse animation from the keyless local alpha header, keeping behavior and status copy unchanged, limiting product changes to frontend/src/app/page.tsx plus guardrails evidence, and not touching Pro/backend/API/provider/worker/quota/billing behavior."`
+  - Result: the automatic detector inferred an over-broad bugfix scope that included docs, backend files, and `pro/target` build artifacts. I did not accept it. The contract was manually narrowed to the actual OSS homepage animation fix.
 
-- `cargo fmt --manifest-path pro/Cargo.toml --all -- --check`
-  - Initial result: failed on Rust formatting in `pro/crates/queue/src/lib.rs`.
-  - Follow-up: ran `cargo fmt --manifest-path pro/Cargo.toml --all`.
-  - Final result: passed.
+- Source search:
+  - `Get-ChildItem -Path frontend\src -Recurse -Include *.tsx,*.css | Select-String -Pattern "pulse"`
+  - Result before fix: found `frontend\src\app\page.tsx` status-dot animation and page-local keyframes.
+  - Result after fix: no remaining `pulse` references in `frontend\src\app\page.tsx`; unrelated `gentlePulse`/selected glow CSS and a separate layout header `animate-pulse` remain outside this page scope.
 
-- `cargo test --manifest-path pro/Cargo.toml`
-  - Result: passed.
-  - API tests: `41 passed`.
-  - Domain tests: `22 passed`.
-  - Event-store tests: `6 passed`.
-  - Provider-routing tests: `12 passed`.
-  - Queue tests: `12 passed`.
-  - Run-store tests: `4 passed`.
-  - Web tests: `3 passed`.
-
-- `cargo build --manifest-path pro/Cargo.toml`
+- `npm --prefix frontend run lint`
   - Result: passed.
 
-- API smoke:
-  - Started Pro API/Web with `cargo run`.
-  - The first custom-port startup script accidentally interpolated PowerShell env var assignments incorrectly, so the processes started on default ports instead of `8791/3011`.
-  - Verified default API health: `GET http://127.0.0.1:8787/healthz` returned `{"service":"retrocause-pro-api","status":"ok"}`.
-  - Verified default web graph page: `GET http://127.0.0.1:3007/graph` returned HTTP `200`.
-  - Verified `POST http://127.0.0.1:8787/api/execution-intents/durability-gate` returned `status=rejected_missing_hosted_durability`, `durability_allowed=false`, `hosted_store_connection_allowed=false`, `execution_allowed=false`, `idempotency_preview_scoped` satisfied, and hosted blockers for tenant auth, vault, quota, intent store, lease, retry, and result commit.
+- `npm --prefix frontend run build`
+  - Result: passed.
+  - Next.js compiled successfully, TypeScript finished, and the root route prerendered.
 
 - Browser smoke:
-  - Playwright opened `http://127.0.0.1:3007/graph`.
-  - Clicked `#execution-intent-durability-gate-button`.
-  - First assertion used case-sensitive text and failed because the UI text is uppercased by CSS/rendering. Follow-up inspection showed the panel rendered correctly and there were no console errors.
-  - Final browser smoke passed with case-insensitive checks:
-    - durability gate panel rendered
-    - status included blocked state
-    - prerequisites included intent store connection
-    - console errors: `0`
-    - secret-shaped fields: `0`
-  - Screenshot captured at `D:\opencode\retrocause-ai\.tmp\previews\pro-intent-durability-gate.png`.
-  - Temporary Pro API/Web processes were stopped and ports `8787`/`3007` were no longer listening.
+  - First Playwright attempt against existing `http://127.0.0.1:3005` timed out waiting for `networkidle`; follow-up attempts saw navigation context churn, likely from the existing production process after the local build.
+  - Started a temporary independent production frontend on port `3015` with `npm --prefix frontend run start -- -p 3015`.
+  - Playwright opened `http://127.0.0.1:3015`.
+  - Result: HTTP status `200`.
+  - Result: title `RetroCause — Evidence-Backed Causal Explorer`.
+  - Result: animation count `17`, infinite animation count `0`.
+  - Result: console errors `0`.
+  - Result: horizontal overflow `false`.
+  - Result: external runtime requests `0`.
+  - Stopped the temporary port `3015` process tree after the smoke.
 
 - `git diff --check`
   - Result: passed.
-  - Git emitted expected CRLF conversion warnings for touched text/Rust files only.
-
-- Sensitive-token scan across changed task files
-  - Result: passed.
-  - No `sk-*`-style secrets, JWT-shaped bearer tokens, private-key headers, or key assignment patterns were found.
-
-- Pre-commit guardrails probes
-  - `agent-guardrails check --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"` failed because the working tree was not committed yet, so `HEAD~1...HEAD` inspected the previously merged Pro UI design commit and flagged its `DESIGN.md` scope.
-  - `agent-guardrails check --base-ref HEAD --commands-run "cargo test --manifest-path pro/Cargo.toml"` returned `95/100` but warned that no diff was visible against `HEAD`.
-  - Resolution: commit this slice first, then run the required `HEAD~1` check against the actual durability-gate commit.
-
-- First post-commit guardrails check:
-  - `agent-guardrails check --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
-  - Result: blocked at `75/100`.
-  - Blocking issue: guardrails classified `pro/apps/web/src/main.rs` and `pro/crates/queue/src/lib.rs` as change type `other`, while the task contract allowed implementation/interface/tests/docs/guardrails-internal only.
-  - Fix: added `other` to `allowedChangeTypes` because these files are already expected and allowed by path; no product scope was expanded.
-  - Non-blocking warning: `docs/PROJECT_STATE.md` changed. This is intentional because the user asked to keep project docs synchronized.
-
-- Final post-amend guardrails check:
-  - `agent-guardrails check --base-ref HEAD~1 --commands-run "cargo test --manifest-path pro/Cargo.toml"`
-  - Result: passed with score `95/100 (safe-to-deploy)`.
-  - Blocking errors: `0`.
-  - Non-blocking warning: `docs/PROJECT_STATE.md` changed. This is intentional state synchronization for the new Pro durability-gate slice.
+  - Git emitted expected CRLF conversion warnings for touched text files only.
 
 ## Risk / Tradeoff Notes
 
-- This is still preview-only Pro control-plane work. It does not connect Postgres/Redis, persist execution intents, issue admission tokens, issue vault handles, reserve quota, start workers, schedule retries, call providers, write result events, or mutate billing/quota.
-- The payload intentionally includes the nested create-request and result-commit boundaries so future hosted implementation can reuse the same denial vocabulary before replacing the preview with real durable persistence.
-- The `/graph` control area remains dense; the homepage remains dialogue-only and unchanged by this slice.
-- OSS runtime files and keyless OSS behavior were not changed.
+- This removes the continuous flash from the OSS homepage header status dot while keeping finite entrance/string drawing animations intact.
+- The separate `frontend/src/components/layout/Header.tsx` `animate-pulse` usage was not changed because it is outside the active homepage page file and was not the animation observed on the reported OSS page.
+- No backend, API, Pro, provider, worker, quota, or billing behavior changed.
+
+## Observability
+
+- No production metrics, logging, tracing, telemetry, or runtime monitoring hooks were added or changed.
+- The observable acceptance signal for this UI-only fix is browser-level animation inspection:
+  - Pre-fix Playwright observation: one infinite `pulse` animation on the homepage header status `SPAN`.
+  - Post-fix Playwright observation: infinite animation count `0` on the production-built OSS homepage.
 
 ## Remaining Risks
 
-- Real hosted intent storage still requires tenant auth, vault-handle issuance, quota reservation, a durable intent/idempotency store, lease store, retry scheduler, replay semantics, and worker-owned result commit storage.
-- The current gate is pure metadata and has no concurrency behavior because no hosted store is connected yet.
-- Guardrails passed with one intentional non-blocking warning about `docs/PROJECT_STATE.md` being updated.
+- The already-running port `3005` process may need a browser refresh or process restart to pick up the rebuilt static asset immediately in an existing tab.
+- The repository still contains unrelated historical mojibake in some docs visible through Windows console output; this task did not change documentation text outside guardrails evidence.

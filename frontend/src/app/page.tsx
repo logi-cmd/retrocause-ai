@@ -1617,7 +1617,6 @@ export default function Home() {
                 height: "6px",
                 background: qualityGateTone === "strong" ? "#74b276" : qualityGateTone === "caution" ? "#d39b46" : "#78a7bd",
                 borderRadius: "50%",
-                animation: "pulse 2s infinite",
               }}
             />
             <span>
@@ -2614,11 +2613,6 @@ export default function Home() {
       </div>
 
       <style jsx global>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-
         @keyframes noteIn {
           0% { opacity: 0; transform: translateY(14px) scale(0.96); }
           100% { opacity: 1; transform: translateY(0) scale(1); }

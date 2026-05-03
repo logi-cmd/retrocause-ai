@@ -1,115 +1,98 @@
 {
   "schemaVersion": 3,
-  "task": "Add the next Pro backend durability gate before real hosted intent storage: keep execution preview-only, add a reusable server-side intent durability gate payload that composes execution admission, vault-handle, quota reservation, idempotency, intent-store, worker-lease, retry, and result-commit prerequisites; expose it through the Rust API and /graph web shell; update docs and guardrails evidence without adding credentials or provider execution.",
+  "task": "Fix the OSS homepage flashing status indicator by removing the continuous pulse animation from the keyless local alpha header while preserving status copy and product behavior.",
   "preset": "generic",
-  "createdAt": "2026-04-26T00:00:00.000Z",
+  "createdAt": "2026-05-04T00:00:00.000+08:00",
   "allowedPaths": [
-    "pro/crates/queue/",
-    "pro/apps/api/",
-    "pro/apps/web/",
-    "docs/PROJECT_STATE.md",
-    "docs/pro-rust-architecture.md",
+    "frontend/src/app/page.tsx",
     ".agent-guardrails/"
   ],
   "requiredCommands": [
-    "cargo test --manifest-path pro/Cargo.toml"
+    "npm --prefix frontend run lint",
+    "npm --prefix frontend run build",
+    "git diff --check"
   ],
   "evidencePaths": [
     ".agent-guardrails/evidence/current-task.md"
   ],
   "intendedFiles": [
-    "pro/crates/queue/src/lib.rs",
-    "pro/apps/api/src/main.rs",
-    "pro/apps/web/src/main.rs",
-    "docs/PROJECT_STATE.md",
-    "docs/pro-rust-architecture.md",
-    ".agent-guardrails/evidence/current-task.md",
-    ".agent-guardrails/task-contract.json"
+    "frontend/src/app/page.tsx",
+    ".agent-guardrails/task-contract.json",
+    ".agent-guardrails/evidence/current-task.md"
   ],
   "protectedPaths": [
     "retrocause/",
-    "frontend/",
+    "pro/",
     ".retrocause/",
     ".env",
     ".env.local"
   ],
   "allowedChangeTypes": [
     "implementation",
-    "interface",
     "tests",
     "docs",
     "guardrails-internal",
     "other"
   ],
-  "riskLevel": "standard",
+  "riskLevel": "low",
   "requiresReviewNotes": false,
   "validationProfile": "standard",
   "securityRequirements": [
     "Do not add credential fields, provider key entry, auth token handling, provider execution, worker execution, billing mutation, or quota mutation.",
-    "The new durability gate must remain preview-only and must keep durable intent creation rejected until real hosted auth, vault, quota, lease, retry, replay, and commit stores exist.",
-    "No secrets, API keys, JWTs, bearer tokens, provider keys, vault handles, quota reservation ids, admission tokens, or durable intent ids may be emitted."
+    "Keep the OSS browser/API surface keyless."
   ],
   "dependencyRequirements": [
-    "Do not add Rust, npm, Python, image, icon, font, or external asset dependencies."
+    "Do not add npm, Python, Rust, image, icon, font, or external asset dependencies."
   ],
   "performanceRequirements": [
-    "Keep the payload pure/in-memory and reuse existing Maud/fetchJson patterns."
+    "Remove the continuous animation from the status indicator and do not add a replacement loop."
   ],
   "understandingRequirements": [
-    "Explain that this is a backend/interface gate for future hosted intent storage, not real durable hosted execution."
+    "Explain that the observed flash was a continuous OSS homepage status-dot animation, not Pro code being mixed into the OSS repository."
   ],
   "continuityRequirements": [
-    "Reuse the existing ExecutionAdmissionRequest, execution_intent_create_request_preview, execution_intent_store_boundary, worker_lease_boundary, and result/preflight boundary vocabulary.",
-    "Keep the OSS runtime untouched."
+    "Keep status text, analysis behavior, API behavior, and Pro files unchanged."
   ],
   "acknowledgedSkips": [
-    "agent-guardrails plan inferred an unrelated generic auth scope, so this contract is manually narrowed to the Pro Rust paths."
+    "agent-guardrails plan inferred an over-broad bugfix scope including docs, backend, and pro target build artifacts, so this contract is manually narrowed to the actual OSS homepage animation fix."
   ],
-  "patternSummary": "Pro backend slices expose keyless preview-only Rust payloads through Axum endpoints and render them in the server-rendered Maud /graph shell. Existing payloads are denied by default and document blockers, safeguards, and next required steps.",
-  "smallestViableChange": "Add a rejected ExecutionIntentDurabilityGate payload in pro/crates/queue, expose POST /api/execution-intents/durability-gate, render it on /graph, and cover it with Rust tests/docs/evidence.",
+  "patternSummary": "The OSS homepage is a Next.js local alpha UI in frontend/src/app/page.tsx. This change preserves the existing inline style pattern and removes only the continuous status-dot animation.",
+  "smallestViableChange": "Remove the status-dot pulse animation and delete the now-unused page-local keyframes.",
   "assumptions": [
-    "The next Pro feature should advance hosted intent-store readiness without enabling live persistence or execution.",
-    "Existing local stores remain local alpha boundaries and are not hosted tenant stores.",
-    "The UI remains a preview/debug surface for Pro alpha operators."
+    "The user's reported flashing refers to the continuously blinking header status dot observed in the running OSS homepage.",
+    "Finite entry and string-draw animations are not the reported issue."
   ],
   "acceptanceCriteria": [
-    "A reusable server-side durability gate payload exists and composes admission/create-request, intent-store, worker-lease, retry/idempotency, and result-commit prerequisites.",
-    "The Pro API exposes the new payload through a keyless POST endpoint.",
-    "The /graph page can request and render the gate without adding credentials or changing the dialogue-only homepage.",
-    "Tests prove the gate is rejected, preview-only, secret-free, and names the missing hosted prerequisites.",
-    "Docs/evidence describe the new boundary and remaining blockers."
+    "The OSS homepage status dot no longer has a continuous pulse animation.",
+    "The page keeps the same status text and keyless local alpha behavior.",
+    "No Pro, backend, API, provider, worker, quota, or billing behavior changes.",
+    "Browser smoke confirms there are no running infinite animations on the OSS homepage after initial load."
   ],
   "nonGoals": [
-    "No OSS runtime changes",
-    "No real hosted auth",
-    "No credential collection or vault access",
-    "No quota reservation or billing mutation",
-    "No Redis/Postgres connection",
-    "No durable execution intent persistence",
-    "No worker lease claims or retries",
-    "No provider calls",
-    "No result commits",
-    "No package publishing"
+    "No redesign",
+    "No Pro changes",
+    "No backend/API changes",
+    "No provider execution changes",
+    "No new dependencies",
+    "No release or push"
   ],
   "expectedBehaviorChanges": [
-    "Pro API gains a preview-only intent durability gate endpoint.",
-    "Pro /graph gains a panel/button to inspect the gate before hosted intent storage exists."
+    "The small homepage status indicator becomes static instead of blinking."
   ],
-  "expectedPublicSurfaceChanges": [
-    "POST /api/execution-intents/durability-gate"
-  ],
+  "expectedPublicSurfaceChanges": [],
   "expectedTestTargets": [
-    "cargo fmt --manifest-path pro/Cargo.toml --all -- --check",
-    "cargo test --manifest-path pro/Cargo.toml",
-    "cargo build --manifest-path pro/Cargo.toml",
-    "agent-guardrails check --base-ref HEAD~1 --commands-run \"cargo test --manifest-path pro/Cargo.toml\""
+    "npm --prefix frontend run lint",
+    "npm --prefix frontend run build",
+    "OSS homepage Playwright animation smoke on http://127.0.0.1:3005",
+    "git diff --check",
+    "agent-guardrails check --base-ref HEAD~1 --commands-run \"npm --prefix frontend run lint; npm --prefix frontend run build; git diff --check\""
   ],
   "nfrRequirements": [
-    "Keep readable UI copy, no remote assets, no secret-shaped values, and no broad refactors."
+    "Keep the change small and easy to review."
   ],
-  "expectedConcurrencyImpact": "None. The new gate is a pure preview payload and does not mutate stores.",
+  "expectedConcurrencyImpact": "None. This is a static style change.",
   "observabilityRequirements": [
-    "The payload must make blocking prerequisites inspectable through explicit lists."
+    "Evidence note must include the Playwright observation that the only continuous animation was the pulse on the header status span."
   ],
-  "rollbackNotes": "Revert this branch commit; it adds no migrations, dependencies, hosted stores, or runtime secrets."
+  "rollbackNotes": "Revert the style removal in frontend/src/app/page.tsx and restore the page-local pulse keyframes."
 }
